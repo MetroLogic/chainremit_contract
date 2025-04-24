@@ -1,0 +1,2 @@
+[build]
+rustflags = ["--cfg=unstable_features", "--cfg=expr_2021"]
