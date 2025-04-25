@@ -1,4 +1,2 @@
 #[starknet::interface]
-pub trait IStarkRemit<TContractState> {
-
-}
+pub trait IStarkRemit<TContractState> {}

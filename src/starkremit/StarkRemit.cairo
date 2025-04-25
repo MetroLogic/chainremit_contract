@@ -6,5 +6,4 @@ mod StarkRemit {
     struct Storage {
         admin: ContractAddress,
     }
-
 }

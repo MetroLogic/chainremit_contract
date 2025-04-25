@@ -12,6 +12,6 @@ pub mod utils {
     mod helpers;
 }
 
-pub mod starkremit  {
+pub mod starkremit {
     mod StarkRemit;
 }
