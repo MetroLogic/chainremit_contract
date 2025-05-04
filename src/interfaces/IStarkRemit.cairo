@@ -19,4 +19,15 @@ pub trait IStarkRemitToken<TContractState> {
     fn transfer_from(
         ref self: TContractState, sender: ContractAddress, recipient: ContractAddress, amount: u256,
     ) -> bool;
+
+    fn get_supported_currencies(self: @TContractState) -> Array<felt252>;
+    fn get_exchange_rate(
+        self: @TContractState, from_currency: felt252, to_currency: felt252,
+    ) -> u256;
+    fn convert_currency(
+        ref self: TContractState, from_currency: felt252, to_currency: felt252, amount: u256,
+    ) -> u256;
+    fn register_currency(ref self: TContractState, currency: felt252);
+    fn set_oracle(ref self: TContractState, oracle_address: ContractAddress);
+    fn get_oracle(self: @TContractState) -> ContractAddress;
 }

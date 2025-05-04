@@ -16,4 +16,7 @@ pub mod ERC20Errors {
 
     /// Error triggered when burning from the zero address
     pub const BURN_FROM_ZERO: felt252 = 'ERC20: burn from 0 address';
+
+    /// Error triggered when the caller is not the owner of the token
+    pub const NotAdmin: felt252 = 'ERC20: not admin';
 }
