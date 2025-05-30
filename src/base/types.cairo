@@ -67,7 +67,7 @@ pub struct RegistrationRequest {
     pub preferred_currency: felt252,
     /// User's country code
     pub country_code: felt252,
-  }
+}
 
 #[derive(Copy, Drop, Serde, starknet::Store, PartialEq)]
 pub enum KycLevel {

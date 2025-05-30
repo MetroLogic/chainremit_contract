@@ -66,6 +66,7 @@ pub mod RegistrationErrors {
 
     /// Error triggered when user is suspended
     pub const USER_SUSPENDED: felt252 = 'User account suspended';
+}
 
 pub mod KYCErrors {
     /// Error triggered when user has insufficient KYC level
