@@ -1,7 +1,67 @@
 use starknet::ContractAddress;
-use starkremit_contract::base::types::{KycLevel, KycStatus};
+use starkremit_contract::base::types::{
+    KYCLevel, KycLevel, KycStatus, RegistrationRequest, RegistrationStatus, UserProfile,
+};
 
-// Re-export the ERC-20 interface to ensure StarkRemit implements it
+// Comprehensive StarkRemit interface combining all functionality
+#[starknet::interface]
+pub trait IStarkRemit<TContractState> {
+    // User Registration Functions
+    /// Register a new user with the platform
+    fn register_user(ref self: TContractState, registration_data: RegistrationRequest) -> bool;
+
+    /// Get user profile by address
+    fn get_user_profile(self: @TContractState, user_address: ContractAddress) -> UserProfile;
+
+    /// Update user profile information
+    fn update_user_profile(ref self: TContractState, updated_profile: UserProfile) -> bool;
+
+    /// Check if user is registered
+    fn is_user_registered(self: @TContractState, user_address: ContractAddress) -> bool;
+
+    /// Get user registration status
+    fn get_registration_status(
+        self: @TContractState, user_address: ContractAddress,
+    ) -> RegistrationStatus;
+
+    /// Update user KYC level (admin only)
+    fn update_kyc_level(
+        ref self: TContractState, user_address: ContractAddress, kyc_level: KYCLevel,
+    ) -> bool;
+
+    /// Deactivate user account (admin only)
+    fn deactivate_user(ref self: TContractState, user_address: ContractAddress) -> bool;
+
+    /// Reactivate user account (admin only)
+    fn reactivate_user(ref self: TContractState, user_address: ContractAddress) -> bool;
+
+    /// Get total registered users count
+    fn get_total_users(self: @TContractState) -> u256;
+
+    /// Validate registration data
+    fn validate_registration_data(
+        self: @TContractState, registration_data: RegistrationRequest,
+    ) -> bool;
+
+    // KYC Management Functions
+    fn update_kyc_status(
+        ref self: TContractState,
+        user: ContractAddress,
+        status: KycStatus,
+        level: KycLevel,
+        verification_hash: felt252,
+        expires_at: u64,
+    ) -> bool;
+
+    fn get_kyc_status(self: @TContractState, user: ContractAddress) -> (KycStatus, KycLevel);
+    fn is_kyc_valid(self: @TContractState, user: ContractAddress) -> bool;
+    fn set_kyc_enforcement(ref self: TContractState, enabled: bool) -> bool;
+    fn is_kyc_enforcement_enabled(self: @TContractState) -> bool;
+    fn suspend_user_kyc(ref self: TContractState, user: ContractAddress) -> bool;
+    fn reinstate_user_kyc(ref self: TContractState, user: ContractAddress) -> bool;
+}
+
+// ERC-20 Token interface
 #[starknet::interface]
 pub trait IStarkRemitToken<TContractState> {
     // Standard ERC-20 functions
@@ -17,6 +77,7 @@ pub trait IStarkRemitToken<TContractState> {
         ref self: TContractState, sender: ContractAddress, recipient: ContractAddress, amount: u256,
     ) -> bool;
 
+    // Multi-currency functions
     fn get_supported_currencies(self: @TContractState) -> Array<felt252>;
     fn get_exchange_rate(
         self: @TContractState, from_currency: felt252, to_currency: felt252,
@@ -27,22 +88,4 @@ pub trait IStarkRemitToken<TContractState> {
     fn register_currency(ref self: TContractState, currency: felt252);
     fn set_oracle(ref self: TContractState, oracle_address: ContractAddress);
     fn get_oracle(self: @TContractState) -> ContractAddress;
-}
-
-#[starknet::interface]
-pub trait IStarkRemit<TContractState> {
-    fn update_kyc_status(
-        ref self: TContractState,
-        user: ContractAddress,
-        status: KycStatus,
-        level: KycLevel,
-        verification_hash: felt252,
-        expires_at: u64,
-    ) -> bool;
-    fn get_kyc_status(self: @TContractState, user: ContractAddress) -> (KycStatus, KycLevel);
-    fn is_kyc_valid(self: @TContractState, user: ContractAddress) -> bool;
-    fn set_kyc_enforcement(ref self: TContractState, enabled: bool) -> bool;
-    fn is_kyc_enforcement_enabled(self: @TContractState) -> bool;
-    fn suspend_user_kyc(ref self: TContractState, user: ContractAddress) -> bool;
-    fn reinstate_user_kyc(ref self: TContractState, user: ContractAddress) -> bool;
 }
