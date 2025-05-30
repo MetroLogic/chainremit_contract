@@ -26,7 +26,6 @@ pub struct UserProfile {
 
 /// KYC verification levels
 #[derive(Copy, Drop, Serde, starknet::Store)]
-#[allow(starknet::store_no_default_variant)]
 pub enum KYCLevel {
     /// No verification
     None,
@@ -40,7 +39,6 @@ pub enum KYCLevel {
 
 /// Registration status for tracking user onboarding progress
 #[derive(Copy, Drop, Serde, starknet::Store)]
-#[allow(starknet::store_no_default_variant)]
 pub enum RegistrationStatus {
     /// Registration not started
     NotStarted,
