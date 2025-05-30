@@ -1,38 +1,46 @@
 use starknet::ContractAddress;
-use starkremit_contract::base::types::{UserProfile, RegistrationRequest, RegistrationStatus, KYCLevel};
+use starkremit_contract::base::types::{
+    KYCLevel, RegistrationRequest, RegistrationStatus, UserProfile,
+};
 
 #[starknet::interface]
 pub trait IStarkRemit<TContractState> {
     // User Registration Functions
     /// Register a new user with the platform
     fn register_user(ref self: TContractState, registration_data: RegistrationRequest) -> bool;
-    
+
     /// Get user profile by address
     fn get_user_profile(self: @TContractState, user_address: ContractAddress) -> UserProfile;
-    
+
     /// Update user profile information
     fn update_user_profile(ref self: TContractState, updated_profile: UserProfile) -> bool;
-    
+
     /// Check if user is registered
     fn is_user_registered(self: @TContractState, user_address: ContractAddress) -> bool;
-    
+
     /// Get user registration status
-    fn get_registration_status(self: @TContractState, user_address: ContractAddress) -> RegistrationStatus;
-    
+    fn get_registration_status(
+        self: @TContractState, user_address: ContractAddress,
+    ) -> RegistrationStatus;
+
     /// Update user KYC level (admin only)
-    fn update_kyc_level(ref self: TContractState, user_address: ContractAddress, kyc_level: KYCLevel) -> bool;
-    
+    fn update_kyc_level(
+        ref self: TContractState, user_address: ContractAddress, kyc_level: KYCLevel,
+    ) -> bool;
+
     /// Deactivate user account (admin only)
     fn deactivate_user(ref self: TContractState, user_address: ContractAddress) -> bool;
-    
+
     /// Reactivate user account (admin only)
     fn reactivate_user(ref self: TContractState, user_address: ContractAddress) -> bool;
-    
+
     /// Get total registered users count
     fn get_total_users(self: @TContractState) -> u256;
-    
+
     /// Validate registration data
-    fn validate_registration_data(self: @TContractState, registration_data: RegistrationRequest) -> bool;
+    fn validate_registration_data(
+        self: @TContractState, registration_data: RegistrationRequest,
+    ) -> bool;
 }
 
 // Re-export the ERC-20 interface to ensure StarkRemit implements it

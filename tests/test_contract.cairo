@@ -1,6 +1,6 @@
+use snforge_std::declare;
 #[feature("deprecated-starknet-consts")]
 use starknet::ContractAddress;
-use snforge_std::{declare};
 
 // Test Constants
 const NAME: felt252 = 'StarkRemit Token';
@@ -12,10 +12,10 @@ const USD_CURRENCY: felt252 = 'USD';
 fn test_token_metadata() {
     // Declare the contract
     let contract_class = declare("StarkRemit");
-    
+
     // Test that the contract declaration succeeded
     assert(contract_class.is_err() == false, 'Contract declaration failed');
-    
+
     // This confirms that the contract name and symbol match our expectations
     println!("StarkRemit token metadata verified");
 }
