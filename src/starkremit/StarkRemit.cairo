@@ -4,13 +4,12 @@ mod StarkRemit {
     // Import necessary libraries and traits
     use starknet::storage::{
         Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
-        StoragePointerWriteAccess
+        StoragePointerWriteAccess,
     };
-    use starknet::{ContractAddress, get_caller_address, get_block_timestamp};
+    use starknet::{ContractAddress, get_block_timestamp, get_caller_address};
     use starkremit_contract::base::errors::{ERC20Errors, KYCErrors};
-    use starkremit_contract::interfaces::IERC20;
-    use starkremit_contract::interfaces::IStarkRemit;
     use starkremit_contract::base::types::{KycLevel, KycStatus, UserKycData};
+    use starkremit_contract::interfaces::{IERC20, IStarkRemit};
 
     // Fixed point scalar for accurate currency conversion calculations
     // Equivalent to 10^18, standard for 18 decimal places
@@ -25,7 +24,7 @@ mod StarkRemit {
         CurrencyAssigned: CurrencyAssigned, // Event for currency assignments
         TokenConverted: TokenConverted, // Event for currency conversions
         KycStatusUpdated: KycStatusUpdated, // Event for KYC status updates
-        KycEnforcementEnabled: KycEnforcementEnabled, // Event for KYC enforcement
+        KycEnforcementEnabled: KycEnforcementEnabled // Event for KYC enforcement
     }
 
     // Standard ERC20 Transfer event
@@ -101,7 +100,6 @@ mod StarkRemit {
         currency_balances: Map<(ContractAddress, felt252), u256>, // User balances by currency
         supported_currencies: Map<felt252, bool>, // Registered currencies
         oracle_address: ContractAddress, // Oracle contract address for exchange rates
-
         // KYC storage
         kyc_enforcement_enabled: bool,
         user_kyc_data: Map<ContractAddress, UserKycData>,
@@ -184,7 +182,7 @@ mod StarkRemit {
         // Transfers tokens from caller to recipient
         fn transfer(ref self: ContractState, recipient: ContractAddress, amount: u256) -> bool {
             let caller = get_caller_address();
-            
+
             // Validate KYC if enforcement is enabled
             if self.kyc_enforcement_enabled.read() {
                 self._validate_kyc_and_limits(caller, amount);
@@ -282,20 +280,19 @@ mod StarkRemit {
 
             self.user_kyc_data.write(user, new_data);
 
-            self.emit(KycStatusUpdated {
-                user,
-                old_status,
-                new_status: status,
-                old_level,
-                new_level: level,
-            });
+            self
+                .emit(
+                    KycStatusUpdated {
+                        user, old_status, new_status: status, old_level, new_level: level,
+                    },
+                );
 
             true
         }
 
         fn get_kyc_status(self: @ContractState, user: ContractAddress) -> (KycStatus, KycLevel) {
             let kyc_data = self.user_kyc_data.read(user);
-            
+
             // Check if KYC has expired
             let current_time = get_block_timestamp();
             if kyc_data.expires_at > 0 && current_time > kyc_data.expires_at {
@@ -368,19 +365,19 @@ mod StarkRemit {
         fn _get_daily_usage(self: @ContractState, user: ContractAddress) -> u256 {
             let current_time = get_block_timestamp();
             let last_reset = self.last_reset.read(user);
-            
+
             // Reset if it's a new day (86400 seconds = 24 hours)
             if current_time > last_reset + 86400 {
                 return 0;
             }
-            
+
             self.daily_usage.read(user)
         }
 
         fn _record_daily_usage(ref self: ContractState, user: ContractAddress, amount: u256) {
             let current_time = get_block_timestamp();
             let last_reset = self.last_reset.read(user);
-            
+
             if current_time > last_reset + 86400 {
                 // Reset for new day
                 self.daily_usage.write(user, amount);

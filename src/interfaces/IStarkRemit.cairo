@@ -30,7 +30,7 @@ pub trait IStarkRemitToken<TContractState> {
 }
 
 #[starknet::interface]
-pub trait IStarkRemit<TContractState> { 
+pub trait IStarkRemit<TContractState> {
     fn update_kyc_status(
         ref self: TContractState,
         user: ContractAddress,
