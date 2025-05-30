@@ -3,12 +3,12 @@
 mod StarkRemit {
     // Import necessary libraries and traits
     use starknet::storage::{
-        Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess, // Unused import
-        StoragePointerWriteAccess // Unused import
+        Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePathEntry,
+        StoragePointerReadAccess, StoragePointerWriteAccess // Unused import
     };
     use starknet::{ContractAddress, get_caller_address};
-    use starkremit_contract::base::errors::ERC20Errors;
-    use starkremit_contract::interfaces::IERC20;
+    use starkremit_contract::base::errors::{ERC20Errors, GroupsErrors};
+    use starkremit_contract::interfaces::{IERC20, IGroups};
 
     // Fixed point scalar for accurate currency conversion calculations
     // Equivalent to 10^18, standard for 18 decimal places
@@ -21,7 +21,9 @@ mod StarkRemit {
         Transfer: Transfer, // Standard ERC20 transfer event
         Approval: Approval, // Standard ERC20 approval event
         CurrencyAssigned: CurrencyAssigned, // Event for currency assignments
-        TokenConverted: TokenConverted // Event for currency conversions
+        TokenConverted: TokenConverted, // Event for currency conversions
+        GroupCreated: GroupCreated, // Event for new group creation
+        MemberJoined: MemberJoined // Event for new user joining group
     }
 
     // Standard ERC20 Transfer event
@@ -66,6 +68,34 @@ mod StarkRemit {
         amount_out: u256 // Output amount after conversion
     }
 
+    // Event emitted when a new group is created
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct GroupCreated {
+        #[key]
+        group_id: u64, // Unique group ID
+        creator: ContractAddress, // Address that created the group
+        max_members: u8 // Configured size limit
+    }
+
+    // Event emitted when a user joins a group
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct MemberJoined {
+        #[key]
+        group_id: u64, // Group being joined
+        #[key]
+        member: ContractAddress // Address that joined
+    }
+
+    // Savings group record
+    #[derive(Copy, Drop, starknet::Store)]
+    pub struct SavingsGroup {
+        id: u64, // Group identifier
+        creator: ContractAddress, // Group creator
+        max_members: u8, // Maximum number of members
+        member_count: u8, // Current number of members
+        is_active: bool // Group active status
+    }
+
     // Contract storage definition
     #[storage]
     struct Storage {
@@ -80,7 +110,11 @@ mod StarkRemit {
         // Multi-currency support storage
         currency_balances: Map<(ContractAddress, felt252), u256>, // User balances by currency
         supported_currencies: Map<felt252, bool>, // Registered currencies
-        oracle_address: ContractAddress // Oracle contract address for exchange rates
+        oracle_address: ContractAddress, // Oracle contract address for exchange rates
+        // Savings-group storage
+        groups: Map<u64, SavingsGroup>, // Stores all savings groups by ID
+        group_members: Map<(u64, ContractAddress), bool>, // True if user is member of given group
+        group_count: u64 // Counter used to assign unique group IDs
     }
 
     // Contract constructor
@@ -268,6 +302,88 @@ mod StarkRemit {
             converted
         }
     }
+    // Implementation of Savings Groups functions
+    #[abi(embed_v0)]
+    impl IGroupsImpl of IGroups::IGroups<ContractState> {
+        // Creates a new savings group, caller becomes first member
+        // Returns the id of the created group
+        fn create_group(ref self: ContractState, max_members: u8) -> u64 {
+            let caller = get_caller_address();
+
+            // TODO: UserRegistry check
+
+            // Require at least two members in the group
+            assert(max_members > 1, GroupsErrors::INVALID_GROUP_SIZE);
+
+            let group_id = self._new_group_id();
+
+            // Store group parameters
+            self
+                .groups
+                .entry(group_id)
+                .write(
+                    SavingsGroup {
+                        id: group_id,
+                        creator: caller,
+                        max_members,
+                        member_count: 1_u8,
+                        is_active: true,
+                    },
+                );
+
+            // Add caller as member of the group
+            self.group_members.write((group_id, caller), true);
+
+            // Emit group created event
+            self.emit(GroupCreated { group_id, creator: caller, max_members });
+
+            group_id
+        }
+
+        // Joins an existing active group
+        fn join_group(ref self: ContractState, group_id: u64) {
+            let caller = get_caller_address();
+
+            // TODO: UserRegistry check
+
+            let group = self.groups.entry(group_id).read();
+
+            // Group must be active
+            assert(group.is_active, GroupsErrors::GROUP_INACTIVE);
+
+            // Caller must not already be a member
+            assert(
+                !self.group_members.entry((group_id, caller)).read(), GroupsErrors::ALREADY_MEMBER,
+            );
+
+            // Group must not be full
+            assert(group.member_count < group.max_members, GroupsErrors::GROUP_FULL);
+
+            // Update number of members in the group
+            self.groups.entry(group_id).member_count.write(group.member_count + 1);
+
+            // Mark caller as member of the group
+            self.group_members.write((group_id, caller), true);
+
+            // Emit member joined event
+            self.emit(MemberJoined { group_id, member: caller });
+        }
+    }
+
+    // Internal helper for Savings groups
+    #[generate_trait]
+    impl InternalGroupsHelpers of InternalGroupsHelpersTrait {
+        // Generates and stores a new unique group ID for a savings group
+        // Returns the newly generated group ID
+        fn _new_group_id(ref self: ContractState) -> u64 {
+            let group_id = self.group_count.read();
+
+            self.group_count.write(group_id + 1);
+
+            group_id
+        }
+    }
+
 
     // Oracle interface for retrieving exchange rates
     #[starknet::interface]
