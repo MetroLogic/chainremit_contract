@@ -5,7 +5,6 @@ pub mod base {
 
 pub mod interfaces {
     pub mod IERC20;
-    pub mod IGroups;
     pub mod IStarkRemit;
 }
 
