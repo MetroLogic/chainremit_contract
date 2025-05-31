@@ -1,6 +1,7 @@
 use starknet::ContractAddress;
 use starkremit_contract::base::types::{
-    KYCLevel, KycLevel, KycStatus, RegistrationRequest, RegistrationStatus, UserProfile,
+    KYCLevel, KycLevel, KycStatus, MemberContribution, RegistrationRequest, RegistrationStatus,
+    UserProfile,
 };
 
 // Comprehensive StarkRemit interface combining all functionality
@@ -59,6 +60,17 @@ pub trait IStarkRemit<TContractState> {
     fn is_kyc_enforcement_enabled(self: @TContractState) -> bool;
     fn suspend_user_kyc(ref self: TContractState, user: ContractAddress) -> bool;
     fn reinstate_user_kyc(ref self: TContractState, user: ContractAddress) -> bool;
+
+    // contribution
+
+    fn contribute_round(ref self: TContractState, round_id: u256, amount: u256);
+    fn complete_round(ref self: TContractState, round_id: u256);
+    fn add_round_to_schedule(ref self: TContractState, recipient: ContractAddress, deadline: u64);
+    fn is_member(self: @TContractState, address: ContractAddress) -> bool;
+    fn check_missed_contributions(ref self: TContractState, round_id: u256);
+    fn get_all_members(self: @TContractState) -> Array<ContractAddress>;
+    fn add_member(ref self: TContractState, address: ContractAddress);
+    fn disburse_round_contribution(ref self: TContractState, round_id: u256);
 }
 
 // ERC-20 Token interface
