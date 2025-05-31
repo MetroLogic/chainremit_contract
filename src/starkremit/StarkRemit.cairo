@@ -3,14 +3,16 @@
 mod StarkRemit {
     // Import necessary libraries and traits
     use starknet::storage::{
-        Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
-        StoragePointerWriteAccess,
+        Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePathEntry,
+        StoragePointerReadAccess, StoragePointerWriteAccess,
     };
     use starknet::{ContractAddress, get_block_timestamp, get_caller_address, get_contract_address};
-    use starkremit_contract::base::errors::{ERC20Errors, KYCErrors, RegistrationErrors};
+    use starkremit_contract::base::errors::{
+        ERC20Errors, GroupErrors, KYCErrors, RegistrationErrors,
+    };
     use starkremit_contract::base::types::{
-        KYCLevel, KycLevel, KycStatus, RegistrationRequest, RegistrationStatus, UserKycData,
-        UserProfile,
+        KYCLevel, KycLevel, KycStatus, RegistrationRequest, RegistrationStatus, SavingsGroup,
+        UserKycData, UserProfile,
     };
     use starkremit_contract::interfaces::{IERC20, IStarkRemit};
 
@@ -40,6 +42,9 @@ mod StarkRemit {
         RoundCompleted: RoundCompleted,
         ContributionMissed: ContributionMissed,
         MemberAdded: MemberAdded,
+        // Savings Group
+        GroupCreated: GroupCreated, // New savings group created
+        MemberJoined: MemberJoined // User joined a savings group
     }
 
 
@@ -215,6 +220,24 @@ mod StarkRemit {
         updated_by: ContractAddress,
     }
 
+    // Event emitted when a new group is created
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct GroupCreated {
+        #[key]
+        group_id: u64, // Unique group ID
+        creator: ContractAddress, // Address that created the group
+        max_members: u8 // Configured size limit
+    }
+
+    // Event emitted when a user joins a group
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct MemberJoined {
+        #[key]
+        group_id: u64, // Group being joined
+        #[key]
+        member: ContractAddress // Address that joined
+    }
+
     // Contract storage definition
     #[storage]
     struct Storage {
@@ -256,8 +279,12 @@ mod StarkRemit {
         round_ids: u256,
         contribution_deadline: u64,
         members: Map<ContractAddress, bool>,
-        member_count: u32, // 
+        member_count: u32, //
         member_by_index: Map<u32, ContractAddress>,
+        // Savings Group storage
+        groups: Map<u64, SavingsGroup>, // Stores all savings groups by ID
+        group_members: Map<(u64, ContractAddress), bool>, // True if user is member of given group
+        group_count: u64 // Counter used to assign unique group IDs
     }
 
     // Contract constructor
@@ -948,6 +975,74 @@ mod StarkRemit {
             self.member_count.write(count + 1);
             self.emit(MemberAdded { address });
         }
+
+        // Creates a new savings group, caller becomes first member
+        // Returns the id of the created group
+        fn create_group(ref self: ContractState, max_members: u8) -> u64 {
+            let caller = get_caller_address();
+
+            // Member validation
+            assert(self.is_user_registered(caller), RegistrationErrors::USER_NOT_FOUND);
+            assert(self.is_kyc_valid(caller), KYCErrors::INVALID_KYC_STATUS);
+
+            // Require at least two members in the group
+            assert(max_members > 1, GroupErrors::INVALID_GROUP_SIZE);
+
+            let group_id = self._new_group_id();
+
+            // Store group parameters
+            self
+                .groups
+                .write(
+                    group_id,
+                    SavingsGroup {
+                        id: group_id,
+                        creator: caller,
+                        max_members,
+                        member_count: 1_u8,
+                        is_active: true,
+                    },
+                );
+
+            // Add caller as member of the group
+            self.group_members.write((group_id, caller), true);
+
+            // Emit group created event
+            self.emit(GroupCreated { group_id, creator: caller, max_members });
+
+            group_id
+        }
+
+        // Join an existing active group
+        fn join_group(ref self: ContractState, group_id: u64) {
+            let caller = get_caller_address();
+
+            // Member validation
+            assert(self.is_user_registered(caller), RegistrationErrors::USER_NOT_FOUND);
+            assert(self.is_kyc_valid(caller), KYCErrors::INVALID_KYC_STATUS);
+
+            let group = self.groups.entry(group_id).read();
+
+            // Group must be active
+            assert(group.is_active, GroupErrors::GROUP_INACTIVE);
+
+            // Caller must not already be a member
+            assert(
+                !self.group_members.entry((group_id, caller)).read(), GroupErrors::ALREADY_MEMBER,
+            );
+
+            // Group must not be full
+            assert(group.member_count < group.max_members, GroupErrors::GROUP_FULL);
+
+            // Update number of members in the group
+            self.groups.entry(group_id).member_count.write(group.member_count + 1);
+
+            // Mark caller as member of the group
+            self.group_members.write((group_id, caller), true);
+
+            // Emit member joined event
+            self.emit(MemberJoined { group_id, member: caller });
+        }
     }
 
     // Internal helper functions
@@ -1023,6 +1118,16 @@ mod StarkRemit {
             // Premium level - maximum limits
             self.daily_limits.write(3, 100000_000_000_000_000_000_000); // 100,000 tokens
             self.single_limits.write(3, 50000_000_000_000_000_000_000); // 50,000 tokens
+        }
+
+        // Generates and stores a new unique group ID for a savings group
+        // Returns the newly generated group ID
+        fn _new_group_id(ref self: ContractState) -> u64 {
+            let group_id = self.group_count.read();
+
+            self.group_count.write(group_id + 1);
+
+            group_id
         }
     }
 

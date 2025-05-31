@@ -109,3 +109,13 @@ pub struct MemberContribution {
     amount: u256,
     contributed_at: u64,
 }
+
+// Savings group record
+#[derive(Copy, Drop, starknet::Store)]
+pub struct SavingsGroup {
+    pub id: u64, // Group identifier
+    pub creator: ContractAddress, // Group creator
+    pub max_members: u8, // Maximum number of members
+    pub member_count: u8, // Current number of members
+    pub is_active: bool // Group active status
+}

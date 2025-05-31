@@ -71,6 +71,10 @@ pub trait IStarkRemit<TContractState> {
     fn get_all_members(self: @TContractState) -> Array<ContractAddress>;
     fn add_member(ref self: TContractState, address: ContractAddress);
     fn disburse_round_contribution(ref self: TContractState, round_id: u256);
+
+    // Savings Group Functions
+    fn create_group(ref self: TContractState, max_members: u8) -> u64;
+    fn join_group(ref self: TContractState, group_id: u64);
 }
 
 // ERC-20 Token interface

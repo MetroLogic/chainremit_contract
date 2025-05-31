@@ -126,3 +126,17 @@ pub mod KYCErrors {
     /// Error triggered when KYC data not found for user
     pub const KYC_DATA_NOT_FOUND: felt252 = 'KYC: data not found';
 }
+
+pub mod GroupErrors {
+    /// Error triggered when the max members is less than two
+    pub const INVALID_GROUP_SIZE: felt252 = 'GROUP: mini 2 members expected';
+
+    /// Error triggered when trying to join an inactive group
+    pub const GROUP_INACTIVE: felt252 = 'GROUP: group is inactive';
+
+    /// Error triggered when trying to join a group twice
+    pub const ALREADY_MEMBER: felt252 = 'GROUP: caller already a member';
+
+    /// Error triggered when the group is full
+    pub const GROUP_FULL: felt252 = 'GROUP: group is full';
+}
