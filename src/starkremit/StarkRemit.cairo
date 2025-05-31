@@ -6,13 +6,14 @@ mod StarkRemit {
         Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
         StoragePointerWriteAccess,
     };
-    use starknet::{ContractAddress, get_block_timestamp, get_caller_address};
+    use starknet::{ContractAddress, get_block_timestamp, get_caller_address, get_contract_address};
     use starkremit_contract::base::errors::{ERC20Errors, KYCErrors, RegistrationErrors};
     use starkremit_contract::base::types::{
         KYCLevel, KycLevel, KycStatus, RegistrationRequest, RegistrationStatus, UserKycData,
         UserProfile,
     };
     use starkremit_contract::interfaces::{IERC20, IStarkRemit};
+
 
     // Fixed-point scaler for currency conversions (18 decimals)
     const FIXED_POINT_SCALER: u256 = 1_000_000_000_000_000_000;
@@ -32,8 +33,78 @@ mod StarkRemit {
         UserReactivated: UserReactivated, // Event for user reactivation
         KYCLevelUpdated: KYCLevelUpdated, // Event for KYC level updates
         KycStatusUpdated: KycStatusUpdated, // Event for KYC status updates
-        KycEnforcementEnabled: KycEnforcementEnabled // Event for KYC enforcement
+        KycEnforcementEnabled: KycEnforcementEnabled, // Event for KYC enforcement
+        // contribution
+        ContributionMade: ContributionMade,
+        RoundDisbursed: RoundDisbursed,
+        RoundCompleted: RoundCompleted,
+        ContributionMissed: ContributionMissed,
+        MemberAdded: MemberAdded,
     }
+
+
+    // Enum for the status of a contribution round
+    #[derive(Copy, Drop, Serde, PartialEq, starknet::Store)]
+    enum RoundStatus {
+        Active,
+        Completed,
+    }
+
+    // Struct for a contribution round
+    #[derive(Copy, Drop, Serde, PartialEq, starknet::Store)]
+    struct ContributionRound {
+        round_id: u256,
+        total_contributions: u256,
+        status: RoundStatus,
+        deadline: u64,
+    }
+
+    // Struct for a member's contribution
+    #[derive(Copy, Drop, Serde, PartialEq, starknet::Store)]
+    struct MemberContribution {
+        member: ContractAddress,
+        amount: u256,
+        contributed_at: u64,
+    }
+
+
+    //event
+
+    #[derive(Copy, Drop, starknet::Event)]
+    struct MemberAdded {
+        #[key]
+        address: ContractAddress,
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    struct ContributionMade {
+        #[key]
+        round_id: u256,
+        member: ContractAddress,
+        amount: u256,
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    struct RoundDisbursed {
+        #[key]
+        round_id: u256,
+        amount: u256,
+        recipient: ContractAddress,
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    struct RoundCompleted {
+        #[key]
+        round_id: u256,
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    struct ContributionMissed {
+        #[key]
+        round_id: u256,
+        member: ContractAddress,
+    }
+
 
     // Standard ERC20 Transfer event
     #[derive(Copy, Drop, starknet::Event)]
@@ -178,6 +249,15 @@ mod StarkRemit {
         single_limits: Map<u8, u256>,
         daily_usage: Map<ContractAddress, u256>,
         last_reset: Map<ContractAddress, u64>,
+        // contribution storage
+        rounds: Map<u256, ContributionRound>,
+        member_contributions: Map<(u256, ContractAddress), MemberContribution>,
+        rotation_schedule: Map<u256, ContractAddress>,
+        round_ids: u256,
+        contribution_deadline: u64,
+        members: Map<ContractAddress, bool>,
+        member_count: u32, // 
+        member_by_index: Map<u32, ContractAddress>,
     }
 
     // Contract constructor
@@ -758,6 +838,115 @@ mod StarkRemit {
                 );
 
             true
+        }
+
+
+        //contribution management
+
+        fn contribute_round(ref self: ContractState, round_id: u256, amount: u256) {
+            let caller = get_caller_address();
+            assert(self.is_member(caller), 'Caller is not a member');
+
+            let mut round = self.rounds.read(round_id);
+            assert(round.status == RoundStatus::Active, 'Round is not active');
+            assert(get_block_timestamp() <= round.deadline, 'Contribution deadline passed');
+
+            let contribution = MemberContribution {
+                member: caller, amount, contributed_at: get_block_timestamp(),
+            };
+
+            self.member_contributions.write((round_id, caller), contribution);
+            round.total_contributions += amount;
+
+            self.rounds.write(round_id, round);
+            self.emit(ContributionMade { round_id, member: caller, amount });
+        }
+
+        fn disburse_round_contribution(ref self: ContractState, round_id: u256) {
+            let round = self.rounds.read(round_id);
+            assert(round.status == RoundStatus::Completed, 'Round is not completed');
+
+            let recipient = self.rotation_schedule.read(round_id);
+            let amount = round.total_contributions;
+            let contract_address = get_contract_address();
+            self.transfer_from(contract_address, recipient, amount);
+
+            self.emit(RoundDisbursed { round_id, amount, recipient });
+        }
+
+
+        fn complete_round(ref self: ContractState, round_id: u256) {
+            let mut round = self.rounds.read(round_id);
+            assert(round.status == RoundStatus::Active, 'Round is not active');
+            assert(get_block_timestamp() > round.deadline, 'Deadline not passed');
+
+            round.status = RoundStatus::Completed;
+            self.rounds.write(round_id, round);
+
+            self.emit(RoundCompleted { round_id });
+        }
+
+        fn is_member(self: @ContractState, address: ContractAddress) -> bool {
+            self.members.read(address)
+        }
+
+
+        fn check_missed_contributions(ref self: ContractState, round_id: u256) {
+            let round = self.rounds.read(round_id);
+            let members = self.get_all_members();
+
+            for member in members {
+                let contribution = self.member_contributions.read((round_id, member));
+                if contribution.contributed_at == 0 {
+                    self.emit(ContributionMissed { round_id, member });
+                }
+            }
+        }
+
+
+        fn get_all_members(self: @ContractState) -> Array<ContractAddress> {
+            let mut result = ArrayTrait::new();
+            let count = self.member_count.read();
+
+            let mut i: u32 = 0;
+            loop {
+                if i >= count {
+                    break;
+                }
+
+                let member = self.member_by_index.read(i);
+                result.append(member);
+
+                i += 1;
+            }
+
+            result
+        }
+
+
+        fn add_round_to_schedule(
+            ref self: ContractState, recipient: ContractAddress, deadline: u64,
+        ) {
+            let round_id = self.round_ids.read();
+            let round = ContributionRound {
+                round_id, total_contributions: 0, status: RoundStatus::Active, deadline,
+            };
+
+            self.rounds.write(round_id, round);
+            self.rotation_schedule.write(round_id, recipient);
+            self.round_ids.write(round_id + 1);
+        }
+
+        fn add_member(ref self: ContractState, address: ContractAddress) {
+            let caller = get_caller_address();
+            assert(caller == self.admin.read(), 'Only admin can add members');
+            assert(!self.members.read(address), 'Already a member');
+
+            let count = self.member_count.read();
+            self.members.write(address, true);
+            self.member_by_index.write(count, address);
+            self.member_count.write(count + 1);
+            self.emit(MemberAdded { address });
         }
     }
 

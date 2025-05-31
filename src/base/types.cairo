@@ -101,3 +101,11 @@ pub struct TransactionLimits {
     pub daily_limit: u256,
     pub single_tx_limit: u256,
 }
+
+// Struct for a member's contribution
+#[derive(Copy, Drop, Serde, PartialEq, starknet::Store)]
+pub struct MemberContribution {
+    member: ContractAddress,
+    amount: u256,
+    contributed_at: u64,
+}

@@ -79,3 +79,4 @@ fn test_registration_status_enum() {
     // This test ensures the enum variants are properly defined
     println!("Registration status enum variants work correctly");
 }
+
