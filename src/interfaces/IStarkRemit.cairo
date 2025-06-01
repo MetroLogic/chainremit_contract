@@ -93,15 +93,41 @@ pub trait IStarkRemitToken<TContractState> {
         ref self: TContractState, sender: ContractAddress, recipient: ContractAddress, amount: u256,
     ) -> bool;
 
-    // Multi-currency functions
-    fn get_supported_currencies(self: @TContractState) -> Array<felt252>;
-    fn get_exchange_rate(
-        self: @TContractState, from_currency: felt252, to_currency: felt252,
-    ) -> u256;
-    fn convert_currency(
-        ref self: TContractState, from_currency: felt252, to_currency: felt252, amount: u256,
-    ) -> u256;
-    fn register_currency(ref self: TContractState, currency: felt252);
-    fn set_oracle(ref self: TContractState, oracle_address: ContractAddress);
-    fn get_oracle(self: @TContractState) -> ContractAddress;
+    // Token Supply Management Functions
+    /// Mints new tokens to a specified recipient.
+    /// Callable only by authorized minters.
+    fn mint(ref self: TContractState, recipient: ContractAddress, amount: u256) -> bool;
+
+    /// Burns (destroys) a specified amount of tokens from the caller's balance.
+    fn burn(ref self: TContractState, amount: u256) -> bool;
+
+    /// Adds a new authorized minter.
+    /// Callable only by the contract admin.
+    fn add_minter(ref self: TContractState, minter_address: ContractAddress) -> bool;
+
+    /// Removes an authorized minter.
+    /// Callable only by the contract admin.
+    fn remove_minter(ref self: TContractState, minter_address: ContractAddress) -> bool;
+
+    /// Checks if an account is an authorized minter.
+    fn is_minter(self: @TContractState, account: ContractAddress) -> bool;
+
+    /// Sets the maximum total supply of the token.
+    /// Callable only by the contract admin.
+    fn set_max_supply(ref self: TContractState, new_max_supply: u256) -> bool;
+
+    /// Gets the maximum total supply of the token.
+    fn get_max_supply(self: @TContractState) -> u256;
+
+    // // Multi-currency functions
+    // fn get_supported_currencies(self: @TContractState) -> Array<felt252>;
+    // fn get_exchange_rate(
+    //     self: @TContractState, from_currency: felt252, to_currency: felt252,
+    // ) -> u256;
+    // fn convert_currency(
+    //     ref self: TContractState, from_currency: felt252, to_currency: felt252, amount: u256,
+    // ) -> u256;
+    // fn register_currency(ref self: TContractState, currency: felt252);
+    // fn set_oracle(ref self: TContractState, oracle_address: ContractAddress);
+    // fn get_oracle(self: @TContractState) -> ContractAddress;
 }
