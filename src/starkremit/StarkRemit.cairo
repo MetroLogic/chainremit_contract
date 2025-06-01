@@ -8,7 +8,7 @@ mod StarkRemit {
     };
     use starknet::{ContractAddress, get_block_timestamp, get_caller_address, get_contract_address};
     use starkremit_contract::base::errors::{
-        ERC20Errors, GroupErrors, KYCErrors, RegistrationErrors,
+        ERC20Errors, GroupErrors, KYCErrors, RegistrationErrors, MintBurnErrors,
     };
     use starkremit_contract::base::types::{
         KYCLevel, KycLevel, KycStatus, RegistrationRequest, RegistrationStatus, SavingsGroup,
@@ -44,7 +44,13 @@ mod StarkRemit {
         MemberAdded: MemberAdded,
         // Savings Group
         GroupCreated: GroupCreated, // New savings group created
-        MemberJoined: MemberJoined // User joined a savings group
+        MemberJoined: MemberJoined, // User joined a savings group
+        // Token Supply Events
+        Minted: Minted,
+        Burned: Burned,
+        MinterAdded: MinterAdded,
+        MinterRemoved: MinterRemoved,
+        MaxSupplyUpdated: MaxSupplyUpdated,
     }
 
 
@@ -238,6 +244,51 @@ mod StarkRemit {
         member: ContractAddress // Address that joined
     }
 
+    // Event emitted when tokens are minted
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct Minted {
+        #[key]
+        minter: ContractAddress, // Address that performed the minting
+        #[key]
+        recipient: ContractAddress, // Address that received the minted tokens
+        amount: u256 // Amount of tokens minted
+    }
+
+    // Event emitted when tokens are burned
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct Burned {
+        #[key]
+        account: ContractAddress, // Address whose tokens were burned
+        amount: u256 // Amount of tokens burned
+    }
+
+    // Event emitted when a new minter is added
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct MinterAdded {
+        #[key]
+        account: ContractAddress, // Address added as a minter
+        #[key]
+        added_by: ContractAddress // Admin who added the minter
+    }
+
+    // Event emitted when a minter is removed
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct MinterRemoved {
+        #[key]
+        account: ContractAddress, // Address removed from minters
+        #[key]
+        removed_by: ContractAddress // Admin who removed the minter
+    }
+
+    // Event emitted when the maximum supply is updated
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct MaxSupplyUpdated {
+        new_max_supply: u256, // The new maximum supply
+        #[key]
+        updated_by: ContractAddress // Admin who updated the max supply
+    }
+
+
     // Contract storage definition
     #[storage]
     struct Storage {
@@ -284,7 +335,10 @@ mod StarkRemit {
         // Savings Group storage
         groups: Map<u64, SavingsGroup>, // Stores all savings groups by ID
         group_members: Map<(u64, ContractAddress), bool>, // True if user is member of given group
-        group_count: u64 // Counter used to assign unique group IDs
+        group_count: u64, // Counter used to assign unique group IDs
+        // Token Supply Management
+        max_supply: u256, // Maximum total supply of the token
+        minters: Map<ContractAddress, bool> // Addresses authorized to mint tokens
     }
 
     // Contract constructor
@@ -296,6 +350,7 @@ mod StarkRemit {
         name: felt252, // Token name
         symbol: felt252, // Token symbol
         initial_supply: u256, // Initial token supply
+        max_supply: u256, // Maximum token supply
         base_currency: felt252, // Base currency identifier
         oracle_address: ContractAddress // Oracle contract address
     ) {
@@ -320,6 +375,12 @@ mod StarkRemit {
         self.kyc_enforcement_enabled.write(false);
         self._set_default_transaction_limits();
 
+        // Initialize Token Supply Management
+        // Max supply must be greater than or equal to initial supply
+        assert(max_supply >= initial_supply, MintBurnErrors::MAX_SUPPLY_TOO_LOW);
+        self.max_supply.write(max_supply);
+        self.minters.write(admin, true); // The deployer/admin is an initial minter
+
         // Emit transfer event for initial supply
         let zero_address: ContractAddress = 0.try_into().unwrap();
         self.emit(Transfer { from: zero_address, to: admin, value: initial_supply });
@@ -327,7 +388,7 @@ mod StarkRemit {
 
     // Implementation of the ERC20 standard interface
     #[abi(embed_v0)]
-    impl IERC20Impl of IERC20::IERC20<ContractState> {
+    impl IStarkRemitTokenImpl of IStarkRemit::IStarkRemitToken<ContractState> {
         // Returns the token name
         fn name(self: @ContractState) -> felt252 {
             self.name.read()
@@ -428,6 +489,102 @@ mod StarkRemit {
 
             self.emit(Transfer { from: sender, to: recipient, value: amount });
             true
+        }
+
+        /// Mints new tokens to a specified recipient.
+        /// - Caller must be an authorized minter.
+        /// - Minting cannot exceed the `max_supply`.
+        /// - Recipient cannot be the zero address.
+        /// - Amount must be greater than zero.
+        fn mint(ref self: ContractState, recipient: ContractAddress, amount: u256) -> bool {
+            let caller = get_caller_address();
+            assert(self.minters.read(caller), MintBurnErrors::NOT_MINTER);
+
+            let zero_address: ContractAddress = 0.try_into().unwrap();
+            assert(recipient != zero_address, MintBurnErrors::MINT_TO_ZERO);
+            assert(amount > 0, MintBurnErrors::MINT_ZERO_AMOUNT);
+
+            let current_total_supply = self.total_supply.read();
+            let new_total_supply = current_total_supply + amount;
+            assert(new_total_supply <= self.max_supply.read(), MintBurnErrors::MAX_SUPPLY_EXCEEDED);
+
+            self.total_supply.write(new_total_supply);
+            let recipient_balance = self.balances.read(recipient);
+            self.balances.write(recipient, recipient_balance + amount);
+
+            self.emit(Minted { minter: caller, recipient, amount });
+            self.emit(Transfer { from: zero_address, to: recipient, value: amount });
+            true
+        }
+
+        /// Burns (destroys) a specified amount of tokens from the caller's balance.
+        /// - Amount must be greater than zero.
+        /// - Caller must have sufficient balance.
+        fn burn(ref self: ContractState, amount: u256) -> bool {
+            let caller = get_caller_address();
+            assert(amount > 0, MintBurnErrors::BURN_ZERO_AMOUNT);
+
+            let caller_balance = self.balances.read(caller);
+            assert(caller_balance >= amount, MintBurnErrors::INSUFFICIENT_BALANCE_BURN);
+
+            self.balances.write(caller, caller_balance - amount);
+            let current_total_supply = self.total_supply.read();
+            self.total_supply.write(current_total_supply - amount);
+
+            let zero_address: ContractAddress = 0.try_into().unwrap();
+            self.emit(Burned { account: caller, amount });
+            self.emit(Transfer { from: caller, to: zero_address, value: amount });
+            true
+        }
+
+        /// Adds a new authorized minter. Callable only by the contract admin.
+        fn add_minter(ref self: ContractState, minter_address: ContractAddress) -> bool {
+            let caller = get_caller_address();
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+            let zero_address: ContractAddress = 0.try_into().unwrap();
+            assert(minter_address != zero_address, MintBurnErrors::INVALID_MINTER_ADDRESS);
+
+            self.minters.write(minter_address, true);
+            self.emit(MinterAdded { account: minter_address, added_by: caller });
+            true
+        }
+
+        /// Removes an authorized minter. Callable only by the contract admin.
+        fn remove_minter(ref self: ContractState, minter_address: ContractAddress) -> bool {
+            let caller = get_caller_address();
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+            let zero_address: ContractAddress = 0.try_into().unwrap();
+            assert(minter_address != zero_address, MintBurnErrors::INVALID_MINTER_ADDRESS);
+            // Optional: Add logic to prevent removing the last minter or the admin itself without care.
+            // For now, allowing removal.
+
+            self.minters.write(minter_address, false);
+            self.emit(MinterRemoved { account: minter_address, removed_by: caller });
+            true
+        }
+
+        /// Checks if an account is an authorized minter.
+        fn is_minter(self: @ContractState, account: ContractAddress) -> bool {
+            self.minters.read(account)
+        }
+
+        /// Sets the maximum total supply of the token. Callable only by the contract admin.
+        /// Max supply cannot be set lower than the current total supply.
+        fn set_max_supply(ref self: ContractState, new_max_supply: u256) -> bool {
+            let caller = get_caller_address();
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+            assert(
+                new_max_supply >= self.total_supply.read(), MintBurnErrors::MAX_SUPPLY_TOO_LOW
+            );
+
+            self.max_supply.write(new_max_supply);
+            self.emit(MaxSupplyUpdated { new_max_supply, updated_by: caller });
+            true
+        }
+
+        /// Gets the maximum total supply of the token.
+        fn get_max_supply(self: @ContractState) -> u256 {
+            self.max_supply.read()
         }
     }
 
