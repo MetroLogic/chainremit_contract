@@ -6,13 +6,12 @@ use snforge_std::{
     stop_cheat_caller_address,
 };
 use starknet::{
-    ContractAddress, contract_address_const, get_block_timestamp, get_caller_address,
-    get_contract_address,
+    ContractAddress, contract_address_const, get_block_timestamp,
 };
 use starkremit_contract::interfaces::IStarkRemit::{
     IStarkRemitDispatcher, IStarkRemitDispatcherTrait,
 };
-use core::num::traits::{Pow, Zero};
+use core::num::traits::Pow;
 
 // Test constants
 const ADMIN: felt252 = 'admin';
