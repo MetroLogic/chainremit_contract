@@ -7,11 +7,13 @@ use starkremit_contract::base::types::{KycLevel, KycStatus};
 use starkremit_contract::interfaces::IStarkRemit::{
     IStarkRemitDispatcher, IStarkRemitDispatcherTrait,
 };
+use core::num::traits::{Pow, Zero};
 
 const ADMIN_ADDRESS: felt252 = 0x123;
 const USER_ADDRESS: felt252 = 0x456;
 const ORACLE_ADDRESS: felt252 = 0x789;
 const VERIFICATION_HASH: felt252 = 0xABC;
+const MAX_SUPPLY: u256 = 1_000_000_000 * 10_u256.pow(18); // 1B tokens with 18 decimals
 
 fn deploy_starkremit_contract() -> IStarkRemitDispatcher {
     let contract = declare("StarkRemit").unwrap().contract_class();
@@ -23,6 +25,7 @@ fn deploy_starkremit_contract() -> IStarkRemitDispatcher {
     'StarkRemit'.serialize(ref calldata);
     'SRM'.serialize(ref calldata);
     1000000_u256.serialize(ref calldata);
+    MAX_SUPPLY.serialize(ref calldata);
     'USD'.serialize(ref calldata);
     oracle.serialize(ref calldata);
 

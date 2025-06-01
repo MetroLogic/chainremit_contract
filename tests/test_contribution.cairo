@@ -12,6 +12,7 @@ use starknet::{
 use starkremit_contract::interfaces::IStarkRemit::{
     IStarkRemitDispatcher, IStarkRemitDispatcherTrait,
 };
+use core::num::traits::{Pow, Zero};
 
 // Test constants
 const ADMIN: felt252 = 'admin';
@@ -25,6 +26,7 @@ const NAME: felt252 = 'StarkRemit Token';
 const SYMBOL: felt252 = 'SRT';
 const INITIAL_SUPPLY: u256 = 1000000000000000000000000; // 1,000,000 tokens with 18 decimals
 const BASE_CURRENCY: felt252 = 'USD';
+const MAX_SUPPLY: u256 = 1_000_000_000 * 10_u256.pow(18); // 1B tokens with 18 decimals
 
 // Helper function to create a contract address
 fn address(value: felt252) -> ContractAddress {
@@ -45,6 +47,8 @@ fn setup() -> (ContractAddress, ContractAddress) {
     calldata.append(SYMBOL);
     calldata.append(INITIAL_SUPPLY.low.into());
     calldata.append(INITIAL_SUPPLY.high.into());
+    calldata.append(MAX_SUPPLY.low.into());
+    calldata.append(MAX_SUPPLY.high.into());
     calldata.append(BASE_CURRENCY);
     calldata.append(oracle_address.into());
 
