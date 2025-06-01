@@ -1,20 +1,25 @@
 # starkRemit_contract
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) <!-- Optional: Add relevant badges -->
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Cairo](https://img.shields.io/badge/Cairo-1.x-orange.svg)](https://book.cairo-lang.org/)
+[![Starknet](https://img.shields.io/badge/Starknet-L2-blue.svg)](https://starknet.io/)
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](#)
 
 ## Project Overview
 
-**starkRemit_contract** is a Starknet smart contract designed for [**Describe the main purpose of the contract here. e.g., facilitating secure and efficient cross-border remittances, managing escrow services, etc.**].
+**starkRemit_contract** is a Starknet smart contract designed for facilitating secure and efficient cross-border remittances with built-in escrow services and compliance features.
 
-This project aims to leverage the scalability and low transaction costs of Starknet L2 to [**Explain the problem it solves or the value it provides**].
+This project leverages the scalability and low transaction costs of Starknet L2 to solve the high-cost, slow settlement, and limited transparency issues plaguing traditional remittance services. By utilizing blockchain technology, we eliminate intermediaries, reduce fees from 6-10% to under 1%, and provide real-time settlement with full transaction transparency.
 
 **Key Features:**
-*   [**Feature 1: e.g., User registration and KYC (if applicable)**]
-*   [**Feature 2: e.g., Creating remittance requests**]
-*   [**Feature 3: e.g., Secure fund locking/escrow**]
-*   [**Feature 4: e.g., Fund release upon confirmation**]
-*   [**Feature 5: e.g., Dispute resolution mechanism (if applicable)**]
-*   [**Feature 6: e.g., Fee structure**]
+*   **Multi-Currency Support**: Send and receive payments in various ERC20 tokens with automatic conversion
+*   **KYC Integration**: Built-in identity verification system with compliance checks for regulatory requirements
+*   **Secure Escrow System**: Funds are locked in smart contract escrow until recipient confirmation or dispute resolution
+*   **Real-time Exchange Rates**: Integration with Pragma Oracle for accurate, up-to-date currency conversion rates
+*   **Dispute Resolution**: Automated arbitration system with appeal mechanisms for transaction conflicts
+*   **Ultra-Low Fees**: Leverage Starknet's L2 efficiency for transaction costs under 0.5% of transfer amount
+*   **Multi-signature Security**: Optional multi-sig approval for high-value transactions
+*   **Compliance Monitoring**: Automatic AML/CFT screening and regulatory reporting capabilities
 
 ---
 
@@ -23,37 +28,48 @@ This project aims to leverage the scalability and low transaction costs of Stark
 Follow these steps to set up the project locally for development and testing.
 
 **Prerequisites:**
-*   [**Prerequisite 1: e.g., Scarb (Cairo package manager)**] - [Link to installation guide]
-*   [**Prerequisite 2: e.g., Starknet Foundry (Testing framework)**] - [Link to installation guide]
-*   [**Prerequisite 3: e.g., Starknet Devnet (Local testnet)**] - [Link to installation guide]
-*   [**Prerequisite 4: e.g., Git**]
+*   [Scarb (Cairo package manager)](https://docs.swmansion.com/scarb/download.html) - v2.4.0 or higher
+*   [Starknet Foundry (Testing framework)](https://foundry-rs.github.io/starknet-foundry/getting-started/installation.html) - v0.20.0 or higher
+*   [Starknet Devnet (Local testnet)](https://github.com/0xSpaceShard/starknet-devnet-py) - v0.6.0 or higher
+*   [Git](https://git-scm.com/downloads) - Latest stable version
+*   [Node.js](https://nodejs.org/) - v18+ (for frontend integration scripts)
 
 **Installation:**
 
 1.  **Clone the repository:**
     ```bash
-    git clone <your-repository-url>
+    git clone https://github.com/your-username/starkRemit_contract.git
     cd starkRemit_contract
     ```
-2.  **Install dependencies (if any specific steps are needed beyond Scarb):**
+2.  **Install Scarb dependencies:**
     ```bash
-    # e.g., scarb build (often sufficient to fetch dependencies)
     scarb build
     ```
-3.  **Configure environment variables (if needed):**
-    *   Create a `.env` file based on `.env.example` (if you have one).
-    *   Fill in necessary variables like private keys for deployment, RPC endpoints, etc.
+3.  **Configure environment variables:**
     ```bash
     cp .env.example .env
-    # Edit .env with your details
+    # Edit .env with your configuration:
+    # STARKNET_RPC_URL=https://starknet-goerli.g.alchemy.com/v2/your-api-key
+    # ACCOUNT_ADDRESS=0x...
+    # PRIVATE_KEY=0x...
+    # PRAGMA_ORACLE_ADDRESS=0x...
+    # DEFAULT_FEE_RATE=50  # 0.5% in basis points
+    ```
+4.  **Install additional tools:**
+    ```bash
+    # Install Starkli for contract interaction
+    curl -L https://raw.githubusercontent.com/xJonathanLEI/starkli/master/install.sh | bash
+    starkliup
+    
+    # Install Node.js dependencies for scripts
+    npm install
     ```
 
 **Running Locally:**
 
 1.  **Start a local Starknet Devnet:**
     ```bash
-    # Command to start the devnet
-    starknet-devnet &
+    starknet-devnet --host 127.0.0.1 --port 5050 --seed 42 &
     ```
 2.  **Compile the contract:**
     ```bash
@@ -61,8 +77,11 @@ Follow these steps to set up the project locally for development and testing.
     ```
 3.  **Run tests:**
     ```bash
-    # Command to run tests (e.g., using Starknet Foundry)
-    snforge test
+    snforge test --verbose
+    ```
+4.  **Deploy to local devnet:**
+    ```bash
+    ./scripts/deploy_local.sh
     ```
 
 ---
@@ -71,19 +90,36 @@ Follow these steps to set up the project locally for development and testing.
 
 This project includes the following scripts to aid development:
 
-*   `scarb build`: Compiles the Cairo contract.
-*   `snforge test`: Runs the test suite using Starknet Foundry.
-*   `[script_name_1]`: [**Description of what the script does, e.g., Deploy to devnet**]
+*   `scarb build`: Compiles the Cairo contract and generates artifacts.
+*   `snforge test`: Runs the complete test suite using Starknet Foundry.
+*   `scarb fmt`: Formats all Cairo source code according to project standards.
+*   **Local Deployment**: Deploys contract to local devnet with test configuration
     ```bash
-    # How to run the script
-    ./scripts/deploy_devnet.sh
+    ./scripts/deploy_local.sh
     ```
-*   `[script_name_2]`: [**Description of what the script does, e.g., Format code**]
+*   **Testnet Deployment**: Deploys contract to Goerli or Sepolia testnet
     ```bash
-    # How to run the script
-    scarb fmt
+    ./scripts/deploy_testnet.sh --network goerli
+    ./scripts/deploy_testnet.sh --network sepolia
     ```
-*   *Add more scripts as needed.*
+*   **Contract Interaction**: Utility scripts for common contract operations
+    ```bash
+    ./scripts/create_remittance.sh <recipient> <amount> <token_address>
+    ./scripts/fund_remittance.sh <remittance_id>
+    ./scripts/release_funds.sh <remittance_id>
+    ```
+*   **Oracle Setup**: Initialize and configure Pragma Oracle integration
+    ```bash
+    ./scripts/setup_oracle.sh
+    ```
+*   **Verification**: Verify deployed contracts on Starkscan
+    ```bash
+    ./scripts/verify_contract.sh <contract_address> <network>
+    ```
+*   **Load Testing**: Performance testing suite for high-volume scenarios
+    ```bash
+    npm run load-test
+    ```
 
 ---
 
@@ -91,172 +127,345 @@ This project includes the following scripts to aid development:
 
 ```
 /home/knights/Desktop/starkRemit_contract
-├── Scarb.toml             # Project manifest and dependencies
-├── src/                   # Main contract source code
-│   └── lib.cairo          # Entry point for the contract
-├── tests/                 # Contract tests using Starknet Foundry
-│   └── test_contract.cairo # Example test file
-├── scripts/               # Helper scripts (deployment, etc.) - Optional
-└── README.md              # This file
+├── Scarb.toml                    # Project manifest and dependencies
+├── .env.example                  # Environment variables template
+├── src/                          # Main contract source code
+│   ├── lib.cairo                 # Contract entry point and module declarations
+│   ├── core/                     # Core contract logic
+│   │   ├── remittance.cairo      # Remittance creation and management
+│   │   ├── escrow.cairo          # Escrow and fund locking mechanisms
+│   │   ├── kyc.cairo             # KYC and compliance verification
+│   │   └── dispute.cairo         # Dispute resolution system
+│   ├── interfaces/               # Contract interfaces and traits
+│   │   ├── IRemittance.cairo     # Main remittance interface
+│   │   ├── IEscrow.cairo         # Escrow service interface
+│   │   └── IOracle.cairo         # Price oracle interface
+│   ├── utils/                    # Utility functions and helpers
+│   │   ├── math.cairo            # Mathematical operations and validations
+│   │   ├── access_control.cairo  # Role-based access control
+│   │   └── events.cairo          # Event definitions and emissions
+│   └── storage/                  # Storage definitions and mappings
+│       ├── remittance_storage.cairo
+│       └── user_storage.cairo
+├── tests/                        # Comprehensive test suite
+│   ├── unit/                     # Unit tests for individual functions
+│   │   ├── test_remittance.cairo
+│   │   ├── test_escrow.cairo
+│   │   └── test_kyc.cairo
+│   ├── integration/              # Integration tests for complete workflows
+│   │   ├── test_full_remittance_flow.cairo
+│   │   └── test_dispute_resolution.cairo
+│   └── mocks/                    # Mock contracts for testing
+│       ├── mock_erc20.cairo
+│       └── mock_oracle.cairo
+├── scripts/                      # Deployment and utility scripts
+│   ├── deploy_local.sh
+│   ├── deploy_testnet.sh
+│   ├── create_remittance.sh
+│   ├── fund_remittance.sh
+│   ├── release_funds.sh
+│   ├── setup_oracle.sh
+│   └── verify_contract.sh
+├── docs/                         # Additional documentation
+│   ├── API.md                    # Detailed API documentation
+│   ├── SECURITY.md               # Security considerations and audit reports
+│   └── INTEGRATION.md            # Frontend integration guide
+├── package.json                  # Node.js dependencies for scripts
+└── README.md                     # This file
 ```
-*   **`Scarb.toml`**: Defines project metadata, dependencies, and compilation settings.
-*   **`src/`**: Contains the core logic of the smart contract written in Cairo.
-*   **`tests/`**: Holds integration and unit tests for the contract.
-*   **`scripts/`**: Contains utility scripts for tasks like deployment, interaction, etc. (if applicable).
+
+**Directory Descriptions:**
+*   **`Scarb.toml`**: Defines project metadata, Cairo dependencies, and compilation settings.
+*   **`src/core/`**: Contains the main business logic for remittance processing, escrow management, and compliance.
+*   **`src/interfaces/`**: Defines contract interfaces following Cairo best practices for modularity.
+*   **`src/utils/`**: Reusable utility functions for mathematical operations, access control, and event handling.
+*   **`tests/`**: Comprehensive testing suite including unit tests, integration tests, and mock contracts.
+*   **`scripts/`**: Shell and Node.js scripts for deployment, contract interaction, and maintenance tasks.
+*   **`docs/`**: Extended documentation covering API details, security, and integration guides.
 
 ---
 
 ## Coding Conventions
 
-*   **Language:** Cairo 1.x+
-*   **Formatting:** Use `scarb fmt` for consistent code style.
-*   **Naming:**
-    *   Contracts: `PascalCase` (e.g., `StarkRemit`)
-    *   Functions: `snake_case` (e.g., `create_remittance`)
-    *   Variables: `snake_case` (e.g., `sender_address`)
-    *   Structs/Enums: `PascalCase` (e.g., `RemittanceDetails`)
-    *   Constants: `UPPER_SNAKE_CASE` (e.g., `MAX_AMOUNT`)
-    *   Events: `PascalCase` (e.g., `RemittanceCreated`)
-*   **Comments:** Use `//` for single-line comments and `///` for documentation comments (doc comments) that explain functions, structs, etc.
-*   **Error Handling:** Utilize `panic` for unrecoverable errors and descriptive `Result<T, E>` or custom error types where appropriate. Use `#[external]` and `#[view]` attributes correctly.
-*   **Testing:** Write comprehensive tests covering success cases, edge cases, and failure scenarios. Aim for high test coverage.
+*   **Language:** Cairo 1.x+ (Compatible with Cairo 2.4.0+)
+*   **Formatting:** Use `scarb fmt` for consistent code style across all source files.
+*   **Naming Conventions:**
+    *   Contracts: `PascalCase` (e.g., `StarkRemit`, `EscrowManager`)
+    *   Functions: `snake_case` (e.g., `create_remittance`, `release_funds`)
+    *   Variables: `snake_case` (e.g., `sender_address`, `total_amount`)
+    *   Structs/Enums: `PascalCase` (e.g., `RemittanceDetails`, `TransactionStatus`)
+    *   Constants: `UPPER_SNAKE_CASE` (e.g., `MAX_REMITTANCE_AMOUNT`, `MIN_FEE_RATE`)
+    *   Events: `PascalCase` (e.g., `RemittanceCreated`, `FundsReleased`)
+    *   Storage Variables: `snake_case` (e.g., `remittances_by_id`, `user_kyc_status`)
+*   **Documentation Standards:**
+    *   Use `///` for documentation comments explaining functions, structs, and modules
+    *   Include parameter descriptions, return value explanations, and usage examples
+    *   Document all public interfaces with comprehensive examples
+*   **Error Handling:**
+    *   Use descriptive error messages with context
+    *   Implement custom error types for different failure scenarios
+    *   Use `assert!` for critical invariants and `panic_with_felt252` for custom error codes
+    *   Prefer recoverable errors with proper Result types where applicable
+*   **Security Practices:**
+    *   Implement checks-effects-interactions pattern
+    *   Use reentrancy guards for external calls
+    *   Validate all inputs and state changes
+    *   Follow principle of least privilege for access control
+*   **Testing Standards:**
+    *   Write unit tests for all public functions
+    *   Include edge cases and boundary condition testing
+    *   Test both success and failure scenarios
+    *   Maintain minimum 85% code coverage
+    *   Use descriptive test names following `test_function_name_condition_expected_result` pattern
 
 ---
 
 ## Deployment Process
 
 **Prerequisites:**
-*   Compiled contract artifacts (`target/dev/your_contract_name.contract_class.json`).
-*   A funded Starknet account (on the target network: Goerli Testnet, Sepolia Testnet, Mainnet).
-*   RPC endpoint for the target network.
-*   Deployment tool (e.g., Starkli, Starknet.js).
+*   Compiled contract artifacts in `target/dev/` directory
+*   Funded Starknet account with sufficient ETH for deployment fees
+*   RPC endpoint access for target network (Mainnet, Goerli, or Sepolia)
+*   Deployment tools: Starkli v0.2.0+ or Starknet.js
 
-**Steps (using Starkli as an example):**
+**Network Configuration:**
 
-1.  **Declare the Class:**
+| Network | RPC Endpoint | Chain ID | Status |
+|---------|--------------|----------|---------|
+| Mainnet | `https://starknet-mainnet.g.alchemy.com/v2/` | SN_MAIN | Production |
+| Goerli  | `https://starknet-goerli.g.alchemy.com/v2/` | SN_GOERLI | Testnet |
+| Sepolia | `https://starknet-sepolia.g.alchemy.com/v2/` | SN_SEPOLIA | Testnet |
+
+**Deployment Steps (using Starkli):**
+
+1.  **Set up Starkli account and keystore:**
     ```bash
-    starkli declare target/dev/starkRemit_contract_StarkRemit.contract_class.json --network <network_name> --account <account_address_or_path> --private-key <private_key_or_path> --compiler-version <compiler_version> --max-fee <max_fee_in_wei>
-    # Note the Class Hash output
-    ```
-2.  **Deploy the Contract Instance:**
-    ```bash
-    starkli deploy <class_hash> <constructor_arg_1> <constructor_arg_2> ... --network <network_name> --account <account_address_or_path> --private-key <private_key_or_path> --max-fee <max_fee_in_wei>
-    # Note the Contract Address output
+    # Create account descriptor
+    starkli account fetch <account_address> --rpc <rpc_url>
+    
+    # Create keystore (if not already done)
+    starkli signer keystore from-key ~/.starkli-wallets/keystore.json
     ```
 
-*   Replace `<network_name>` with `goerli-1`, `sepolia-1`, or `mainnet`.
-*   Replace `<account_address_or_path>`, `<private_key_or_path>`, `<compiler_version>`, `<max_fee_in_wei>`, `<class_hash>`, and constructor arguments with your specific values.
-*   Refer to the Starkli documentation for detailed usage.
-*   [**Add any project-specific deployment notes or script references here.**]
+2.  **Declare the Contract Class:**
+    ```bash
+    starkli declare target/dev/starkRemit_contract_StarkRemit.contract_class.json \
+        --network goerli \
+        --account ~/.starkli-wallets/account.json \
+        --keystore ~/.starkli-wallets/keystore.json \
+        --compiler-version 2.4.0 \
+        --max-fee 0.01
+    
+    # Save the returned class hash: 0x...
+    ```
+
+3.  **Deploy Contract Instance:**
+    ```bash
+    starkli deploy <class_hash> \
+        <initial_owner_address> \
+        <oracle_address> \
+        <default_fee_rate> \
+        --network goerli \
+        --account ~/.starkli-wallets/account.json \
+        --keystore ~/.starkli-wallets/keystore.json \
+        --max-fee 0.05
+    
+    # Save the returned contract address: 0x...
+    ```
+
+**Constructor Parameters:**
+*   `initial_owner`: Address that will have admin privileges (use your account address)
+*   `oracle_address`: Pragma Oracle contract address for price feeds
+*   `default_fee_rate`: Fee rate in basis points (e.g., 50 = 0.5%)
+
+**Post-Deployment Configuration:**
+```bash
+# Set supported tokens
+starkli invoke <contract_address> add_supported_token <token_address> --network goerli
+
+# Configure KYC provider
+starkli invoke <contract_address> set_kyc_provider <provider_address> --network goerli
+
+# Set minimum/maximum remittance limits
+starkli invoke <contract_address> set_limits <min_amount> <max_amount> --network goerli
+```
+
+**Automated Deployment:**
+Use our deployment scripts for easier deployment:
+```bash
+# Deploy to testnet with configuration
+./scripts/deploy_testnet.sh --network goerli --owner 0x... --oracle 0x...
+
+# Deploy to mainnet (requires additional confirmations)
+./scripts/deploy_mainnet.sh --owner 0x... --oracle 0x...
+```
 
 ---
 
 ## Component Library Documentation (Contract Interface)
 
-This section describes the main functions (external entry points) and data structures (structs/enums) exposed by the `starkRemit_contract`.
+This section describes the main functions, data structures, and events exposed by the `starkRemit_contract`.
+
+### Core Data Structures
 
 **Structs:**
 
 *   **`RemittanceDetails`**:
-    *   `sender: ContractAddress` - The address initiating the remittance.
-    *   `recipient: ContractAddress` - The intended recipient address.
-    *   `amount: u256` - The amount of funds being sent.
-    *   `token_address: ContractAddress` - The address of the ERC20 token being used.
-    *   `status: RemittanceStatus` - The current status of the remittance.
-    *   `[Other fields as needed...]`
-*   **`[Other Struct Name]`**:
-    *   `[Field descriptions...]`
+    ```cairo
+    struct RemittanceDetails {
+        id: u64,                           // Unique remittance identifier
+        sender: ContractAddress,           // Address initiating the remittance
+        recipient: ContractAddress,        // Intended recipient address
+        amount: u256,                      // Amount in source token units
+        source_token: ContractAddress,     // Source token contract address
+        target_token: ContractAddress,     // Target token contract address
+        exchange_rate: u256,               // Exchange rate at creation time
+        fee_amount: u256,                  // Total fees charged
+        status: RemittanceStatus,          // Current remittance status
+        created_at: u64,                   // Block timestamp of creation
+        funded_at: u64,                    // Block timestamp when funded
+        released_at: u64,                  // Block timestamp when released
+        expires_at: u64,                   // Expiration timestamp
+        kyc_verified: bool,               // KYC verification status
+        dispute_id: u64,                   // Associated dispute ID (if any)
+    }
+    ```
+
+*   **`UserProfile`**:
+    ```cairo
+    struct UserProfile {
+        address: ContractAddress,          // User's address
+        kyc_level: KYCLevel,              // KYC verification level
+        total_sent: u256,                  // Total amount sent lifetime
+        total_received: u256,              // Total amount received lifetime
+        reputation_score: u32,             // User reputation (0-1000)
+        is_blocked: bool,                  // Account suspension status
+        created_at: u64,                   // Registration timestamp
+        last_activity: u64,                // Last transaction timestamp
+    }
+    ```
+
+*   **`DisputeDetails`**:
+    ```cairo
+    struct DisputeDetails {
+        id: u64,                           // Unique dispute identifier
+        remittance_id: u64,               // Associated remittance ID
+        initiator: ContractAddress,        // Address that raised the dispute
+        reason: DisputeReason,            // Categorized dispute reason
+        description: ByteArray,            // Detailed description
+        evidence_hash: felt252,           // IPFS hash of evidence
+        status: DisputeStatus,            // Current dispute status
+        created_at: u64,                   // Dispute creation timestamp
+        resolved_at: u64,                  // Resolution timestamp
+        resolution: DisputeResolution,     // Final resolution decision
+    }
+    ```
 
 **Enums:**
 
 *   **`RemittanceStatus`**:
-    *   `Pending`
-    *   `Funded`
-    *   `Released`
-    *   `Cancelled`
-*   **`[Other Enum Name]`**:
-    *   `[Variant descriptions...]`
+    ```cairo
+    enum RemittanceStatus {
+        Created,        // Remittance created but not funded
+        Funded,         // Funds locked in escrow
+        Released,       // Funds released to recipient
+        Cancelled,      // Cancelled by sender (before funding)
+        Disputed,       // Under dispute resolution
+        Expired,        // Expired without completion
+        Refunded,       // Funds returned to sender
+    }
+    ```
 
-**External Functions (`#[external]`):**
+*   **`KYCLevel`**:
+    ```cairo
+    enum KYCLevel {
+        None,           // No KYC verification
+        Basic,          // Basic identity verification
+        Enhanced,       // Enhanced due diligence
+        Premium,        // Full institutional verification
+    }
+    ```
 
-*   **`fn constructor(ref self: ContractState, initial_owner: ContractAddress, ...)`**:
-    *   Initializes the contract state upon deployment.
-    *   *Parameters:* [Describe parameters]
-    *   *Usage Example:* Called automatically during deployment.
-*   **`fn create_remittance(ref self: ContractState, recipient: ContractAddress, amount: u256, token_address: ContractAddress)`**:
-    *   Allows a user to initiate a new remittance request.
-    *   *Parameters:* [Describe parameters]
-    *   *Emits:* `RemittanceCreated` event.
-    *   *Usage Example:* `starkli invoke <contract_address> create_remittance <recipient> <amount_low> <amount_high> <token_address> ...`
+*   **`DisputeReason`**:
+    ```cairo
+    enum DisputeReason {
+        PaymentNotReceived,     // Recipient claims non-receipt
+        WrongAmount,           // Incorrect amount received
+        UnauthorizedTx,        // Unauthorized transaction claim
+        TechnicalIssue,        // Technical problem during transfer
+        FraudSuspicion,        // Suspected fraudulent activity
+        Other,                 // Other dispute reasons
+    }
+    ```
+
+### External Functions
+
+**Core Remittance Functions:**
+
+*   **`fn create_remittance(ref self: ContractState, recipient: ContractAddress, amount: u256, source_token: ContractAddress, target_token: ContractAddress, expires_in: u64) -> u64`**:
+    *   Creates a new remittance request with specified parameters.
+    *   *Parameters:* 
+        - `recipient`: Destination address for funds
+        - `amount`: Amount to send in source token units
+        - `source_token`: ERC20 token address for source currency
+        - `target_token`: ERC20 token address for target currency
+        - `expires_in`: Expiration time in seconds from now
+    *   *Returns:* Unique remittance ID
+    *   *Emits:* `RemittanceCreated` event
+    *   *Requirements:* Valid addresses, amount > 0, tokens supported
+    *   *Usage Example:* 
+        ```bash
+        starkli invoke <contract_address> create_remittance \
+            0x1234...recipient 1000000000000000000 \
+            0x5678...usdc 0x9abc...eth 86400
+        ```
+
 *   **`fn fund_remittance(ref self: ContractState, remittance_id: u64)`**:
-    *   Allows the sender (or designated funder) to lock funds for a specific remittance. Requires prior ERC20 approval.
-    *   *Parameters:* [Describe parameters]
-    *   *Emits:* `RemittanceFunded` event.
-    *   *Usage Example:* `starkli invoke <contract_address> fund_remittance <remittance_id> ...`
+    *   Locks funds in escrow for the specified remittance. Requires prior ERC20 approval.
+    *   *Parameters:* `remittance_id`: ID of the remittance to fund
+    *   *Emits:* `RemittanceFunded` event
+    *   *Requirements:* Remittance exists, caller is sender, sufficient allowance
+    *   *Usage Example:*
+        ```bash
+        # First approve token transfer
+        starkli invoke <token_address> approve <contract_address> <amount>
+        # Then fund the remittance
+        starkli invoke <contract_address> fund_remittance 123
+        ```
+
 *   **`fn release_funds(ref self: ContractState, remittance_id: u64)`**:
-    *   Allows the recipient (or designated party) to claim the funds.
-    *   *Parameters:* [Describe parameters]
-    *   *Emits:* `FundsReleased` event.
-    *   *Usage Example:* `starkli invoke <contract_address> release_funds <remittance_id> ...`
-*   **`[Other External Function]`**:
-    *   [Description, Parameters, Emits, Usage Example]
+    *   Releases escrowed funds to the recipient after validation.
+    *   *Parameters:* `remittance_id`: ID of the remittance to complete
+    *   *Emits:* `FundsReleased` event
+    *   *Requirements:* Remittance funded, caller is recipient, not expired
+    *   *Usage Example:*
+        ```bash
+        starkli invoke <contract_address> release_funds 123
+        ```
 
-**View Functions (`#[view]`):**
+*   **`fn cancel_remittance(ref self: ContractState, remittance_id: u64)`**:
+    *   Cancels an unfunded remittance or refunds a funded one under specific conditions.
+    *   *Parameters:* `remittance_id`: ID of the remittance to cancel
+    *   *Emits:* `RemittanceCancelled` or `RemittanceRefunded` event
+    *   *Requirements:* Caller is sender, valid cancellation conditions
+    *   *Usage Example:*
+        ```bash
+        starkli invoke <contract_address> cancel_remittance 123
+        ```
 
-*   **`fn get_remittance_details(self: @ContractState, remittance_id: u64) -> RemittanceDetails`**:
-    *   Retrieves the details for a specific remittance.
-    *   *Parameters:* [Describe parameters]
-    *   *Returns:* `RemittanceDetails` struct.
-    *   *Usage Example:* `starkli call <contract_address> get_remittance_details <remittance_id> ...`
-*   **`[Other View Function]`**:
-    *   [Description, Parameters, Returns, Usage Example]
+**Dispute Resolution Functions:**
 
----
+*   **`fn raise_dispute(ref self: ContractState, remittance_id: u64, reason: DisputeReason, description: ByteArray, evidence_hash: felt252) -> u64`**:
+    *   Initiates a dispute for a specific remittance.
+    *   *Parameters:* Remittance ID, dispute reason, description, evidence hash
+    *   *Returns:* Dispute ID
+    *   *Emits:* `DisputeRaised` event
+    *   *Usage Example:*
+        ```bash
+        starkli invoke <contract_address> raise_dispute 123 0 "Payment not received" 0x...
+        ```
 
-## Contributing Guidelines
-
-We welcome contributions to `starkRemit_contract`! Please follow these guidelines:
-
-1.  **Fork the repository:** Create your own copy of the project.
-2.  **Create a feature branch:** `git checkout -b feat/your-feature-name` or `fix/your-bug-fix-name`.
-3.  **Make your changes:** Adhere to the Coding Conventions.
-4.  **Add tests:** Ensure your changes are well-tested.
-5.  **Ensure tests pass:** Run `snforge test`.
-6.  **Format your code:** Run `scarb fmt`.
-7.  **Commit your changes:** Use clear and descriptive commit messages (e.g., following Conventional Commits).
-8.  **Push to your branch:** `git push origin feat/your-feature-name`.
-9.  **Open a Pull Request (PR):** Target the `main` (or `develop`) branch of the original repository. Provide a clear description of your changes in the PR.
-10. **Code Review:** Wait for maintainers to review your PR. Address any feedback provided.
-
-**Reporting Issues:**
-*   Use the GitHub Issues tab to report bugs or suggest features.
-*   Provide detailed information, including steps to reproduce (for bugs).
-
----
-
-## Architecture (Optional)
-
-[**If you create architecture diagrams (e.g., using tools like Mermaid, Excalidraw, or image files), embed them here and provide explanations.**]
-
-**Example using Mermaid:**
-
-```mermaid
-graph TD;
-    User-->|1. create_remittance| StarkRemitContract;
-    StarkRemitContract-->|2. Emits RemittanceCreated| EventLog;
-    User-->|3. approve ERC20 transfer| ERC20Contract;
-    User-->|4. fund_remittance| StarkRemitContract;
-    StarkRemitContract-->|5. transferFrom| ERC20Contract;
-    StarkRemitContract-->|6. Emits RemittanceFunded| EventLog;
-    Recipient-->|7. release_funds| StarkRemitContract;
-    StarkRemitContract-->|8. transfer to Recipient| ERC20Contract;
-    StarkRemitContract-->|9. Emits FundsReleased| EventLog;
-```
-
-**Explanation:**
-*   [**Explain the flow depicted in the diagram.**]
-*   [**Describe the key components and their interactions.**]
-
+**
 ---
 
 ## License
