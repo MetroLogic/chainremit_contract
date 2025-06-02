@@ -8,7 +8,7 @@ mod StarkRemit {
     };
     use starknet::{ContractAddress, get_block_timestamp, get_caller_address, get_contract_address};
     use starkremit_contract::base::errors::{
-        ERC20Errors, GroupErrors, KYCErrors, RegistrationErrors, MintBurnErrors,
+        ERC20Errors, GroupErrors, KYCErrors, MintBurnErrors, RegistrationErrors,
     };
     use starkremit_contract::base::types::{
         KYCLevel, KycLevel, KycStatus, RegistrationRequest, RegistrationStatus, SavingsGroup,
@@ -555,7 +555,8 @@ mod StarkRemit {
             assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
             let zero_address: ContractAddress = 0.try_into().unwrap();
             assert(minter_address != zero_address, MintBurnErrors::INVALID_MINTER_ADDRESS);
-            // Optional: Add logic to prevent removing the last minter or the admin itself without care.
+            // Optional: Add logic to prevent removing the last minter or the admin itself without
+            // care.
             // For now, allowing removal.
 
             self.minters.write(minter_address, false);
@@ -573,9 +574,7 @@ mod StarkRemit {
         fn set_max_supply(ref self: ContractState, new_max_supply: u256) -> bool {
             let caller = get_caller_address();
             assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
-            assert(
-                new_max_supply >= self.total_supply.read(), MintBurnErrors::MAX_SUPPLY_TOO_LOW
-            );
+            assert(new_max_supply >= self.total_supply.read(), MintBurnErrors::MAX_SUPPLY_TOO_LOW);
 
             self.max_supply.write(new_max_supply);
             self.emit(MaxSupplyUpdated { new_max_supply, updated_by: caller });

@@ -1,13 +1,13 @@
+use core::num::traits::Pow;
 use snforge_std::{
-    ContractClassTrait, DeclareResultTrait, declare,
-    start_cheat_block_timestamp, start_cheat_caller_address,
+    ContractClassTrait, DeclareResultTrait, declare, start_cheat_block_timestamp,
+    start_cheat_caller_address,
 };
 use starknet::{ContractAddress, contract_address_const, get_block_timestamp};
 use starkremit_contract::base::types::{KycLevel, KycStatus};
 use starkremit_contract::interfaces::IStarkRemit::{
     IStarkRemitDispatcher, IStarkRemitDispatcherTrait,
 };
-use core::num::traits::{Pow};
 
 const ADMIN_ADDRESS: felt252 = 0x123;
 const USER_ADDRESS: felt252 = 0x456;

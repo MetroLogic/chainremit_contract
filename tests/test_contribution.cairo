@@ -1,17 +1,15 @@
 use core::array::ArrayTrait;
+use core::num::traits::Pow;
 use core::result::ResultTrait;
 use core::traits::TryInto;
 use snforge_std::{
     ContractClassTrait, DeclareResultTrait, declare, start_cheat_caller_address,
     stop_cheat_caller_address,
 };
-use starknet::{
-    ContractAddress, contract_address_const, get_block_timestamp,
-};
+use starknet::{ContractAddress, contract_address_const, get_block_timestamp};
 use starkremit_contract::interfaces::IStarkRemit::{
     IStarkRemitDispatcher, IStarkRemitDispatcherTrait,
 };
-use core::num::traits::Pow;
 
 // Test constants
 const ADMIN: felt252 = 'admin';
