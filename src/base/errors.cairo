@@ -140,3 +140,22 @@ pub mod GroupErrors {
     /// Error triggered when the group is full
     pub const GROUP_FULL: felt252 = 'GROUP: group is full';
 }
+
+pub mod MintBurnErrors {
+    /// Error triggered when the caller is not an authorized minter
+    pub const NOT_MINTER: felt252 = 'Mint: caller is not a minter';
+    /// Error triggered when trying to mint to the zero address
+    pub const MINT_TO_ZERO: felt252 = 'Mint: mint to zero address';
+    /// Error triggered when trying to mint zero tokens
+    pub const MINT_ZERO_AMOUNT: felt252 = 'Mint: amount must be > 0';
+    /// Error triggered when minting would exceed the maximum supply
+    pub const MAX_SUPPLY_EXCEEDED: felt252 = 'Mint: exceeds max supply';
+    /// Error triggered when trying to burn zero tokens
+    pub const BURN_ZERO_AMOUNT: felt252 = 'Burn: amount must be > 0';
+    /// Error triggered when trying to burn more tokens than available balance
+    pub const INSUFFICIENT_BALANCE_BURN: felt252 = 'Burn: insufficient balance';
+    /// Error triggered for invalid minter address management
+    pub const INVALID_MINTER_ADDRESS: felt252 = 'MinterMgmt: invalid address';
+    /// Error triggered if max supply is set too low
+    pub const MAX_SUPPLY_TOO_LOW: felt252 = 'SetMaxSupply: too low';
+}

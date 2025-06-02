@@ -1,6 +1,5 @@
 use snforge_std::declare;
 #[feature("deprecated-starknet-consts")]
-use starknet::ContractAddress;
 use starkremit_contract::base::types::{KYCLevel, RegistrationRequest, RegistrationStatus};
 
 // Test Constants
