@@ -842,6 +842,21 @@ mod StarkRemit {
             true
         }
 
+        //mangage user profile
+        /// Get the profile of the calling user
+        fn get_my_profile(self: @ContractState) -> UserProfile {
+            let caller = get_caller_address();
+            self.get_user_profile(caller)
+        }
+
+        /// Update the calling user's own profile
+        fn update_my_profile(ref self: ContractState, updated_profile: UserProfile) -> bool {
+            let caller = get_caller_address();
+            // Ensure the caller is updating their own profile
+            assert(caller == updated_profile.address, 'Unauthorized update');
+            self.update_user_profile(updated_profile)
+        }
+
         /// Get user profile by address
         fn get_user_profile(self: @ContractState, user_address: ContractAddress) -> UserProfile {
             let status = self.registration_status.read(user_address);
