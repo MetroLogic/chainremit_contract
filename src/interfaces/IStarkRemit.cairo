@@ -16,7 +16,13 @@ pub trait IStarkRemit<TContractState> {
 
     /// Update user profile information
     fn update_user_profile(ref self: TContractState, updated_profile: UserProfile) -> bool;
+    
+     /// Get the profile of the calling user
+    fn get_my_profile(self: @TContractState) -> UserProfile;
 
+    /// Update the calling user's own profile
+    fn update_my_profile(ref self: TContractState, updated_profile: UserProfile) -> bool;
+    
     /// Check if user is registered
     fn is_user_registered(self: @TContractState, user_address: ContractAddress) -> bool;
 
