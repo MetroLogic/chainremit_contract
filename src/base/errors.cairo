@@ -127,6 +127,7 @@ pub mod KYCErrors {
     pub const KYC_DATA_NOT_FOUND: felt252 = 'KYC: data not found';
 }
 
+
 pub mod TransferErrors {
     /// Error triggered when transfer is not found
     pub const TRANSFER_NOT_FOUND: felt252 = 'Transfer not found';
@@ -181,4 +182,37 @@ pub mod TransferErrors {
 
     /// Error triggered when search parameters are invalid
     pub const INVALID_SEARCH_PARAMS: felt252 = 'Invalid search parameters';
+
+pub mod GroupErrors {
+    /// Error triggered when the max members is less than two
+    pub const INVALID_GROUP_SIZE: felt252 = 'GROUP: mini 2 members expected';
+
+    /// Error triggered when trying to join an inactive group
+    pub const GROUP_INACTIVE: felt252 = 'GROUP: group is inactive';
+
+    /// Error triggered when trying to join a group twice
+    pub const ALREADY_MEMBER: felt252 = 'GROUP: caller already a member';
+
+    /// Error triggered when the group is full
+    pub const GROUP_FULL: felt252 = 'GROUP: group is full';
+}
+
+pub mod MintBurnErrors {
+    /// Error triggered when the caller is not an authorized minter
+    pub const NOT_MINTER: felt252 = 'Mint: caller is not a minter';
+    /// Error triggered when trying to mint to the zero address
+    pub const MINT_TO_ZERO: felt252 = 'Mint: mint to zero address';
+    /// Error triggered when trying to mint zero tokens
+    pub const MINT_ZERO_AMOUNT: felt252 = 'Mint: amount must be > 0';
+    /// Error triggered when minting would exceed the maximum supply
+    pub const MAX_SUPPLY_EXCEEDED: felt252 = 'Mint: exceeds max supply';
+    /// Error triggered when trying to burn zero tokens
+    pub const BURN_ZERO_AMOUNT: felt252 = 'Burn: amount must be > 0';
+    /// Error triggered when trying to burn more tokens than available balance
+    pub const INSUFFICIENT_BALANCE_BURN: felt252 = 'Burn: insufficient balance';
+    /// Error triggered for invalid minter address management
+    pub const INVALID_MINTER_ADDRESS: felt252 = 'MinterMgmt: invalid address';
+    /// Error triggered if max supply is set too low
+    pub const MAX_SUPPLY_TOO_LOW: felt252 = 'SetMaxSupply: too low';
+
 }

@@ -3,16 +3,23 @@
 mod StarkRemit {
     // Import necessary libraries and traits
     use starknet::storage::{
-        Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
-        StoragePointerWriteAccess,
+        Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePathEntry,
+        StoragePointerReadAccess, StoragePointerWriteAccess,
     };
+    use starknet::{ContractAddress, get_block_timestamp, get_caller_address, get_contract_address};
+    use starkremit_contract::base::errors::{
+        ERC20Errors, GroupErrors, KYCErrors, MintBurnErrors, RegistrationErrors,
+    };
+
     use starknet::{ContractAddress, get_block_timestamp, get_caller_address};
     use starkremit_contract::base::errors::{ERC20Errors, KYCErrors, RegistrationErrors, TransferErrors};
     use starkremit_contract::base::types::{
-        KYCLevel, KycLevel, KycStatus, RegistrationRequest, RegistrationStatus, UserKycData,
+        KYCLevel, KycLevel, KycStatus, RegistrationRequest, RegistrationStatus, SavingsGroup, UserKycData,
         UserProfile, Transfer as TransferData, TransferStatus, TransferHistory, Agent, AgentStatus,
+
     };
     use starkremit_contract::interfaces::{IERC20, IStarkRemit};
+
 
     // Fixed-point scaler for currency conversions (18 decimals)
     const FIXED_POINT_SCALER: u256 = 1_000_000_000_000_000_000;
@@ -33,6 +40,7 @@ mod StarkRemit {
         KYCLevelUpdated: KYCLevelUpdated, // Event for KYC level updates
         KycStatusUpdated: KycStatusUpdated, // Event for KYC status updates
         KycEnforcementEnabled: KycEnforcementEnabled, // Event for KYC enforcement
+
         // Transfer Administration Events
         TransferCreated: TransferCreated, // Event for transfer creation
         TransferCancelled: TransferCancelled, // Event for transfer cancellation
@@ -45,7 +53,88 @@ mod StarkRemit {
         AgentRegistered: AgentRegistered, // Event for agent registration
         AgentStatusUpdated: AgentStatusUpdated, // Event for agent status updates
         TransferHistoryRecorded: TransferHistoryRecorded // Event for history recording
+
+        // contribution
+        ContributionMade: ContributionMade,
+        RoundDisbursed: RoundDisbursed,
+        RoundCompleted: RoundCompleted,
+        ContributionMissed: ContributionMissed,
+        MemberAdded: MemberAdded,
+        // Savings Group
+        GroupCreated: GroupCreated, // New savings group created
+        MemberJoined: MemberJoined, // User joined a savings group
+        // Token Supply Events
+        Minted: Minted,
+        Burned: Burned,
+        MinterAdded: MinterAdded,
+        MinterRemoved: MinterRemoved,
+        MaxSupplyUpdated: MaxSupplyUpdated,
     }
+
+
+    // Enum for the status of a contribution round
+    #[derive(Copy, Drop, Serde, PartialEq, starknet::Store)]
+    enum RoundStatus {
+        Active,
+        Completed,
+    }
+
+    // Struct for a contribution round
+    #[derive(Copy, Drop, Serde, PartialEq, starknet::Store)]
+    struct ContributionRound {
+        round_id: u256,
+        total_contributions: u256,
+        status: RoundStatus,
+        deadline: u64,
+    }
+
+    // Struct for a member's contribution
+    #[derive(Copy, Drop, Serde, PartialEq, starknet::Store)]
+    struct MemberContribution {
+        member: ContractAddress,
+        amount: u256,
+        contributed_at: u64,
+    }
+
+
+    //event
+
+    #[derive(Copy, Drop, starknet::Event)]
+    struct MemberAdded {
+        #[key]
+        address: ContractAddress,
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    struct ContributionMade {
+        #[key]
+        round_id: u256,
+        member: ContractAddress,
+        amount: u256,
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    struct RoundDisbursed {
+        #[key]
+        round_id: u256,
+        amount: u256,
+        recipient: ContractAddress,
+
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    struct RoundCompleted {
+        #[key]
+        round_id: u256,
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    struct ContributionMissed {
+        #[key]
+        round_id: u256,
+        member: ContractAddress,
+    }
+
 
     // Standard ERC20 Transfer event
     #[derive(Copy, Drop, starknet::Event)]
@@ -263,6 +352,70 @@ mod StarkRemit {
         timestamp: u64,
     }
 
+    // Event emitted when a new group is created
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct GroupCreated {
+        #[key]
+        group_id: u64, // Unique group ID
+        creator: ContractAddress, // Address that created the group
+        max_members: u8 // Configured size limit
+    }
+
+    // Event emitted when a user joins a group
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct MemberJoined {
+        #[key]
+        group_id: u64, // Group being joined
+        #[key]
+        member: ContractAddress // Address that joined
+    }
+
+    // Event emitted when tokens are minted
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct Minted {
+        #[key]
+        minter: ContractAddress, // Address that performed the minting
+        #[key]
+        recipient: ContractAddress, // Address that received the minted tokens
+        amount: u256 // Amount of tokens minted
+    }
+
+    // Event emitted when tokens are burned
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct Burned {
+        #[key]
+        account: ContractAddress, // Address whose tokens were burned
+        amount: u256 // Amount of tokens burned
+    }
+
+    // Event emitted when a new minter is added
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct MinterAdded {
+        #[key]
+        account: ContractAddress, // Address added as a minter
+        #[key]
+        added_by: ContractAddress // Admin who added the minter
+    }
+
+    // Event emitted when a minter is removed
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct MinterRemoved {
+        #[key]
+        account: ContractAddress, // Address removed from minters
+        #[key]
+        removed_by: ContractAddress // Admin who removed the minter
+    }
+
+    // Event emitted when the maximum supply is updated
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct MaxSupplyUpdated {
+        new_max_supply: u256, // The new maximum supply
+        #[key]
+        updated_by: ContractAddress // Admin who updated the max supply
+    }
+
+
+
     // Contract storage definition
     #[storage]
     struct Storage {
@@ -297,6 +450,7 @@ mod StarkRemit {
         single_limits: Map<u8, u256>,
         daily_usage: Map<ContractAddress, u256>,
         last_reset: Map<ContractAddress, u64>,
+
         // Transfer Administration storage
         transfers: Map<u256, TransferData>, // Transfer ID to Transfer mapping
         next_transfer_id: u256, // Counter for generating unique transfer IDs
@@ -320,7 +474,25 @@ mod StarkRemit {
         total_transfers: u256, // Total number of transfers created
         total_completed_transfers: u256, // Total completed transfers
         total_cancelled_transfers: u256, // Total cancelled transfers
-        total_expired_transfers: u256, // Total expired transfers
+        total_expired_transfers: u256, // Total expired transfer
+        
+        // contribution storage
+        rounds: Map<u256, ContributionRound>,
+        member_contributions: Map<(u256, ContractAddress), MemberContribution>,
+        rotation_schedule: Map<u256, ContractAddress>,
+        round_ids: u256,
+        contribution_deadline: u64,
+        members: Map<ContractAddress, bool>,
+        member_count: u32, //
+        member_by_index: Map<u32, ContractAddress>,
+        // Savings Group storage
+        groups: Map<u64, SavingsGroup>, // Stores all savings groups by ID
+        group_members: Map<(u64, ContractAddress), bool>, // True if user is member of given group
+        group_count: u64, // Counter used to assign unique group IDs
+        // Token Supply Management
+        max_supply: u256, // Maximum total supply of the token
+        minters: Map<ContractAddress, bool> // Addresses authorized to mint tokens
+
     }
 
     // Contract constructor
@@ -332,6 +504,7 @@ mod StarkRemit {
         name: felt252, // Token name
         symbol: felt252, // Token symbol
         initial_supply: u256, // Initial token supply
+        max_supply: u256, // Maximum token supply
         base_currency: felt252, // Base currency identifier
         oracle_address: ContractAddress // Oracle contract address
     ) {
@@ -356,12 +529,20 @@ mod StarkRemit {
         self.kyc_enforcement_enabled.write(false);
         self._set_default_transaction_limits();
 
+
         // Initialize transfer administration
         self.next_transfer_id.write(1); // Start transfer IDs from 1
         self.total_transfers.write(0);
         self.total_completed_transfers.write(0);
         self.total_cancelled_transfers.write(0);
         self.total_expired_transfers.write(0);
+
+        // Initialize Token Supply Management
+        // Max supply must be greater than or equal to initial supply
+        assert(max_supply >= initial_supply, MintBurnErrors::MAX_SUPPLY_TOO_LOW);
+        self.max_supply.write(max_supply);
+        self.minters.write(admin, true); // The deployer/admin is an initial minter
+
 
         // Emit transfer event for initial supply
         let zero_address: ContractAddress = 0.try_into().unwrap();
@@ -370,7 +551,7 @@ mod StarkRemit {
 
     // Implementation of the ERC20 standard interface
     #[abi(embed_v0)]
-    impl IERC20Impl of IERC20::IERC20<ContractState> {
+    impl IStarkRemitTokenImpl of IStarkRemit::IStarkRemitToken<ContractState> {
         // Returns the token name
         fn name(self: @ContractState) -> felt252 {
             self.name.read()
@@ -471,6 +652,101 @@ mod StarkRemit {
 
             self.emit(Transfer { from: sender, to: recipient, value: amount });
             true
+        }
+
+        /// Mints new tokens to a specified recipient.
+        /// - Caller must be an authorized minter.
+        /// - Minting cannot exceed the `max_supply`.
+        /// - Recipient cannot be the zero address.
+        /// - Amount must be greater than zero.
+        fn mint(ref self: ContractState, recipient: ContractAddress, amount: u256) -> bool {
+            let caller = get_caller_address();
+            assert(self.minters.read(caller), MintBurnErrors::NOT_MINTER);
+
+            let zero_address: ContractAddress = 0.try_into().unwrap();
+            assert(recipient != zero_address, MintBurnErrors::MINT_TO_ZERO);
+            assert(amount > 0, MintBurnErrors::MINT_ZERO_AMOUNT);
+
+            let current_total_supply = self.total_supply.read();
+            let new_total_supply = current_total_supply + amount;
+            assert(new_total_supply <= self.max_supply.read(), MintBurnErrors::MAX_SUPPLY_EXCEEDED);
+
+            self.total_supply.write(new_total_supply);
+            let recipient_balance = self.balances.read(recipient);
+            self.balances.write(recipient, recipient_balance + amount);
+
+            self.emit(Minted { minter: caller, recipient, amount });
+            self.emit(Transfer { from: zero_address, to: recipient, value: amount });
+            true
+        }
+
+        /// Burns (destroys) a specified amount of tokens from the caller's balance.
+        /// - Amount must be greater than zero.
+        /// - Caller must have sufficient balance.
+        fn burn(ref self: ContractState, amount: u256) -> bool {
+            let caller = get_caller_address();
+            assert(amount > 0, MintBurnErrors::BURN_ZERO_AMOUNT);
+
+            let caller_balance = self.balances.read(caller);
+            assert(caller_balance >= amount, MintBurnErrors::INSUFFICIENT_BALANCE_BURN);
+
+            self.balances.write(caller, caller_balance - amount);
+            let current_total_supply = self.total_supply.read();
+            self.total_supply.write(current_total_supply - amount);
+
+            let zero_address: ContractAddress = 0.try_into().unwrap();
+            self.emit(Burned { account: caller, amount });
+            self.emit(Transfer { from: caller, to: zero_address, value: amount });
+            true
+        }
+
+        /// Adds a new authorized minter. Callable only by the contract admin.
+        fn add_minter(ref self: ContractState, minter_address: ContractAddress) -> bool {
+            let caller = get_caller_address();
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+            let zero_address: ContractAddress = 0.try_into().unwrap();
+            assert(minter_address != zero_address, MintBurnErrors::INVALID_MINTER_ADDRESS);
+
+            self.minters.write(minter_address, true);
+            self.emit(MinterAdded { account: minter_address, added_by: caller });
+            true
+        }
+
+        /// Removes an authorized minter. Callable only by the contract admin.
+        fn remove_minter(ref self: ContractState, minter_address: ContractAddress) -> bool {
+            let caller = get_caller_address();
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+            let zero_address: ContractAddress = 0.try_into().unwrap();
+            assert(minter_address != zero_address, MintBurnErrors::INVALID_MINTER_ADDRESS);
+            // Optional: Add logic to prevent removing the last minter or the admin itself without
+            // care.
+            // For now, allowing removal.
+
+            self.minters.write(minter_address, false);
+            self.emit(MinterRemoved { account: minter_address, removed_by: caller });
+            true
+        }
+
+        /// Checks if an account is an authorized minter.
+        fn is_minter(self: @ContractState, account: ContractAddress) -> bool {
+            self.minters.read(account)
+        }
+
+        /// Sets the maximum total supply of the token. Callable only by the contract admin.
+        /// Max supply cannot be set lower than the current total supply.
+        fn set_max_supply(ref self: ContractState, new_max_supply: u256) -> bool {
+            let caller = get_caller_address();
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+            assert(new_max_supply >= self.total_supply.read(), MintBurnErrors::MAX_SUPPLY_TOO_LOW);
+
+            self.max_supply.write(new_max_supply);
+            self.emit(MaxSupplyUpdated { new_max_supply, updated_by: caller });
+            true
+        }
+
+        /// Gets the maximum total supply of the token.
+        fn get_max_supply(self: @ContractState) -> u256 {
+            self.max_supply.read()
         }
     }
 
@@ -909,6 +1185,7 @@ mod StarkRemit {
 
             true
         }
+
 
         // Transfer Administration Functions
         /// Create a new transfer
@@ -1684,6 +1961,183 @@ mod StarkRemit {
             assert(self.agent_exists.read(agent), TransferErrors::AGENT_NOT_FOUND);
             let agent_data = self.agents.read(agent);
             (agent_data.completed_transactions, agent_data.total_volume, agent_data.rating)
+
+
+        //contribution management
+
+        fn contribute_round(ref self: ContractState, round_id: u256, amount: u256) {
+            let caller = get_caller_address();
+            assert(self.is_member(caller), 'Caller is not a member');
+
+            let mut round = self.rounds.read(round_id);
+            assert(round.status == RoundStatus::Active, 'Round is not active');
+            assert(get_block_timestamp() <= round.deadline, 'Contribution deadline passed');
+
+            let contribution = MemberContribution {
+                member: caller, amount, contributed_at: get_block_timestamp(),
+            };
+
+            self.member_contributions.write((round_id, caller), contribution);
+            round.total_contributions += amount;
+
+            self.rounds.write(round_id, round);
+            self.emit(ContributionMade { round_id, member: caller, amount });
+        }
+
+        fn disburse_round_contribution(ref self: ContractState, round_id: u256) {
+            let round = self.rounds.read(round_id);
+            assert(round.status == RoundStatus::Completed, 'Round is not completed');
+
+            let recipient = self.rotation_schedule.read(round_id);
+            let amount = round.total_contributions;
+            let contract_address = get_contract_address();
+            self.transfer_from(contract_address, recipient, amount);
+
+            self.emit(RoundDisbursed { round_id, amount, recipient });
+        }
+
+
+        fn complete_round(ref self: ContractState, round_id: u256) {
+            let mut round = self.rounds.read(round_id);
+            assert(round.status == RoundStatus::Active, 'Round is not active');
+            assert(get_block_timestamp() > round.deadline, 'Deadline not passed');
+
+            round.status = RoundStatus::Completed;
+            self.rounds.write(round_id, round);
+
+            self.emit(RoundCompleted { round_id });
+        }
+
+        fn is_member(self: @ContractState, address: ContractAddress) -> bool {
+            self.members.read(address)
+        }
+
+
+        fn check_missed_contributions(ref self: ContractState, round_id: u256) {
+            let round = self.rounds.read(round_id);
+            let members = self.get_all_members();
+
+            for member in members {
+                let contribution = self.member_contributions.read((round_id, member));
+                if contribution.contributed_at == 0 {
+                    self.emit(ContributionMissed { round_id, member });
+                }
+            }
+        }
+
+
+        fn get_all_members(self: @ContractState) -> Array<ContractAddress> {
+            let mut result = ArrayTrait::new();
+            let count = self.member_count.read();
+
+            let mut i: u32 = 0;
+            loop {
+                if i >= count {
+                    break;
+                }
+
+                let member = self.member_by_index.read(i);
+                result.append(member);
+
+                i += 1;
+            }
+
+            result
+        }
+
+
+        fn add_round_to_schedule(
+            ref self: ContractState, recipient: ContractAddress, deadline: u64,
+        ) {
+            let round_id = self.round_ids.read();
+            let round = ContributionRound {
+                round_id, total_contributions: 0, status: RoundStatus::Active, deadline,
+            };
+
+            self.rounds.write(round_id, round);
+            self.rotation_schedule.write(round_id, recipient);
+            self.round_ids.write(round_id + 1);
+        }
+
+        fn add_member(ref self: ContractState, address: ContractAddress) {
+            let caller = get_caller_address();
+            assert(caller == self.admin.read(), 'Only admin can add members');
+            assert(!self.members.read(address), 'Already a member');
+
+            let count = self.member_count.read();
+            self.members.write(address, true);
+            self.member_by_index.write(count, address);
+            self.member_count.write(count + 1);
+            self.emit(MemberAdded { address });
+        }
+
+        // Creates a new savings group, caller becomes first member
+        // Returns the id of the created group
+        fn create_group(ref self: ContractState, max_members: u8) -> u64 {
+            let caller = get_caller_address();
+
+            // Member validation
+            assert(self.is_user_registered(caller), RegistrationErrors::USER_NOT_FOUND);
+            assert(self.is_kyc_valid(caller), KYCErrors::INVALID_KYC_STATUS);
+
+            // Require at least two members in the group
+            assert(max_members > 1, GroupErrors::INVALID_GROUP_SIZE);
+
+            let group_id = self._new_group_id();
+
+            // Store group parameters
+            self
+                .groups
+                .write(
+                    group_id,
+                    SavingsGroup {
+                        id: group_id,
+                        creator: caller,
+                        max_members,
+                        member_count: 1_u8,
+                        is_active: true,
+                    },
+                );
+
+            // Add caller as member of the group
+            self.group_members.write((group_id, caller), true);
+
+            // Emit group created event
+            self.emit(GroupCreated { group_id, creator: caller, max_members });
+
+            group_id
+        }
+
+        // Join an existing active group
+        fn join_group(ref self: ContractState, group_id: u64) {
+            let caller = get_caller_address();
+
+            // Member validation
+            assert(self.is_user_registered(caller), RegistrationErrors::USER_NOT_FOUND);
+            assert(self.is_kyc_valid(caller), KYCErrors::INVALID_KYC_STATUS);
+
+            let group = self.groups.entry(group_id).read();
+
+            // Group must be active
+            assert(group.is_active, GroupErrors::GROUP_INACTIVE);
+
+            // Caller must not already be a member
+            assert(
+                !self.group_members.entry((group_id, caller)).read(), GroupErrors::ALREADY_MEMBER,
+            );
+
+            // Group must not be full
+            assert(group.member_count < group.max_members, GroupErrors::GROUP_FULL);
+
+            // Update number of members in the group
+            self.groups.entry(group_id).member_count.write(group.member_count + 1);
+
+            // Mark caller as member of the group
+            self.group_members.write((group_id, caller), true);
+
+            // Emit member joined event
+            self.emit(MemberJoined { group_id, member: caller });
+
         }
     }
 
@@ -1762,6 +2216,7 @@ mod StarkRemit {
             self.single_limits.write(3, 50000_000_000_000_000_000_000); // 50,000 tokens
         }
 
+
         fn _record_transfer_history(
             ref self: ContractState,
             transfer_id: u256,
@@ -1806,6 +2261,16 @@ mod StarkRemit {
                 actor,
                 timestamp: current_time,
             });
+
+        // Generates and stores a new unique group ID for a savings group
+        // Returns the newly generated group ID
+        fn _new_group_id(ref self: ContractState) -> u64 {
+            let group_id = self.group_count.read();
+
+            self.group_count.write(group_id + 1);
+
+            group_id
+
         }
     }
 

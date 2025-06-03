@@ -1,7 +1,9 @@
 use starknet::ContractAddress;
 use starkremit_contract::base::types::{
+
     KYCLevel, KycLevel, KycStatus, RegistrationRequest, RegistrationStatus, UserProfile,
-    Transfer as TransferData, TransferStatus, TransferHistory, Agent, AgentStatus,
+    Transfer as TransferData, TransferStatus, TransferHistory, Agent, AgentStatus, MemberContribution,
+
 };
 
 // Comprehensive StarkRemit interface combining all functionality
@@ -177,6 +179,22 @@ pub trait IStarkRemit<TContractState> {
     fn get_agent_statistics(
         self: @TContractState, agent: ContractAddress,
     ) -> (u256, u256, u256); // total_transfers, total_volume, rating
+
+    // contribution
+
+    fn contribute_round(ref self: TContractState, round_id: u256, amount: u256);
+    fn complete_round(ref self: TContractState, round_id: u256);
+    fn add_round_to_schedule(ref self: TContractState, recipient: ContractAddress, deadline: u64);
+    fn is_member(self: @TContractState, address: ContractAddress) -> bool;
+    fn check_missed_contributions(ref self: TContractState, round_id: u256);
+    fn get_all_members(self: @TContractState) -> Array<ContractAddress>;
+    fn add_member(ref self: TContractState, address: ContractAddress);
+    fn disburse_round_contribution(ref self: TContractState, round_id: u256);
+
+    // Savings Group Functions
+    fn create_group(ref self: TContractState, max_members: u8) -> u64;
+    fn join_group(ref self: TContractState, group_id: u64);
+
 }
 
 // ERC-20 Token interface
@@ -195,15 +213,40 @@ pub trait IStarkRemitToken<TContractState> {
         ref self: TContractState, sender: ContractAddress, recipient: ContractAddress, amount: u256,
     ) -> bool;
 
-    // Multi-currency functions
-    fn get_supported_currencies(self: @TContractState) -> Array<felt252>;
-    fn get_exchange_rate(
-        self: @TContractState, from_currency: felt252, to_currency: felt252,
-    ) -> u256;
-    fn convert_currency(
-        ref self: TContractState, from_currency: felt252, to_currency: felt252, amount: u256,
-    ) -> u256;
-    fn register_currency(ref self: TContractState, currency: felt252);
-    fn set_oracle(ref self: TContractState, oracle_address: ContractAddress);
-    fn get_oracle(self: @TContractState) -> ContractAddress;
+    // Token Supply Management Functions
+    /// Mints new tokens to a specified recipient.
+    /// Callable only by authorized minters.
+    fn mint(ref self: TContractState, recipient: ContractAddress, amount: u256) -> bool;
+
+    /// Burns (destroys) a specified amount of tokens from the caller's balance.
+    fn burn(ref self: TContractState, amount: u256) -> bool;
+
+    /// Adds a new authorized minter.
+    /// Callable only by the contract admin.
+    fn add_minter(ref self: TContractState, minter_address: ContractAddress) -> bool;
+
+    /// Removes an authorized minter.
+    /// Callable only by the contract admin.
+    fn remove_minter(ref self: TContractState, minter_address: ContractAddress) -> bool;
+
+    /// Checks if an account is an authorized minter.
+    fn is_minter(self: @TContractState, account: ContractAddress) -> bool;
+
+    /// Sets the maximum total supply of the token.
+    /// Callable only by the contract admin.
+    fn set_max_supply(ref self: TContractState, new_max_supply: u256) -> bool;
+
+    /// Gets the maximum total supply of the token.
+    fn get_max_supply(self: @TContractState) -> u256;
+    // // Multi-currency functions
+// fn get_supported_currencies(self: @TContractState) -> Array<felt252>;
+// fn get_exchange_rate(
+//     self: @TContractState, from_currency: felt252, to_currency: felt252,
+// ) -> u256;
+// fn convert_currency(
+//     ref self: TContractState, from_currency: felt252, to_currency: felt252, amount: u256,
+// ) -> u256;
+// fn register_currency(ref self: TContractState, currency: felt252);
+// fn set_oracle(ref self: TContractState, oracle_address: ContractAddress);
+// fn get_oracle(self: @TContractState) -> ContractAddress;
 }

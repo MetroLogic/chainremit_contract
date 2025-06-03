@@ -26,7 +26,6 @@ pub struct UserProfile {
 
 /// KYC verification levels
 #[derive(Copy, Drop, Serde, starknet::Store)]
-#[allow(starknet::store_no_default_variant)]
 pub enum KYCLevel {
     /// No verification
     None,
@@ -40,7 +39,6 @@ pub enum KYCLevel {
 
 /// Registration status for tracking user onboarding progress
 #[derive(Copy, Drop, Serde, starknet::Store)]
-#[allow(starknet::store_no_default_variant)]
 pub enum RegistrationStatus {
     /// Registration not started
     NotStarted,
@@ -204,4 +202,22 @@ pub struct Agent {
     pub last_active: u64,
     /// Agent's rating (0-1000)
     pub rating: u256,
+
+// Struct for a member's contribution
+#[derive(Copy, Drop, Serde, PartialEq, starknet::Store)]
+pub struct MemberContribution {
+    member: ContractAddress,
+    amount: u256,
+    contributed_at: u64,
+}
+
+// Savings group record
+#[derive(Copy, Drop, starknet::Store)]
+pub struct SavingsGroup {
+    pub id: u64, // Group identifier
+    pub creator: ContractAddress, // Group creator
+    pub max_members: u8, // Maximum number of members
+    pub member_count: u8, // Current number of members
+    pub is_active: bool // Group active status
+
 }

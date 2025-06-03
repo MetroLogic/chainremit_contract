@@ -1,6 +1,7 @@
+use core::num::traits::Pow;
 use snforge_std::{
-    ContractClassTrait, DeclareResultTrait, EventSpyAssertionsTrait, declare, spy_events,
-    start_cheat_block_timestamp, start_cheat_caller_address,
+    ContractClassTrait, DeclareResultTrait, declare, start_cheat_block_timestamp,
+    start_cheat_caller_address,
 };
 use starknet::{ContractAddress, contract_address_const, get_block_timestamp};
 use starkremit_contract::base::types::{KycLevel, KycStatus};
@@ -12,6 +13,7 @@ const ADMIN_ADDRESS: felt252 = 0x123;
 const USER_ADDRESS: felt252 = 0x456;
 const ORACLE_ADDRESS: felt252 = 0x789;
 const VERIFICATION_HASH: felt252 = 0xABC;
+const MAX_SUPPLY: u256 = 1_000_000_000 * 10_u256.pow(18); // 1B tokens with 18 decimals
 
 fn deploy_starkremit_contract() -> IStarkRemitDispatcher {
     let contract = declare("StarkRemit").unwrap().contract_class();
@@ -23,6 +25,7 @@ fn deploy_starkremit_contract() -> IStarkRemitDispatcher {
     'StarkRemit'.serialize(ref calldata);
     'SRM'.serialize(ref calldata);
     1000000_u256.serialize(ref calldata);
+    MAX_SUPPLY.serialize(ref calldata);
     'USD'.serialize(ref calldata);
     oracle.serialize(ref calldata);
 

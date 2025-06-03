@@ -1,7 +1,5 @@
 use snforge_std::declare;
 #[feature("deprecated-starknet-consts")]
-use starknet::ContractAddress;
-
 // Test Constants
 const NAME: felt252 = 'StarkRemit Token';
 const SYMBOL: felt252 = 'SRT';

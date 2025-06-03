@@ -1,9 +1,13 @@
 #[feature("deprecated-starknet-consts")]
+
 use starknet::ContractAddress;
 use snforge_std::{declare, ContractClassTrait, DeclareResultTrait};
 use starkremit_contract::base::types::{
     RegistrationRequest, TransferStatus, AgentStatus, Transfer, Agent,
 };
+
+use starkremit_contract::base::types::{KYCLevel, RegistrationRequest, RegistrationStatus};
+
 
 // Test Constants
 const NAME: felt252 = 'StarkRemit Token';
@@ -105,6 +109,7 @@ fn test_transfer_statistics() {
     println!("Transfer statistics functionality compiles successfully");
 }
 
+
 #[test]
 fn test_erc20_functionality_compilation() {
     // Test contract declaration for ERC20 functionality
@@ -149,3 +154,4 @@ fn test_all_functionalities_integrated() {
     
     println!("All functionalities integrated successfully");
 } 
+
