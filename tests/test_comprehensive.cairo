@@ -1,9 +1,9 @@
+use snforge_std::{ContractClassTrait, DeclareResultTrait, declare};
 #[feature("deprecated-starknet-consts")]
 use starknet::ContractAddress;
-use snforge_std::{declare, ContractClassTrait, DeclareResultTrait};
 use starkremit_contract::base::types::{
-    RegistrationRequest, TransferStatus, AgentStatus, Transfer, Agent, KycLevel, KycStatus,
-    UserProfile, UserKycData,
+    Agent, AgentStatus, KycLevel, KycStatus, RegistrationRequest, Transfer, TransferStatus,
+    UserKycData, UserProfile,
 };
 
 // Test Constants
@@ -188,7 +188,7 @@ fn test_error_handling_compilation() {
     // This ensures error handling will work correctly
     let contract_class = declare("StarkRemit");
     assert(contract_class.is_err() == false, 'Error handling failed');
-    
+
     println!("Error handling compilation test passed");
 }
 
@@ -198,7 +198,7 @@ fn test_event_structures() {
     // Events are crucial for monitoring and debugging
     let contract_class = declare("StarkRemit");
     assert(contract_class.is_err() == false, 'Event structures failed');
-    
+
     println!("Event structures compilation test passed");
 }
 
@@ -207,7 +207,7 @@ fn test_storage_compatibility() {
     // Test that all storage structures are compatible with StarkNet storage
     let contract_class = declare("StarkRemit");
     assert(contract_class.is_err() == false, 'Storage compatibility failed');
-    
+
     println!("Storage compatibility test passed");
 }
 
@@ -216,11 +216,11 @@ fn test_multi_currency_support() {
     // Test multi-currency data structures
     let usd_currency = USD_CURRENCY;
     let eur_currency = EUR_CURRENCY;
-    
+
     assert(usd_currency != eur_currency, 'Currency comparison failed');
     assert(usd_currency == 'USD', 'USD currency constant failed');
     assert(eur_currency == 'EUR', 'EUR currency constant failed');
-    
+
     println!("Multi-currency support test passed");
 }
 
@@ -228,15 +228,15 @@ fn test_multi_currency_support() {
 fn test_mathematical_operations() {
     // Test that mathematical operations work correctly with our data types
     let amount1 = 1000000000000000000000_u256; // 1000 tokens
-    let amount2 = 500000000000000000000_u256;  // 500 tokens
-    
+    let amount2 = 500000000000000000000_u256; // 500 tokens
+
     let sum = amount1 + amount2;
     let difference = amount1 - amount2;
-    
+
     assert(sum == 1500000000000000000000_u256, 'Addition failed');
     assert(difference == 500000000000000000000_u256, 'Subtraction failed');
     assert(amount1 > amount2, 'Comparison failed');
-    
+
     println!("Mathematical operations test passed");
 }
 
@@ -246,10 +246,10 @@ fn test_address_operations() {
     let admin_address: ContractAddress = 123.try_into().unwrap();
     let user_address: ContractAddress = 456.try_into().unwrap();
     let zero_address: ContractAddress = 0.try_into().unwrap();
-    
+
     assert(admin_address != user_address, 'Address comparison failed');
     assert(admin_address != zero_address, 'Zero address comparison failed');
-    
+
     println!("Address operations test passed");
 }
 
@@ -258,12 +258,12 @@ fn test_timestamp_operations() {
     // Test timestamp operations for expiry and scheduling
     let current_time = 1000000_u64;
     let future_time = current_time + 86400_u64; // 24 hours later
-    let past_time = current_time - 3600_u64;    // 1 hour ago
-    
+    let past_time = current_time - 3600_u64; // 1 hour ago
+
     assert(future_time > current_time, 'Future time comparison failed');
     assert(past_time < current_time, 'Past time comparison failed');
     assert(future_time - current_time == 86400_u64, 'Time difference failed');
-    
+
     println!("Timestamp operations test passed");
 }
 
@@ -272,20 +272,20 @@ fn test_integration_readiness() {
     // Final integration test to ensure all components work together
     let contract_class = declare("StarkRemit");
     assert(contract_class.is_err() == false, 'Integration readiness failed');
-    
+
     // Test that we can create all necessary data structures
     test_data_structures_compilation();
-    
+
     // Test that all enums work correctly
     test_transfer_status_enum();
     test_agent_status_enum();
     test_kyc_level_enum();
     test_kyc_status_enum();
-    
+
     // Test mathematical and address operations
     test_mathematical_operations();
     test_address_operations();
     test_timestamp_operations();
-    
+
     println!("Integration readiness test completed - All systems ready!");
-} 
+}

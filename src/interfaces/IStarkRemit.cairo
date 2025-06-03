@@ -1,9 +1,7 @@
 use starknet::ContractAddress;
 use starkremit_contract::base::types::{
-
-    KYCLevel, KycLevel, KycStatus, RegistrationRequest, RegistrationStatus, UserProfile,
-    Transfer as TransferData, TransferStatus, TransferHistory, Agent, AgentStatus, MemberContribution,
-
+    Agent, AgentStatus, KYCLevel, KycLevel, KycStatus, MemberContribution, RegistrationRequest,
+    RegistrationStatus, Transfer as TransferData, TransferHistory, TransferStatus, UserProfile,
 };
 
 // Comprehensive StarkRemit interface combining all functionality
@@ -173,7 +171,9 @@ pub trait IStarkRemit<TContractState> {
     ) -> Array<TransferHistory>;
 
     /// Get transfer statistics
-    fn get_transfer_statistics(self: @TContractState) -> (u256, u256, u256, u256); // total, completed, cancelled, expired
+    fn get_transfer_statistics(
+        self: @TContractState,
+    ) -> (u256, u256, u256, u256); // total, completed, cancelled, expired
 
     /// Get agent statistics
     fn get_agent_statistics(
@@ -194,7 +194,6 @@ pub trait IStarkRemit<TContractState> {
     // Savings Group Functions
     fn create_group(ref self: TContractState, max_members: u8) -> u64;
     fn join_group(ref self: TContractState, group_id: u64);
-
 }
 
 // ERC-20 Token interface

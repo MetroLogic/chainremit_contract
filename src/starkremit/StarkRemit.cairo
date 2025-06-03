@@ -8,15 +8,12 @@ mod StarkRemit {
     };
     use starknet::{ContractAddress, get_block_timestamp, get_caller_address, get_contract_address};
     use starkremit_contract::base::errors::{
-        ERC20Errors, GroupErrors, KYCErrors, MintBurnErrors, RegistrationErrors,
+        ERC20Errors, GroupErrors, KYCErrors, MintBurnErrors, RegistrationErrors, TransferErrors,
     };
-
-    use starknet::{ContractAddress, get_block_timestamp, get_caller_address};
-    use starkremit_contract::base::errors::{ERC20Errors, KYCErrors, RegistrationErrors, TransferErrors};
     use starkremit_contract::base::types::{
-        KYCLevel, KycLevel, KycStatus, RegistrationRequest, RegistrationStatus, SavingsGroup, UserKycData,
-        UserProfile, Transfer as TransferData, TransferStatus, TransferHistory, Agent, AgentStatus,
-
+        Agent, AgentStatus, KYCLevel, KycLevel, KycStatus, RegistrationRequest, RegistrationStatus,
+        SavingsGroup, Transfer as TransferData, TransferHistory, TransferStatus, UserKycData,
+        UserProfile,
     };
     use starkremit_contract::interfaces::{IERC20, IStarkRemit};
 
@@ -40,7 +37,6 @@ mod StarkRemit {
         KYCLevelUpdated: KYCLevelUpdated, // Event for KYC level updates
         KycStatusUpdated: KycStatusUpdated, // Event for KYC status updates
         KycEnforcementEnabled: KycEnforcementEnabled, // Event for KYC enforcement
-
         // Transfer Administration Events
         TransferCreated: TransferCreated, // Event for transfer creation
         TransferCancelled: TransferCancelled, // Event for transfer cancellation
@@ -52,8 +48,7 @@ mod StarkRemit {
         AgentAssigned: AgentAssigned, // Event for agent assignment
         AgentRegistered: AgentRegistered, // Event for agent registration
         AgentStatusUpdated: AgentStatusUpdated, // Event for agent status updates
-        TransferHistoryRecorded: TransferHistoryRecorded // Event for history recording
-
+        TransferHistoryRecorded: TransferHistoryRecorded, // Event for history recording
         // contribution
         ContributionMade: ContributionMade,
         RoundDisbursed: RoundDisbursed,
@@ -119,7 +114,6 @@ mod StarkRemit {
         round_id: u256,
         amount: u256,
         recipient: ContractAddress,
-
     }
 
     #[derive(Copy, Drop, starknet::Event)]
@@ -415,7 +409,6 @@ mod StarkRemit {
     }
 
 
-
     // Contract storage definition
     #[storage]
     struct Storage {
@@ -450,32 +443,42 @@ mod StarkRemit {
         single_limits: Map<u8, u256>,
         daily_usage: Map<ContractAddress, u256>,
         last_reset: Map<ContractAddress, u64>,
-
         // Transfer Administration storage
         transfers: Map<u256, TransferData>, // Transfer ID to Transfer mapping
         next_transfer_id: u256, // Counter for generating unique transfer IDs
-        user_sent_transfers: Map<(ContractAddress, u32), u256>, // User's sent transfers (user, index) -> transfer_id
+        user_sent_transfers: Map<
+            (ContractAddress, u32), u256,
+        >, // User's sent transfers (user, index) -> transfer_id
         user_sent_count: Map<ContractAddress, u32>, // Count of transfers sent by user
-        user_received_transfers: Map<(ContractAddress, u32), u256>, // User's received transfers (user, index) -> transfer_id
+        user_received_transfers: Map<
+            (ContractAddress, u32), u256,
+        >, // User's received transfers (user, index) -> transfer_id
         user_received_count: Map<ContractAddress, u32>, // Count of transfers received by user
         // Agent Management storage
         agents: Map<ContractAddress, Agent>, // Agent address to Agent mapping
         agent_exists: Map<ContractAddress, bool>, // Check if agent exists
-        agent_by_region: Map<(felt252, u32), ContractAddress>, // Agents by region (region, index) -> agent_address
+        agent_by_region: Map<
+            (felt252, u32), ContractAddress,
+        >, // Agents by region (region, index) -> agent_address
         agent_region_count: Map<felt252, u32>, // Count of agents by region
         // Transfer History storage
-        transfer_history: Map<(u256, u32), TransferHistory>, // Transfer history (transfer_id, index) -> history
+        transfer_history: Map<
+            (u256, u32), TransferHistory,
+        >, // Transfer history (transfer_id, index) -> history
         transfer_history_count: Map<u256, u32>, // Count of history entries per transfer
-        actor_history: Map<(ContractAddress, u32), (u256, u32)>, // Actor's history (actor, index) -> (transfer_id, history_index)
+        actor_history: Map<
+            (ContractAddress, u32), (u256, u32),
+        >, // Actor's history (actor, index) -> (transfer_id, history_index)
         actor_history_count: Map<ContractAddress, u32>, // Count of history entries by actor
-        action_history: Map<(felt252, u32), (u256, u32)>, // Action history (action, index) -> (transfer_id, history_index)
+        action_history: Map<
+            (felt252, u32), (u256, u32),
+        >, // Action history (action, index) -> (transfer_id, history_index)
         action_history_count: Map<felt252, u32>, // Count of history entries by action
         // Statistics storage
         total_transfers: u256, // Total number of transfers created
         total_completed_transfers: u256, // Total completed transfers
         total_cancelled_transfers: u256, // Total cancelled transfers
         total_expired_transfers: u256, // Total expired transfer
-        
         // contribution storage
         rounds: Map<u256, ContributionRound>,
         member_contributions: Map<(u256, ContractAddress), MemberContribution>,
@@ -492,7 +495,6 @@ mod StarkRemit {
         // Token Supply Management
         max_supply: u256, // Maximum total supply of the token
         minters: Map<ContractAddress, bool> // Addresses authorized to mint tokens
-
     }
 
     // Contract constructor
@@ -529,7 +531,6 @@ mod StarkRemit {
         self.kyc_enforcement_enabled.write(false);
         self._set_default_transaction_limits();
 
-
         // Initialize transfer administration
         self.next_transfer_id.write(1); // Start transfer IDs from 1
         self.total_transfers.write(0);
@@ -542,7 +543,6 @@ mod StarkRemit {
         assert(max_supply >= initial_supply, MintBurnErrors::MAX_SUPPLY_TOO_LOW);
         self.max_supply.write(max_supply);
         self.minters.write(admin, true); // The deployer/admin is an initial minter
-
 
         // Emit transfer event for initial supply
         let zero_address: ContractAddress = 0.try_into().unwrap();
@@ -1254,22 +1254,26 @@ mod StarkRemit {
             self.total_transfers.write(total + 1);
 
             // Record history
-            self._record_transfer_history(
-                transfer_id, 'created', caller, TransferStatus::Pending, TransferStatus::Pending, 'Transfer created'
-            );
+            self
+                ._record_transfer_history(
+                    transfer_id,
+                    'created',
+                    caller,
+                    TransferStatus::Pending,
+                    TransferStatus::Pending,
+                    'Transfer created',
+                );
 
             // Reserve funds
             self.currency_balances.write((caller, currency), sender_balance - amount);
 
             // Emit event
-            self.emit(TransferCreated {
-                transfer_id,
-                sender: caller,
-                recipient,
-                amount,
-                currency,
-                expires_at,
-            });
+            self
+                .emit(
+                    TransferCreated {
+                        transfer_id, sender: caller, recipient, amount, currency, expires_at,
+                    },
+                );
 
             transfer_id
         }
@@ -1291,8 +1295,12 @@ mod StarkRemit {
 
             // Check if transfer can be cancelled
             match transfer.status {
-                TransferStatus::Completed => assert(false, TransferErrors::TRANSFER_ALREADY_COMPLETED),
-                TransferStatus::Cancelled => assert(false, TransferErrors::TRANSFER_ALREADY_CANCELLED),
+                TransferStatus::Completed => assert(
+                    false, TransferErrors::TRANSFER_ALREADY_COMPLETED,
+                ),
+                TransferStatus::Cancelled => assert(
+                    false, TransferErrors::TRANSFER_ALREADY_CANCELLED,
+                ),
                 TransferStatus::Expired => assert(false, TransferErrors::TRANSFER_EXPIRED),
                 _ => {} // Can cancel pending, partial, or cash-out requested transfers
             }
@@ -1307,24 +1315,35 @@ mod StarkRemit {
             // Refund sender
             let sender_balance = self.currency_balances.read((transfer.sender, transfer.currency));
             let refund_amount = transfer.amount - transfer.partial_amount;
-            self.currency_balances.write((transfer.sender, transfer.currency), sender_balance + refund_amount);
+            self
+                .currency_balances
+                .write((transfer.sender, transfer.currency), sender_balance + refund_amount);
 
             // Update statistics
             let cancelled_count = self.total_cancelled_transfers.read();
             self.total_cancelled_transfers.write(cancelled_count + 1);
 
             // Record history
-            self._record_transfer_history(
-                transfer_id, 'cancelled', caller, old_status, TransferStatus::Cancelled, 'Transfer cancelled'
-            );
+            self
+                ._record_transfer_history(
+                    transfer_id,
+                    'cancelled',
+                    caller,
+                    old_status,
+                    TransferStatus::Cancelled,
+                    'Transfer cancelled',
+                );
 
             // Emit event
-            self.emit(TransferCancelled {
-                transfer_id,
-                cancelled_by: caller,
-                timestamp: current_time,
-                reason: 'user_cancelled',
-            });
+            self
+                .emit(
+                    TransferCancelled {
+                        transfer_id,
+                        cancelled_by: caller,
+                        timestamp: current_time,
+                        reason: 'user_cancelled',
+                    },
+                );
 
             true
         }
@@ -1341,13 +1360,21 @@ mod StarkRemit {
             // Check authorization (recipient, assigned agent, or admin can complete)
             let is_admin = caller == self.admin.read();
             let is_recipient = caller == transfer.recipient;
-            let is_assigned_agent = transfer.assigned_agent != 0.try_into().unwrap() && caller == transfer.assigned_agent;
-            assert(is_admin || is_recipient || is_assigned_agent, TransferErrors::UNAUTHORIZED_TRANSFER_OP);
+            let is_assigned_agent = transfer.assigned_agent != 0.try_into().unwrap()
+                && caller == transfer.assigned_agent;
+            assert(
+                is_admin || is_recipient || is_assigned_agent,
+                TransferErrors::UNAUTHORIZED_TRANSFER_OP,
+            );
 
             // Check status
             match transfer.status {
-                TransferStatus::Completed => assert(false, TransferErrors::TRANSFER_ALREADY_COMPLETED),
-                TransferStatus::Cancelled => assert(false, TransferErrors::TRANSFER_ALREADY_CANCELLED),
+                TransferStatus::Completed => assert(
+                    false, TransferErrors::TRANSFER_ALREADY_COMPLETED,
+                ),
+                TransferStatus::Cancelled => assert(
+                    false, TransferErrors::TRANSFER_ALREADY_CANCELLED,
+                ),
                 TransferStatus::Expired => assert(false, TransferErrors::TRANSFER_EXPIRED),
                 _ => {} // Can complete pending, partial, or cash-out requested transfers
             }
@@ -1363,8 +1390,15 @@ mod StarkRemit {
 
             // Transfer remaining funds to recipient
             if remaining_amount > 0 {
-                let recipient_balance = self.currency_balances.read((transfer.recipient, transfer.currency));
-                self.currency_balances.write((transfer.recipient, transfer.currency), recipient_balance + remaining_amount);
+                let recipient_balance = self
+                    .currency_balances
+                    .read((transfer.recipient, transfer.currency));
+                self
+                    .currency_balances
+                    .write(
+                        (transfer.recipient, transfer.currency),
+                        recipient_balance + remaining_amount,
+                    );
             }
 
             // Update statistics
@@ -1372,16 +1406,23 @@ mod StarkRemit {
             self.total_completed_transfers.write(completed_count + 1);
 
             // Record history
-            self._record_transfer_history(
-                transfer_id, 'completed', caller, old_status, TransferStatus::Completed, 'Transfer completed'
-            );
+            self
+                ._record_transfer_history(
+                    transfer_id,
+                    'completed',
+                    caller,
+                    old_status,
+                    TransferStatus::Completed,
+                    'Transfer completed',
+                );
 
             // Emit event
-            self.emit(TransferCompleted {
-                transfer_id,
-                completed_by: caller,
-                timestamp: current_time,
-            });
+            self
+                .emit(
+                    TransferCompleted {
+                        transfer_id, completed_by: caller, timestamp: current_time,
+                    },
+                );
 
             true
         }
@@ -1400,17 +1441,28 @@ mod StarkRemit {
             // Check authorization
             let is_admin = caller == self.admin.read();
             let is_recipient = caller == transfer.recipient;
-            let is_assigned_agent = transfer.assigned_agent != 0.try_into().unwrap() && caller == transfer.assigned_agent;
-            assert(is_admin || is_recipient || is_assigned_agent, TransferErrors::UNAUTHORIZED_TRANSFER_OP);
+            let is_assigned_agent = transfer.assigned_agent != 0.try_into().unwrap()
+                && caller == transfer.assigned_agent;
+            assert(
+                is_admin || is_recipient || is_assigned_agent,
+                TransferErrors::UNAUTHORIZED_TRANSFER_OP,
+            );
 
             // Validate partial amount
             assert(partial_amount > 0, TransferErrors::INVALID_TRANSFER_AMOUNT);
-            assert(transfer.partial_amount + partial_amount <= transfer.amount, TransferErrors::PARTIAL_AMOUNT_EXCEEDS);
+            assert(
+                transfer.partial_amount + partial_amount <= transfer.amount,
+                TransferErrors::PARTIAL_AMOUNT_EXCEEDS,
+            );
 
             // Check status
             match transfer.status {
-                TransferStatus::Completed => assert(false, TransferErrors::TRANSFER_ALREADY_COMPLETED),
-                TransferStatus::Cancelled => assert(false, TransferErrors::TRANSFER_ALREADY_CANCELLED),
+                TransferStatus::Completed => assert(
+                    false, TransferErrors::TRANSFER_ALREADY_COMPLETED,
+                ),
+                TransferStatus::Cancelled => assert(
+                    false, TransferErrors::TRANSFER_ALREADY_CANCELLED,
+                ),
                 TransferStatus::Expired => assert(false, TransferErrors::TRANSFER_EXPIRED),
                 _ => {} // Can partially complete pending or partial transfers
             }
@@ -1420,7 +1472,7 @@ mod StarkRemit {
             // Update transfer
             transfer.partial_amount += partial_amount;
             transfer.updated_at = current_time;
-            
+
             // Update status to partial if not already
             if transfer.status == TransferStatus::Pending {
                 transfer.status = TransferStatus::PartialComplete;
@@ -1434,22 +1486,39 @@ mod StarkRemit {
             self.transfers.write(transfer_id, transfer);
 
             // Transfer partial funds to recipient
-            let recipient_balance = self.currency_balances.read((transfer.recipient, transfer.currency));
-            self.currency_balances.write((transfer.recipient, transfer.currency), recipient_balance + partial_amount);
+            let recipient_balance = self
+                .currency_balances
+                .read((transfer.recipient, transfer.currency));
+            self
+                .currency_balances
+                .write((transfer.recipient, transfer.currency), recipient_balance + partial_amount);
 
             // Record history
-            let action = if transfer.status == TransferStatus::Completed { 'completed' } else { 'partial_completed' };
-            self._record_transfer_history(
-                transfer_id, action, caller, old_status, transfer.status, 'Transfer partially completed'
-            );
+            let action = if transfer.status == TransferStatus::Completed {
+                'completed'
+            } else {
+                'partial_completed'
+            };
+            self
+                ._record_transfer_history(
+                    transfer_id,
+                    action,
+                    caller,
+                    old_status,
+                    transfer.status,
+                    'Transfer partially completed',
+                );
 
             // Emit event
-            self.emit(TransferPartialCompleted {
-                transfer_id,
-                partial_amount,
-                total_amount: transfer.amount,
-                timestamp: current_time,
-            });
+            self
+                .emit(
+                    TransferPartialCompleted {
+                        transfer_id,
+                        partial_amount,
+                        total_amount: transfer.amount,
+                        timestamp: current_time,
+                    },
+                );
 
             true
         }
@@ -1480,16 +1549,21 @@ mod StarkRemit {
             self.transfers.write(transfer_id, transfer);
 
             // Record history
-            self._record_transfer_history(
-                transfer_id, 'cash_out_requested', caller, old_status, TransferStatus::CashOutRequested, 'Cash-out requested'
-            );
+            self
+                ._record_transfer_history(
+                    transfer_id,
+                    'cash_out_requested',
+                    caller,
+                    old_status,
+                    TransferStatus::CashOutRequested,
+                    'Cash-out requested',
+                );
 
             // Emit event
-            self.emit(CashOutRequested {
-                transfer_id,
-                requested_by: caller,
-                timestamp: current_time,
-            });
+            self
+                .emit(
+                    CashOutRequested { transfer_id, requested_by: caller, timestamp: current_time },
+                );
 
             true
         }
@@ -1504,10 +1578,15 @@ mod StarkRemit {
             assert(transfer.transfer_id != 0, TransferErrors::TRANSFER_NOT_FOUND);
 
             // Check if caller is authorized agent
-            assert(self.is_agent_authorized(caller, transfer_id), TransferErrors::AGENT_NOT_AUTHORIZED);
+            assert(
+                self.is_agent_authorized(caller, transfer_id), TransferErrors::AGENT_NOT_AUTHORIZED,
+            );
 
             // Check status
-            assert(transfer.status == TransferStatus::CashOutRequested, TransferErrors::INVALID_TRANSFER_STATUS);
+            assert(
+                transfer.status == TransferStatus::CashOutRequested,
+                TransferErrors::INVALID_TRANSFER_STATUS,
+            );
 
             let old_status = transfer.status;
 
@@ -1517,16 +1596,18 @@ mod StarkRemit {
             self.transfers.write(transfer_id, transfer);
 
             // Record history
-            self._record_transfer_history(
-                transfer_id, 'cash_out_completed', caller, old_status, TransferStatus::CashOutCompleted, 'Cash-out completed'
-            );
+            self
+                ._record_transfer_history(
+                    transfer_id,
+                    'cash_out_completed',
+                    caller,
+                    old_status,
+                    TransferStatus::CashOutCompleted,
+                    'Cash-out completed',
+                );
 
             // Emit event
-            self.emit(CashOutCompleted {
-                transfer_id,
-                agent: caller,
-                timestamp: current_time,
-            });
+            self.emit(CashOutCompleted { transfer_id, agent: caller, timestamp: current_time });
 
             true
         }
@@ -1544,18 +1625,18 @@ mod StarkRemit {
         ) -> Array<TransferData> {
             let mut transfers = ArrayTrait::new();
             let total_count = self.user_sent_count.read(sender);
-            
+
             let mut i = offset;
             let mut count = 0;
-            
+
             while i < total_count && count < limit {
                 let transfer_id = self.user_sent_transfers.read((sender, i));
                 let transfer = self.transfers.read(transfer_id);
                 transfers.append(transfer);
                 count += 1;
                 i += 1;
-            };
-            
+            }
+
             transfers
         }
 
@@ -1565,18 +1646,18 @@ mod StarkRemit {
         ) -> Array<TransferData> {
             let mut transfers = ArrayTrait::new();
             let total_count = self.user_received_count.read(recipient);
-            
+
             let mut i = offset;
             let mut count = 0;
-            
+
             while i < total_count && count < limit {
                 let transfer_id = self.user_received_transfers.read((recipient, i));
                 let transfer = self.transfers.read(transfer_id);
                 transfers.append(transfer);
                 count += 1;
                 i += 1;
-            };
-            
+            }
+
             transfers
         }
 
@@ -1586,11 +1667,11 @@ mod StarkRemit {
         ) -> Array<TransferData> {
             let mut transfers = ArrayTrait::new();
             let total_transfers = self.total_transfers.read();
-            
+
             let mut i = 1; // Transfer IDs start from 1
             let mut count = 0;
             let mut found = 0;
-            
+
             while i <= total_transfers && count < limit {
                 let transfer = self.transfers.read(i);
                 if transfer.transfer_id != 0 && transfer.status == status {
@@ -1601,24 +1682,28 @@ mod StarkRemit {
                     found += 1;
                 }
                 i += 1;
-            };
-            
+            }
+
             transfers
         }
 
         /// Get expired transfers
-        fn get_expired_transfers(self: @ContractState, limit: u32, offset: u32) -> Array<TransferData> {
+        fn get_expired_transfers(
+            self: @ContractState, limit: u32, offset: u32,
+        ) -> Array<TransferData> {
             let mut transfers = ArrayTrait::new();
             let current_time = get_block_timestamp();
             let total_transfers = self.total_transfers.read();
-            
+
             let mut i = 1; // Transfer IDs start from 1
             let mut count = 0;
             let mut found = 0;
-            
+
             while i <= total_transfers && count < limit {
                 let transfer = self.transfers.read(i);
-                if transfer.transfer_id != 0 && transfer.expires_at <= current_time && transfer.status == TransferStatus::Pending {
+                if transfer.transfer_id != 0
+                    && transfer.expires_at <= current_time
+                    && transfer.status == TransferStatus::Pending {
                     if found >= offset {
                         transfers.append(transfer);
                         count += 1;
@@ -1626,8 +1711,8 @@ mod StarkRemit {
                     found += 1;
                 }
                 i += 1;
-            };
-            
+            }
+
             transfers
         }
 
@@ -1638,45 +1723,56 @@ mod StarkRemit {
 
             let current_time = get_block_timestamp();
             let total_transfers = self.total_transfers.read();
-            
+
             let mut processed = 0;
             let mut i = 1; // Transfer IDs start from 1
-            
+
             while i <= total_transfers && processed < limit {
                 let mut transfer = self.transfers.read(i);
-                
-                if transfer.transfer_id != 0 && transfer.expires_at <= current_time && transfer.status == TransferStatus::Pending {
+
+                if transfer.transfer_id != 0
+                    && transfer.expires_at <= current_time
+                    && transfer.status == TransferStatus::Pending {
                     // Mark as expired
                     transfer.status = TransferStatus::Expired;
                     transfer.updated_at = current_time;
                     self.transfers.write(i, transfer);
 
                     // Refund sender
-                    let sender_balance = self.currency_balances.read((transfer.sender, transfer.currency));
+                    let sender_balance = self
+                        .currency_balances
+                        .read((transfer.sender, transfer.currency));
                     let refund_amount = transfer.amount - transfer.partial_amount;
-                    self.currency_balances.write((transfer.sender, transfer.currency), sender_balance + refund_amount);
+                    self
+                        .currency_balances
+                        .write(
+                            (transfer.sender, transfer.currency), sender_balance + refund_amount,
+                        );
 
                     // Update statistics
                     let expired_count = self.total_expired_transfers.read();
                     self.total_expired_transfers.write(expired_count + 1);
 
                     // Record history
-                    self._record_transfer_history(
-                        i, 'expired', caller, TransferStatus::Pending, TransferStatus::Expired, 'Transfer expired'
-                    );
+                    self
+                        ._record_transfer_history(
+                            i,
+                            'expired',
+                            caller,
+                            TransferStatus::Pending,
+                            TransferStatus::Expired,
+                            'Transfer expired',
+                        );
 
                     // Emit event
-                    self.emit(TransferExpired {
-                        transfer_id: i,
-                        timestamp: current_time,
-                    });
+                    self.emit(TransferExpired { transfer_id: i, timestamp: current_time });
 
                     processed += 1;
                 }
-                
+
                 i += 1;
-            };
-            
+            }
+
             processed
         }
 
@@ -1703,17 +1799,23 @@ mod StarkRemit {
             self.transfers.write(transfer_id, transfer);
 
             // Record history
-            self._record_transfer_history(
-                transfer_id, 'agent_assigned', caller, transfer.status, transfer.status, 'Agent assigned'
-            );
+            self
+                ._record_transfer_history(
+                    transfer_id,
+                    'agent_assigned',
+                    caller,
+                    transfer.status,
+                    transfer.status,
+                    'Agent assigned',
+                );
 
             // Emit event
-            self.emit(AgentAssigned {
-                transfer_id,
-                agent,
-                assigned_by: caller,
-                timestamp: current_time,
-            });
+            self
+                .emit(
+                    AgentAssigned {
+                        transfer_id, agent, assigned_by: caller, timestamp: current_time,
+                    },
+                );
 
             true
         }
@@ -1751,7 +1853,7 @@ mod StarkRemit {
                 total_volume: 0,
                 registered_at: current_time,
                 last_active: current_time,
-                rating: 1000, // Default rating
+                rating: 1000 // Default rating
             };
 
             // Store agent
@@ -1773,13 +1875,16 @@ mod StarkRemit {
             }
 
             // Emit event
-            self.emit(AgentRegistered {
-                agent_address,
-                name,
-                commission_rate,
-                registered_by: caller,
-                timestamp: current_time,
-            });
+            self
+                .emit(
+                    AgentRegistered {
+                        agent_address,
+                        name,
+                        commission_rate,
+                        registered_by: caller,
+                        timestamp: current_time,
+                    },
+                );
 
             true
         }
@@ -1804,13 +1909,16 @@ mod StarkRemit {
             self.agents.write(agent_address, agent);
 
             // Emit event
-            self.emit(AgentStatusUpdated {
-                agent: agent_address,
-                old_status,
-                new_status: status,
-                updated_by: caller,
-                timestamp: current_time,
-            });
+            self
+                .emit(
+                    AgentStatusUpdated {
+                        agent: agent_address,
+                        old_status,
+                        new_status: status,
+                        updated_by: caller,
+                        timestamp: current_time,
+                    },
+                );
 
             true
         }
@@ -1827,10 +1935,11 @@ mod StarkRemit {
         ) -> Array<Agent> {
             let mut agents = ArrayTrait::new();
             // Since we don't have a comprehensive agent list, we'll need to iterate through regions
-            // This is a simplified implementation - in production you might want a better indexing system
+            // This is a simplified implementation - in production you might want a better indexing
+            // system
             let mut _count = 0;
             let mut _found = 0;
-            
+
             // For now, return empty array as we don't have a comprehensive agent index
             // In a production system, you'd want to maintain a separate agent index
             agents
@@ -1842,18 +1951,18 @@ mod StarkRemit {
         ) -> Array<Agent> {
             let mut agents = ArrayTrait::new();
             let total_count = self.agent_region_count.read(region);
-            
+
             let mut i = offset;
             let mut count = 0;
-            
+
             while i < total_count && count < limit {
                 let agent_address = self.agent_by_region.read((region, i));
                 let agent = self.agents.read(agent_address);
                 agents.append(agent);
                 count += 1;
                 i += 1;
-            };
-            
+            }
+
             agents
         }
 
@@ -1888,17 +1997,17 @@ mod StarkRemit {
         ) -> Array<TransferHistory> {
             let mut history = ArrayTrait::new();
             let total_count = self.transfer_history_count.read(transfer_id);
-            
+
             let mut i = offset;
             let mut count = 0;
-            
+
             while i < total_count && count < limit {
                 let history_entry = self.transfer_history.read((transfer_id, i));
                 history.append(history_entry);
                 count += 1;
                 i += 1;
-            };
-            
+            }
+
             history
         }
 
@@ -1908,18 +2017,18 @@ mod StarkRemit {
         ) -> Array<TransferHistory> {
             let mut history = ArrayTrait::new();
             let total_count = self.actor_history_count.read(actor);
-            
+
             let mut i = offset;
             let mut count = 0;
-            
+
             while i < total_count && count < limit {
                 let (transfer_id, history_index) = self.actor_history.read((actor, i));
                 let history_entry = self.transfer_history.read((transfer_id, history_index));
                 history.append(history_entry);
                 count += 1;
                 i += 1;
-            };
-            
+            }
+
             history
         }
 
@@ -1929,18 +2038,18 @@ mod StarkRemit {
         ) -> Array<TransferHistory> {
             let mut history = ArrayTrait::new();
             let total_count = self.action_history_count.read(action);
-            
+
             let mut i = offset;
             let mut count = 0;
-            
+
             while i < total_count && count < limit {
                 let (transfer_id, history_index) = self.action_history.read((action, i));
                 let history_entry = self.transfer_history.read((transfer_id, history_index));
                 history.append(history_entry);
                 count += 1;
                 i += 1;
-            };
-            
+            }
+
             history
         }
 
@@ -1950,7 +2059,7 @@ mod StarkRemit {
                 self.total_transfers.read(),
                 self.total_completed_transfers.read(),
                 self.total_cancelled_transfers.read(),
-                self.total_expired_transfers.read()
+                self.total_expired_transfers.read(),
             )
         }
 
@@ -1961,7 +2070,7 @@ mod StarkRemit {
             assert(self.agent_exists.read(agent), TransferErrors::AGENT_NOT_FOUND);
             let agent_data = self.agents.read(agent);
             (agent_data.completed_transactions, agent_data.total_volume, agent_data.rating)
-
+        }
 
         //contribution management
 
@@ -2137,7 +2246,6 @@ mod StarkRemit {
 
             // Emit member joined event
             self.emit(MemberJoined { group_id, member: caller });
-
         }
     }
 
@@ -2255,12 +2363,11 @@ mod StarkRemit {
             self.action_history_count.write(action, action_count + 1);
 
             // Emit event
-            self.emit(TransferHistoryRecorded {
-                transfer_id,
-                action,
-                actor,
-                timestamp: current_time,
-            });
+            self
+                .emit(
+                    TransferHistoryRecorded { transfer_id, action, actor, timestamp: current_time },
+                );
+        }
 
         // Generates and stores a new unique group ID for a savings group
         // Returns the newly generated group ID
@@ -2270,7 +2377,6 @@ mod StarkRemit {
             self.group_count.write(group_id + 1);
 
             group_id
-
         }
     }
 

@@ -202,6 +202,7 @@ pub struct Agent {
     pub last_active: u64,
     /// Agent's rating (0-1000)
     pub rating: u256,
+}
 
 // Struct for a member's contribution
 #[derive(Copy, Drop, Serde, PartialEq, starknet::Store)]
@@ -219,5 +220,4 @@ pub struct SavingsGroup {
     pub max_members: u8, // Maximum number of members
     pub member_count: u8, // Current number of members
     pub is_active: bool // Group active status
-
 }

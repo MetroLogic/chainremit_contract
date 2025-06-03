@@ -127,7 +127,6 @@ pub mod KYCErrors {
     pub const KYC_DATA_NOT_FOUND: felt252 = 'KYC: data not found';
 }
 
-
 pub mod TransferErrors {
     /// Error triggered when transfer is not found
     pub const TRANSFER_NOT_FOUND: felt252 = 'Transfer not found';
@@ -182,6 +181,7 @@ pub mod TransferErrors {
 
     /// Error triggered when search parameters are invalid
     pub const INVALID_SEARCH_PARAMS: felt252 = 'Invalid search parameters';
+}
 
 pub mod GroupErrors {
     /// Error triggered when the max members is less than two
@@ -214,5 +214,4 @@ pub mod MintBurnErrors {
     pub const INVALID_MINTER_ADDRESS: felt252 = 'MinterMgmt: invalid address';
     /// Error triggered if max supply is set too low
     pub const MAX_SUPPLY_TOO_LOW: felt252 = 'SetMaxSupply: too low';
-
 }
