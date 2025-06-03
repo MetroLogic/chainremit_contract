@@ -1,6 +1,24 @@
-# starkRemit_contract
+# StarkRemit Contract
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+
+## Project Overview
+
+**StarkRemit** is a comprehensive Cairo smart contract for cross-border remittances on StarkNet, featuring multi-currency support, KYC compliance, and advanced transfer administration capabilities.
+
+This project leverages the scalability and low transaction costs of StarkNet L2 to provide secure, efficient, and compliant cross-border money transfers with comprehensive administrative controls.
+
+**Key Features:**
+- **ERC-20 Token Standard**: Full implementation with multi-currency support
+- **User Registration & KYC**: Comprehensive user onboarding with multi-level verification
+- **Transfer Administration**: Complete transfer lifecycle management with agent integration
+- **Multi-Currency Support**: Handle multiple currencies with exchange rate integration
+- **Agent Management**: Cash-out agent registration and authorization system
+- **Transfer History**: Comprehensive tracking and searchable transaction history
+- **Administrative Controls**: Admin functions for transfer and agent management
+- **Event-Driven Architecture**: Real-time events for all administrative actions
+
 [![Cairo](https://img.shields.io/badge/Cairo-1.x-orange.svg)](https://book.cairo-lang.org/)
 [![Starknet](https://img.shields.io/badge/Starknet-L2-blue.svg)](https://starknet.io/)
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](#)
@@ -21,26 +39,60 @@ This project leverages the scalability and low transaction costs of Starknet L2 
 *   **Multi-signature Security**: Optional multi-sig approval for high-value transactions
 *   **Compliance Monitoring**: Automatic AML/CFT screening and regulatory reporting capabilities
 
+
+---
+
+## Transfer Administration Features ✅
+
+The contract includes comprehensive transfer administration functionality:
+
+### Transfer Lifecycle Management
+- **Transfer Creation**: Create transfers with expiry times and metadata
+- **Transfer Cancellation**: Cancel incomplete transfers with automatic refunds
+- **Transfer Completion**: Mark transfers as completed with fund distribution
+- **Partial Completion**: Support for partial transfer completion
+- **Transfer Expiry**: Automatic handling of expired transfers with refunds
+
+### Agent Integration
+- **Agent Registration**: Register cash-out agents with regional and currency support
+- **Agent Management**: Update agent status and manage agent lifecycle
+- **Agent Authorization**: Verify agent permissions for specific transfers
+- **Cash-Out Operations**: Agent-facilitated cash-out completion
+
+### Transfer History & Tracking
+- **Comprehensive History**: Track all transfer actions and status changes
+- **Searchable Records**: Search history by actor, action, or transfer
+- **Event Emission**: Real-time events for all administrative actions
+- **Statistics Tracking**: Maintain transfer and agent statistics
+
 ---
 
 ## Setup Instructions
 
-Follow these steps to set up the project locally for development and testing.
-
 **Prerequisites:**
+
+- [Scarb](https://docs.swmansion.com/scarb/) (Cairo package manager)
+- [Starknet Foundry](https://foundry-rs.github.io/starknet-foundry/) (Testing framework)
+- Git
+
 *   [Scarb (Cairo package manager)](https://docs.swmansion.com/scarb/download.html) - v2.4.0 or higher
 *   [Starknet Foundry (Testing framework)](https://foundry-rs.github.io/starknet-foundry/getting-started/installation.html) - v0.20.0 or higher
 *   [Starknet Devnet (Local testnet)](https://github.com/0xSpaceShard/starknet-devnet-py) - v0.6.0 or higher
 *   [Git](https://git-scm.com/downloads) - Latest stable version
 *   [Node.js](https://nodejs.org/) - v18+ (for frontend integration scripts)
 
+
 **Installation:**
 
-1.  **Clone the repository:**
+1. **Clone the repository:**
     ```bash
     git clone https://github.com/your-username/starkRemit_contract.git
     cd starkRemit_contract
     ```
+
+
+2. **Install dependencies:**
+
 2.  **Install Scarb dependencies:**
     ```bash
     scarb build
@@ -72,21 +124,31 @@ Follow these steps to set up the project locally for development and testing.
     starknet-devnet --host 127.0.0.1 --port 5050 --seed 42 &
     ```
 2.  **Compile the contract:**
+
     ```bash
     scarb build
     ```
-3.  **Run tests:**
+
+3. **Run tests:**
     ```bash
+
+   scarb test
+
     snforge test --verbose
     ```
 4.  **Deploy to local devnet:**
     ```bash
     ./scripts/deploy_local.sh
+
     ```
 
 ---
 
 ## Available Scripts
+
+- `scarb build`: Compiles the Cairo contract
+- `scarb test`: Runs the test suite using Starknet Foundry
+- `scarb fmt`: Formats the code
 
 This project includes the following scripts to aid development:
 
@@ -121,11 +183,94 @@ This project includes the following scripts to aid development:
     npm run load-test
     ```
 
+
 ---
 
 ## Project Structure
 
 ```
+starkRemit_contract/
+├── Scarb.toml                    # Project manifest and dependencies
+├── src/
+│   ├── lib.cairo                 # Library entry point
+│   ├── starkremit/
+│   │   └── StarkRemit.cairo      # Main contract implementation
+│   ├── base/
+│   │   ├── types.cairo           # Data structures and enums
+│   │   └── errors.cairo          # Error definitions
+│   └── interfaces/
+│       └── IStarkRemit.cairo     # Contract interface
+├── tests/
+│   ├── test_StarkRemit.cairo     # Transfer administration tests
+│   ├── test_kyc.cairo            # KYC functionality tests
+│   └── test_contract.cairo       # Basic contract tests
+└── README.md                     # This file
+```
+
+---
+
+## Key Data Structures
+
+### Transfer Management
+```cairo
+struct Transfer {
+    transfer_id: u256,
+    sender: ContractAddress,
+    recipient: ContractAddress,
+    amount: u256,
+    currency: felt252,
+    status: TransferStatus,
+    created_at: u64,
+    updated_at: u64,
+    expires_at: u64,
+    assigned_agent: ContractAddress,
+    partial_amount: u256,
+    metadata: felt252,
+}
+
+enum TransferStatus {
+    Pending,
+    Completed,
+    Cancelled,
+    Expired,
+    PartialComplete,
+    CashOutRequested,
+    CashOutCompleted,
+}
+```
+
+### Agent Management
+```cairo
+struct Agent {
+    agent_address: ContractAddress,
+    name: felt252,
+    status: AgentStatus,
+    primary_currency: felt252,
+    secondary_currency: felt252,
+    primary_region: felt252,
+    secondary_region: felt252,
+    commission_rate: u256,
+    completed_transactions: u256,
+    total_volume: u256,
+    registered_at: u64,
+    last_active: u64,
+    rating: u256,
+}
+```
+
+### History Tracking
+```cairo
+struct TransferHistory {
+    transfer_id: u256,
+    action: felt252,
+    actor: ContractAddress,
+    timestamp: u64,
+    previous_status: TransferStatus,
+    new_status: TransferStatus,
+    details: felt252,
+}
+```
+
 /home/knights/Desktop/starkRemit_contract
 ├── Scarb.toml                    # Project manifest and dependencies
 ├── .env.example                  # Environment variables template
@@ -218,9 +363,60 @@ This project includes the following scripts to aid development:
     *   Maintain minimum 85% code coverage
     *   Use descriptive test names following `test_function_name_condition_expected_result` pattern
 
+
 ---
 
-## Deployment Process
+## Transfer Administration API
+
+### Transfer Operations
+- `create_transfer()` - Create a new transfer
+- `cancel_transfer()` - Cancel an existing transfer
+- `complete_transfer()` - Mark transfer as completed
+- `partial_complete_transfer()` - Partially complete a transfer
+- `request_cash_out()` - Request cash-out for a transfer
+- `complete_cash_out()` - Complete cash-out (agent only)
+
+### Agent Management
+- `register_agent()` - Register a new agent (admin only)
+- `update_agent_status()` - Update agent status (admin only)
+- `get_agent()` - Get agent details
+- `is_agent_authorized()` - Check agent authorization
+
+### Transfer Queries
+- `get_transfer()` - Get transfer details
+- `get_transfers_by_sender()` - Get transfers by sender
+- `get_transfers_by_recipient()` - Get transfers by recipient
+- `get_transfers_by_status()` - Get transfers by status
+- `get_expired_transfers()` - Get expired transfers
+
+### History & Statistics
+- `get_transfer_history()` - Get transfer history
+- `search_history_by_actor()` - Search history by actor
+- `search_history_by_action()` - Search history by action
+- `get_transfer_statistics()` - Get transfer statistics
+- `get_agent_statistics()` - Get agent statistics
+
+### Administrative Functions
+- `assign_agent_to_transfer()` - Assign agent to transfer (admin only)
+- `process_expired_transfers()` - Process expired transfers (admin only)
+
+---
+
+## Events
+
+The contract emits comprehensive events for all transfer administration actions:
+
+- `TransferCreated` - When a transfer is created
+- `TransferCancelled` - When a transfer is cancelled
+- `TransferCompleted` - When a transfer is completed
+- `TransferPartialCompleted` - When a transfer is partially completed
+- `TransferExpired` - When a transfer expires
+- `CashOutRequested` - When cash-out is requested
+- `CashOutCompleted` - When cash-out is completed
+- `AgentAssigned` - When an agent is assigned
+- `AgentRegistered` - When an agent is registered
+- `AgentStatusUpdated` - When agent status is updated
+- `TransferHistoryRecorded` - When history is recorded
 
 **Prerequisites:**
 *   Compiled contract artifacts in `target/dev/` directory
@@ -273,10 +469,14 @@ This project includes the following scripts to aid development:
     # Save the returned contract address: 0x...
     ```
 
+
 **Constructor Parameters:**
 *   `initial_owner`: Address that will have admin privileges (use your account address)
 *   `oracle_address`: Pragma Oracle contract address for price feeds
 *   `default_fee_rate`: Fee rate in basis points (e.g., 50 = 0.5%)
+
+
+## Testing
 
 **Post-Deployment Configuration:**
 ```bash
@@ -300,8 +500,32 @@ Use our deployment scripts for easier deployment:
 ./scripts/deploy_mainnet.sh --owner 0x... --oracle 0x...
 ```
 
+The contract includes comprehensive tests covering:
+- Contract compilation and deployment
+- Transfer lifecycle operations
+- Agent management functionality
+- History tracking and statistics
+- KYC compliance and enforcement
+- Error handling and edge cases
+
+
+All tests pass successfully:
+```bash
+Tests: 20 passed, 0 failed, 0 skipped, 0 ignored, 0 filtered out
+```
+
 ---
 
+## Deployment
+
+The contract requires the following constructor parameters:
+- `admin`: Admin address with special privileges
+- `name`: Token name
+- `symbol`: Token symbol
+- `initial_supply`: Initial token supply
+- `base_currency`: Base currency identifier
+- `oracle_address`: Oracle contract address for exchange rates
+- 
 ## Component Library Documentation (Contract Interface)
 
 This section describes the main functions, data structures, and events exposed by the `starkRemit_contract`.
@@ -309,6 +533,7 @@ This section describes the main functions, data structures, and events exposed b
 ### Core Data Structures
 
 **Structs:**
+
 
 *   **`RemittanceDetails`**:
     ```cairo
@@ -331,6 +556,23 @@ This section describes the main functions, data structures, and events exposed b
     }
     ```
 
+## Security Features
+
+- **Access Control**: Admin-only functions for sensitive operations
+- **KYC Integration**: Optional KYC enforcement for transfers
+- **Transfer Limits**: Configurable transaction limits based on KYC level
+- **Expiry Protection**: Automatic handling of expired transfers
+- **Agent Authorization**: Strict agent verification for cash-out operations
+- **Event Logging**: Comprehensive event emission for audit trails
+
+---
+
+## Performance Considerations
+
+- **Efficient Storage**: Optimized storage patterns for gas efficiency
+- **Batch Operations**: Support for processing multiple transfers
+- **Indexed Queries**: Efficient querying by user, status, and region
+- **Event-Driven**: Real-time event emission for external monitoring
 *   **`UserProfile`**:
     ```cairo
     struct UserProfile {
@@ -470,4 +712,4 @@ This section describes the main functions, data structures, and events exposed b
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details (if you add one).
+This project is licensed under the MIT License.

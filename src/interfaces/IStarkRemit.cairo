@@ -1,7 +1,7 @@
 use starknet::ContractAddress;
 use starkremit_contract::base::types::{
-    KYCLevel, KycLevel, KycStatus, MemberContribution, RegistrationRequest, RegistrationStatus,
-    UserProfile,
+    Agent, AgentStatus, KYCLevel, KycLevel, KycStatus, MemberContribution, RegistrationRequest,
+    RegistrationStatus, Transfer as TransferData, TransferHistory, TransferStatus, UserProfile,
 };
 
 // Comprehensive StarkRemit interface combining all functionality
@@ -60,6 +60,125 @@ pub trait IStarkRemit<TContractState> {
     fn is_kyc_enforcement_enabled(self: @TContractState) -> bool;
     fn suspend_user_kyc(ref self: TContractState, user: ContractAddress) -> bool;
     fn reinstate_user_kyc(ref self: TContractState, user: ContractAddress) -> bool;
+
+    // Transfer Administration Functions
+    /// Create a new transfer
+    fn create_transfer(
+        ref self: TContractState,
+        recipient: ContractAddress,
+        amount: u256,
+        currency: felt252,
+        expires_at: u64,
+        metadata: felt252,
+    ) -> u256;
+
+    /// Cancel an existing transfer
+    fn cancel_transfer(ref self: TContractState, transfer_id: u256) -> bool;
+
+    /// Complete a transfer (mark as completed)
+    fn complete_transfer(ref self: TContractState, transfer_id: u256) -> bool;
+
+    /// Partially complete a transfer
+    fn partial_complete_transfer(
+        ref self: TContractState, transfer_id: u256, partial_amount: u256,
+    ) -> bool;
+
+    /// Request cash-out for a transfer
+    fn request_cash_out(ref self: TContractState, transfer_id: u256) -> bool;
+
+    /// Complete cash-out (agent only)
+    fn complete_cash_out(ref self: TContractState, transfer_id: u256) -> bool;
+
+    /// Get transfer details
+    fn get_transfer(self: @TContractState, transfer_id: u256) -> TransferData;
+
+    /// Get transfers by sender
+    fn get_transfers_by_sender(
+        self: @TContractState, sender: ContractAddress, limit: u32, offset: u32,
+    ) -> Array<TransferData>;
+
+    /// Get transfers by recipient
+    fn get_transfers_by_recipient(
+        self: @TContractState, recipient: ContractAddress, limit: u32, offset: u32,
+    ) -> Array<TransferData>;
+
+    /// Get transfers by status
+    fn get_transfers_by_status(
+        self: @TContractState, status: TransferStatus, limit: u32, offset: u32,
+    ) -> Array<TransferData>;
+
+    /// Get expired transfers
+    fn get_expired_transfers(self: @TContractState, limit: u32, offset: u32) -> Array<TransferData>;
+
+    /// Process expired transfers (admin only)
+    fn process_expired_transfers(ref self: TContractState, limit: u32) -> u32;
+
+    /// Assign agent to transfer (admin only)
+    fn assign_agent_to_transfer(
+        ref self: TContractState, transfer_id: u256, agent: ContractAddress,
+    ) -> bool;
+
+    // Agent Management Functions
+    /// Register a new agent (admin only)
+    fn register_agent(
+        ref self: TContractState,
+        agent_address: ContractAddress,
+        name: felt252,
+        primary_currency: felt252,
+        secondary_currency: felt252,
+        primary_region: felt252,
+        secondary_region: felt252,
+        commission_rate: u256,
+    ) -> bool;
+
+    /// Update agent status (admin only)
+    fn update_agent_status(
+        ref self: TContractState, agent_address: ContractAddress, status: AgentStatus,
+    ) -> bool;
+
+    /// Get agent details
+    fn get_agent(self: @TContractState, agent_address: ContractAddress) -> Agent;
+
+    /// Get agents by status
+    fn get_agents_by_status(
+        self: @TContractState, status: AgentStatus, limit: u32, offset: u32,
+    ) -> Array<Agent>;
+
+    /// Get agents by region
+    fn get_agents_by_region(
+        self: @TContractState, region: felt252, limit: u32, offset: u32,
+    ) -> Array<Agent>;
+
+    /// Check if agent is authorized for transfer
+    fn is_agent_authorized(
+        self: @TContractState, agent: ContractAddress, transfer_id: u256,
+    ) -> bool;
+
+    // Transfer History Functions
+    /// Get transfer history
+    fn get_transfer_history(
+        self: @TContractState, transfer_id: u256, limit: u32, offset: u32,
+    ) -> Array<TransferHistory>;
+
+    /// Search transfer history by actor
+    fn search_history_by_actor(
+        self: @TContractState, actor: ContractAddress, limit: u32, offset: u32,
+    ) -> Array<TransferHistory>;
+
+    /// Search transfer history by action
+    fn search_history_by_action(
+        self: @TContractState, action: felt252, limit: u32, offset: u32,
+    ) -> Array<TransferHistory>;
+
+    /// Get transfer statistics
+    fn get_transfer_statistics(
+        self: @TContractState,
+    ) -> (u256, u256, u256, u256); // total, completed, cancelled, expired
+
+    /// Get agent statistics
+    fn get_agent_statistics(
+        self: @TContractState, agent: ContractAddress,
+    ) -> (u256, u256, u256); // total_transfers, total_volume, rating
 
     // contribution
 

@@ -8,11 +8,12 @@ mod StarkRemit {
     };
     use starknet::{ContractAddress, get_block_timestamp, get_caller_address, get_contract_address};
     use starkremit_contract::base::errors::{
-        ERC20Errors, GroupErrors, KYCErrors, MintBurnErrors, RegistrationErrors,
+        ERC20Errors, GroupErrors, KYCErrors, MintBurnErrors, RegistrationErrors, TransferErrors,
     };
     use starkremit_contract::base::types::{
-        KYCLevel, KycLevel, KycStatus, RegistrationRequest, RegistrationStatus, SavingsGroup,
-        UserKycData, UserProfile,
+        Agent, AgentStatus, KYCLevel, KycLevel, KycStatus, RegistrationRequest, RegistrationStatus,
+        SavingsGroup, Transfer as TransferData, TransferHistory, TransferStatus, UserKycData,
+        UserProfile,
     };
     use starkremit_contract::interfaces::{IERC20, IStarkRemit};
 
@@ -36,6 +37,18 @@ mod StarkRemit {
         KYCLevelUpdated: KYCLevelUpdated, // Event for KYC level updates
         KycStatusUpdated: KycStatusUpdated, // Event for KYC status updates
         KycEnforcementEnabled: KycEnforcementEnabled, // Event for KYC enforcement
+        // Transfer Administration Events
+        TransferCreated: TransferCreated, // Event for transfer creation
+        TransferCancelled: TransferCancelled, // Event for transfer cancellation
+        TransferCompleted: TransferCompleted, // Event for transfer completion
+        TransferPartialCompleted: TransferPartialCompleted, // Event for partial completion
+        TransferExpired: TransferExpired, // Event for transfer expiry
+        CashOutRequested: CashOutRequested, // Event for cash-out request
+        CashOutCompleted: CashOutCompleted, // Event for cash-out completion
+        AgentAssigned: AgentAssigned, // Event for agent assignment
+        AgentRegistered: AgentRegistered, // Event for agent registration
+        AgentStatusUpdated: AgentStatusUpdated, // Event for agent status updates
+        TransferHistoryRecorded: TransferHistoryRecorded, // Event for history recording
         // contribution
         ContributionMade: ContributionMade,
         RoundDisbursed: RoundDisbursed,
@@ -226,6 +239,113 @@ mod StarkRemit {
         updated_by: ContractAddress,
     }
 
+    // Transfer Administration Event Structs
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct TransferCreated {
+        #[key]
+        transfer_id: u256,
+        #[key]
+        sender: ContractAddress,
+        #[key]
+        recipient: ContractAddress,
+        amount: u256,
+        currency: felt252,
+        expires_at: u64,
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct TransferCancelled {
+        #[key]
+        transfer_id: u256,
+        #[key]
+        cancelled_by: ContractAddress,
+        timestamp: u64,
+        reason: felt252,
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct TransferCompleted {
+        #[key]
+        transfer_id: u256,
+        #[key]
+        completed_by: ContractAddress,
+        timestamp: u64,
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct TransferPartialCompleted {
+        #[key]
+        transfer_id: u256,
+        partial_amount: u256,
+        total_amount: u256,
+        timestamp: u64,
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct TransferExpired {
+        #[key]
+        transfer_id: u256,
+        timestamp: u64,
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct CashOutRequested {
+        #[key]
+        transfer_id: u256,
+        #[key]
+        requested_by: ContractAddress,
+        timestamp: u64,
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct CashOutCompleted {
+        #[key]
+        transfer_id: u256,
+        #[key]
+        agent: ContractAddress,
+        timestamp: u64,
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct AgentAssigned {
+        #[key]
+        transfer_id: u256,
+        #[key]
+        agent: ContractAddress,
+        #[key]
+        assigned_by: ContractAddress,
+        timestamp: u64,
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct AgentRegistered {
+        #[key]
+        agent_address: ContractAddress,
+        name: felt252,
+        commission_rate: u256,
+        registered_by: ContractAddress,
+        timestamp: u64,
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct AgentStatusUpdated {
+        #[key]
+        agent: ContractAddress,
+        old_status: AgentStatus,
+        new_status: AgentStatus,
+        updated_by: ContractAddress,
+        timestamp: u64,
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct TransferHistoryRecorded {
+        #[key]
+        transfer_id: u256,
+        action: felt252,
+        actor: ContractAddress,
+        timestamp: u64,
+    }
+
     // Event emitted when a new group is created
     #[derive(Copy, Drop, starknet::Event)]
     pub struct GroupCreated {
@@ -323,6 +443,42 @@ mod StarkRemit {
         single_limits: Map<u8, u256>,
         daily_usage: Map<ContractAddress, u256>,
         last_reset: Map<ContractAddress, u64>,
+        // Transfer Administration storage
+        transfers: Map<u256, TransferData>, // Transfer ID to Transfer mapping
+        next_transfer_id: u256, // Counter for generating unique transfer IDs
+        user_sent_transfers: Map<
+            (ContractAddress, u32), u256,
+        >, // User's sent transfers (user, index) -> transfer_id
+        user_sent_count: Map<ContractAddress, u32>, // Count of transfers sent by user
+        user_received_transfers: Map<
+            (ContractAddress, u32), u256,
+        >, // User's received transfers (user, index) -> transfer_id
+        user_received_count: Map<ContractAddress, u32>, // Count of transfers received by user
+        // Agent Management storage
+        agents: Map<ContractAddress, Agent>, // Agent address to Agent mapping
+        agent_exists: Map<ContractAddress, bool>, // Check if agent exists
+        agent_by_region: Map<
+            (felt252, u32), ContractAddress,
+        >, // Agents by region (region, index) -> agent_address
+        agent_region_count: Map<felt252, u32>, // Count of agents by region
+        // Transfer History storage
+        transfer_history: Map<
+            (u256, u32), TransferHistory,
+        >, // Transfer history (transfer_id, index) -> history
+        transfer_history_count: Map<u256, u32>, // Count of history entries per transfer
+        actor_history: Map<
+            (ContractAddress, u32), (u256, u32),
+        >, // Actor's history (actor, index) -> (transfer_id, history_index)
+        actor_history_count: Map<ContractAddress, u32>, // Count of history entries by actor
+        action_history: Map<
+            (felt252, u32), (u256, u32),
+        >, // Action history (action, index) -> (transfer_id, history_index)
+        action_history_count: Map<felt252, u32>, // Count of history entries by action
+        // Statistics storage
+        total_transfers: u256, // Total number of transfers created
+        total_completed_transfers: u256, // Total completed transfers
+        total_cancelled_transfers: u256, // Total cancelled transfers
+        total_expired_transfers: u256, // Total expired transfer
         // contribution storage
         rounds: Map<u256, ContributionRound>,
         member_contributions: Map<(u256, ContractAddress), MemberContribution>,
@@ -374,6 +530,13 @@ mod StarkRemit {
         // Initialize KYC with default settings
         self.kyc_enforcement_enabled.write(false);
         self._set_default_transaction_limits();
+
+        // Initialize transfer administration
+        self.next_transfer_id.write(1); // Start transfer IDs from 1
+        self.total_transfers.write(0);
+        self.total_completed_transfers.write(0);
+        self.total_cancelled_transfers.write(0);
+        self.total_expired_transfers.write(0);
 
         // Initialize Token Supply Management
         // Max supply must be greater than or equal to initial supply
@@ -1024,6 +1187,891 @@ mod StarkRemit {
         }
 
 
+        // Transfer Administration Functions
+        /// Create a new transfer
+        fn create_transfer(
+            ref self: ContractState,
+            recipient: ContractAddress,
+            amount: u256,
+            currency: felt252,
+            expires_at: u64,
+            metadata: felt252,
+        ) -> u256 {
+            let caller = get_caller_address();
+            let current_time = get_block_timestamp();
+            let zero_address: ContractAddress = 0.try_into().unwrap();
+
+            // Validate inputs
+            assert(recipient != zero_address, TransferErrors::INVALID_TRANSFER_AMOUNT);
+            assert(amount > 0, TransferErrors::INVALID_TRANSFER_AMOUNT);
+            assert(expires_at > current_time, TransferErrors::INVALID_EXPIRY_TIME);
+            assert(self.supported_currencies.read(currency), TransferErrors::UNSUPPORTED_CURRENCY);
+
+            // Validate KYC if enforcement is enabled
+            if self.kyc_enforcement_enabled.read() {
+                self._validate_kyc_and_limits(caller, amount);
+                self._validate_kyc_and_limits(recipient, amount);
+            }
+
+            // Check sender has sufficient balance
+            let sender_balance = self.currency_balances.read((caller, currency));
+            assert(sender_balance >= amount, ERC20Errors::INSUFFICIENT_BALANCE);
+
+            // Generate transfer ID
+            let transfer_id = self.next_transfer_id.read();
+            self.next_transfer_id.write(transfer_id + 1);
+
+            // Create transfer
+            let transfer = TransferData {
+                transfer_id,
+                sender: caller,
+                recipient,
+                amount,
+                currency,
+                status: TransferStatus::Pending,
+                created_at: current_time,
+                updated_at: current_time,
+                expires_at,
+                assigned_agent: zero_address,
+                partial_amount: 0,
+                metadata,
+            };
+
+            // Store transfer
+            self.transfers.write(transfer_id, transfer);
+
+            // Update user indices
+            let sender_count = self.user_sent_count.read(caller);
+            self.user_sent_transfers.write((caller, sender_count), transfer_id);
+            self.user_sent_count.write(caller, sender_count + 1);
+
+            let recipient_count = self.user_received_count.read(recipient);
+            self.user_received_transfers.write((recipient, recipient_count), transfer_id);
+            self.user_received_count.write(recipient, recipient_count + 1);
+
+            // Update statistics
+            let total = self.total_transfers.read();
+            self.total_transfers.write(total + 1);
+
+            // Record history
+            self
+                ._record_transfer_history(
+                    transfer_id,
+                    'created',
+                    caller,
+                    TransferStatus::Pending,
+                    TransferStatus::Pending,
+                    'Transfer created',
+                );
+
+            // Reserve funds
+            self.currency_balances.write((caller, currency), sender_balance - amount);
+
+            // Emit event
+            self
+                .emit(
+                    TransferCreated {
+                        transfer_id, sender: caller, recipient, amount, currency, expires_at,
+                    },
+                );
+
+            transfer_id
+        }
+
+        /// Cancel an existing transfer
+        fn cancel_transfer(ref self: ContractState, transfer_id: u256) -> bool {
+            let caller = get_caller_address();
+            let current_time = get_block_timestamp();
+
+            // Get transfer
+            let mut transfer = self.transfers.read(transfer_id);
+            assert(transfer.transfer_id != 0, TransferErrors::TRANSFER_NOT_FOUND);
+
+            // Check authorization (sender, recipient, or admin can cancel)
+            let is_admin = caller == self.admin.read();
+            let is_sender = caller == transfer.sender;
+            let is_recipient = caller == transfer.recipient;
+            assert(is_admin || is_sender || is_recipient, TransferErrors::UNAUTHORIZED_TRANSFER_OP);
+
+            // Check if transfer can be cancelled
+            match transfer.status {
+                TransferStatus::Completed => assert(
+                    false, TransferErrors::TRANSFER_ALREADY_COMPLETED,
+                ),
+                TransferStatus::Cancelled => assert(
+                    false, TransferErrors::TRANSFER_ALREADY_CANCELLED,
+                ),
+                TransferStatus::Expired => assert(false, TransferErrors::TRANSFER_EXPIRED),
+                _ => {} // Can cancel pending, partial, or cash-out requested transfers
+            }
+
+            let old_status = transfer.status;
+
+            // Update transfer status
+            transfer.status = TransferStatus::Cancelled;
+            transfer.updated_at = current_time;
+            self.transfers.write(transfer_id, transfer);
+
+            // Refund sender
+            let sender_balance = self.currency_balances.read((transfer.sender, transfer.currency));
+            let refund_amount = transfer.amount - transfer.partial_amount;
+            self
+                .currency_balances
+                .write((transfer.sender, transfer.currency), sender_balance + refund_amount);
+
+            // Update statistics
+            let cancelled_count = self.total_cancelled_transfers.read();
+            self.total_cancelled_transfers.write(cancelled_count + 1);
+
+            // Record history
+            self
+                ._record_transfer_history(
+                    transfer_id,
+                    'cancelled',
+                    caller,
+                    old_status,
+                    TransferStatus::Cancelled,
+                    'Transfer cancelled',
+                );
+
+            // Emit event
+            self
+                .emit(
+                    TransferCancelled {
+                        transfer_id,
+                        cancelled_by: caller,
+                        timestamp: current_time,
+                        reason: 'user_cancelled',
+                    },
+                );
+
+            true
+        }
+
+        /// Complete a transfer (mark as completed)
+        fn complete_transfer(ref self: ContractState, transfer_id: u256) -> bool {
+            let caller = get_caller_address();
+            let current_time = get_block_timestamp();
+
+            // Get transfer
+            let mut transfer = self.transfers.read(transfer_id);
+            assert(transfer.transfer_id != 0, TransferErrors::TRANSFER_NOT_FOUND);
+
+            // Check authorization (recipient, assigned agent, or admin can complete)
+            let is_admin = caller == self.admin.read();
+            let is_recipient = caller == transfer.recipient;
+            let is_assigned_agent = transfer.assigned_agent != 0.try_into().unwrap()
+                && caller == transfer.assigned_agent;
+            assert(
+                is_admin || is_recipient || is_assigned_agent,
+                TransferErrors::UNAUTHORIZED_TRANSFER_OP,
+            );
+
+            // Check status
+            match transfer.status {
+                TransferStatus::Completed => assert(
+                    false, TransferErrors::TRANSFER_ALREADY_COMPLETED,
+                ),
+                TransferStatus::Cancelled => assert(
+                    false, TransferErrors::TRANSFER_ALREADY_CANCELLED,
+                ),
+                TransferStatus::Expired => assert(false, TransferErrors::TRANSFER_EXPIRED),
+                _ => {} // Can complete pending, partial, or cash-out requested transfers
+            }
+
+            let old_status = transfer.status;
+            let remaining_amount = transfer.amount - transfer.partial_amount;
+
+            // Update transfer status
+            transfer.status = TransferStatus::Completed;
+            transfer.updated_at = current_time;
+            transfer.partial_amount = transfer.amount;
+            self.transfers.write(transfer_id, transfer);
+
+            // Transfer remaining funds to recipient
+            if remaining_amount > 0 {
+                let recipient_balance = self
+                    .currency_balances
+                    .read((transfer.recipient, transfer.currency));
+                self
+                    .currency_balances
+                    .write(
+                        (transfer.recipient, transfer.currency),
+                        recipient_balance + remaining_amount,
+                    );
+            }
+
+            // Update statistics
+            let completed_count = self.total_completed_transfers.read();
+            self.total_completed_transfers.write(completed_count + 1);
+
+            // Record history
+            self
+                ._record_transfer_history(
+                    transfer_id,
+                    'completed',
+                    caller,
+                    old_status,
+                    TransferStatus::Completed,
+                    'Transfer completed',
+                );
+
+            // Emit event
+            self
+                .emit(
+                    TransferCompleted {
+                        transfer_id, completed_by: caller, timestamp: current_time,
+                    },
+                );
+
+            true
+        }
+
+        /// Partially complete a transfer
+        fn partial_complete_transfer(
+            ref self: ContractState, transfer_id: u256, partial_amount: u256,
+        ) -> bool {
+            let caller = get_caller_address();
+            let current_time = get_block_timestamp();
+
+            // Get transfer
+            let mut transfer = self.transfers.read(transfer_id);
+            assert(transfer.transfer_id != 0, TransferErrors::TRANSFER_NOT_FOUND);
+
+            // Check authorization
+            let is_admin = caller == self.admin.read();
+            let is_recipient = caller == transfer.recipient;
+            let is_assigned_agent = transfer.assigned_agent != 0.try_into().unwrap()
+                && caller == transfer.assigned_agent;
+            assert(
+                is_admin || is_recipient || is_assigned_agent,
+                TransferErrors::UNAUTHORIZED_TRANSFER_OP,
+            );
+
+            // Validate partial amount
+            assert(partial_amount > 0, TransferErrors::INVALID_TRANSFER_AMOUNT);
+            assert(
+                transfer.partial_amount + partial_amount <= transfer.amount,
+                TransferErrors::PARTIAL_AMOUNT_EXCEEDS,
+            );
+
+            // Check status
+            match transfer.status {
+                TransferStatus::Completed => assert(
+                    false, TransferErrors::TRANSFER_ALREADY_COMPLETED,
+                ),
+                TransferStatus::Cancelled => assert(
+                    false, TransferErrors::TRANSFER_ALREADY_CANCELLED,
+                ),
+                TransferStatus::Expired => assert(false, TransferErrors::TRANSFER_EXPIRED),
+                _ => {} // Can partially complete pending or partial transfers
+            }
+
+            let old_status = transfer.status;
+
+            // Update transfer
+            transfer.partial_amount += partial_amount;
+            transfer.updated_at = current_time;
+
+            // Update status to partial if not already
+            if transfer.status == TransferStatus::Pending {
+                transfer.status = TransferStatus::PartialComplete;
+            }
+
+            // Check if now fully completed
+            if transfer.partial_amount == transfer.amount {
+                transfer.status = TransferStatus::Completed;
+            }
+
+            self.transfers.write(transfer_id, transfer);
+
+            // Transfer partial funds to recipient
+            let recipient_balance = self
+                .currency_balances
+                .read((transfer.recipient, transfer.currency));
+            self
+                .currency_balances
+                .write((transfer.recipient, transfer.currency), recipient_balance + partial_amount);
+
+            // Record history
+            let action = if transfer.status == TransferStatus::Completed {
+                'completed'
+            } else {
+                'partial_completed'
+            };
+            self
+                ._record_transfer_history(
+                    transfer_id,
+                    action,
+                    caller,
+                    old_status,
+                    transfer.status,
+                    'Transfer partially completed',
+                );
+
+            // Emit event
+            self
+                .emit(
+                    TransferPartialCompleted {
+                        transfer_id,
+                        partial_amount,
+                        total_amount: transfer.amount,
+                        timestamp: current_time,
+                    },
+                );
+
+            true
+        }
+
+        /// Request cash-out for a transfer
+        fn request_cash_out(ref self: ContractState, transfer_id: u256) -> bool {
+            let caller = get_caller_address();
+            let current_time = get_block_timestamp();
+
+            // Get transfer
+            let mut transfer = self.transfers.read(transfer_id);
+            assert(transfer.transfer_id != 0, TransferErrors::TRANSFER_NOT_FOUND);
+
+            // Check authorization (only recipient can request cash-out)
+            assert(caller == transfer.recipient, TransferErrors::UNAUTHORIZED_TRANSFER_OP);
+
+            // Check status (can only request cash-out for pending or partial transfers)
+            match transfer.status {
+                TransferStatus::Pending | TransferStatus::PartialComplete => {},
+                _ => assert(false, TransferErrors::INVALID_TRANSFER_STATUS),
+            }
+
+            let old_status = transfer.status;
+
+            // Update status
+            transfer.status = TransferStatus::CashOutRequested;
+            transfer.updated_at = current_time;
+            self.transfers.write(transfer_id, transfer);
+
+            // Record history
+            self
+                ._record_transfer_history(
+                    transfer_id,
+                    'cash_out_requested',
+                    caller,
+                    old_status,
+                    TransferStatus::CashOutRequested,
+                    'Cash-out requested',
+                );
+
+            // Emit event
+            self
+                .emit(
+                    CashOutRequested { transfer_id, requested_by: caller, timestamp: current_time },
+                );
+
+            true
+        }
+
+        /// Complete cash-out (agent only)
+        fn complete_cash_out(ref self: ContractState, transfer_id: u256) -> bool {
+            let caller = get_caller_address();
+            let current_time = get_block_timestamp();
+
+            // Get transfer
+            let mut transfer = self.transfers.read(transfer_id);
+            assert(transfer.transfer_id != 0, TransferErrors::TRANSFER_NOT_FOUND);
+
+            // Check if caller is authorized agent
+            assert(
+                self.is_agent_authorized(caller, transfer_id), TransferErrors::AGENT_NOT_AUTHORIZED,
+            );
+
+            // Check status
+            assert(
+                transfer.status == TransferStatus::CashOutRequested,
+                TransferErrors::INVALID_TRANSFER_STATUS,
+            );
+
+            let old_status = transfer.status;
+
+            // Update status
+            transfer.status = TransferStatus::CashOutCompleted;
+            transfer.updated_at = current_time;
+            self.transfers.write(transfer_id, transfer);
+
+            // Record history
+            self
+                ._record_transfer_history(
+                    transfer_id,
+                    'cash_out_completed',
+                    caller,
+                    old_status,
+                    TransferStatus::CashOutCompleted,
+                    'Cash-out completed',
+                );
+
+            // Emit event
+            self.emit(CashOutCompleted { transfer_id, agent: caller, timestamp: current_time });
+
+            true
+        }
+
+        /// Get transfer details
+        fn get_transfer(self: @ContractState, transfer_id: u256) -> TransferData {
+            let transfer = self.transfers.read(transfer_id);
+            assert(transfer.transfer_id != 0, TransferErrors::TRANSFER_NOT_FOUND);
+            transfer
+        }
+
+        /// Get transfers by sender
+        fn get_transfers_by_sender(
+            self: @ContractState, sender: ContractAddress, limit: u32, offset: u32,
+        ) -> Array<TransferData> {
+            let mut transfers = ArrayTrait::new();
+            let total_count = self.user_sent_count.read(sender);
+
+            let mut i = offset;
+            let mut count = 0;
+
+            while i < total_count && count < limit {
+                let transfer_id = self.user_sent_transfers.read((sender, i));
+                let transfer = self.transfers.read(transfer_id);
+                transfers.append(transfer);
+                count += 1;
+                i += 1;
+            }
+
+            transfers
+        }
+
+        /// Get transfers by recipient
+        fn get_transfers_by_recipient(
+            self: @ContractState, recipient: ContractAddress, limit: u32, offset: u32,
+        ) -> Array<TransferData> {
+            let mut transfers = ArrayTrait::new();
+            let total_count = self.user_received_count.read(recipient);
+
+            let mut i = offset;
+            let mut count = 0;
+
+            while i < total_count && count < limit {
+                let transfer_id = self.user_received_transfers.read((recipient, i));
+                let transfer = self.transfers.read(transfer_id);
+                transfers.append(transfer);
+                count += 1;
+                i += 1;
+            }
+
+            transfers
+        }
+
+        /// Get transfers by status
+        fn get_transfers_by_status(
+            self: @ContractState, status: TransferStatus, limit: u32, offset: u32,
+        ) -> Array<TransferData> {
+            let mut transfers = ArrayTrait::new();
+            let total_transfers = self.total_transfers.read();
+
+            let mut i = 1; // Transfer IDs start from 1
+            let mut count = 0;
+            let mut found = 0;
+
+            while i <= total_transfers && count < limit {
+                let transfer = self.transfers.read(i);
+                if transfer.transfer_id != 0 && transfer.status == status {
+                    if found >= offset {
+                        transfers.append(transfer);
+                        count += 1;
+                    }
+                    found += 1;
+                }
+                i += 1;
+            }
+
+            transfers
+        }
+
+        /// Get expired transfers
+        fn get_expired_transfers(
+            self: @ContractState, limit: u32, offset: u32,
+        ) -> Array<TransferData> {
+            let mut transfers = ArrayTrait::new();
+            let current_time = get_block_timestamp();
+            let total_transfers = self.total_transfers.read();
+
+            let mut i = 1; // Transfer IDs start from 1
+            let mut count = 0;
+            let mut found = 0;
+
+            while i <= total_transfers && count < limit {
+                let transfer = self.transfers.read(i);
+                if transfer.transfer_id != 0
+                    && transfer.expires_at <= current_time
+                    && transfer.status == TransferStatus::Pending {
+                    if found >= offset {
+                        transfers.append(transfer);
+                        count += 1;
+                    }
+                    found += 1;
+                }
+                i += 1;
+            }
+
+            transfers
+        }
+
+        /// Process expired transfers (admin only)
+        fn process_expired_transfers(ref self: ContractState, limit: u32) -> u32 {
+            let caller = get_caller_address();
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+
+            let current_time = get_block_timestamp();
+            let total_transfers = self.total_transfers.read();
+
+            let mut processed = 0;
+            let mut i = 1; // Transfer IDs start from 1
+
+            while i <= total_transfers && processed < limit {
+                let mut transfer = self.transfers.read(i);
+
+                if transfer.transfer_id != 0
+                    && transfer.expires_at <= current_time
+                    && transfer.status == TransferStatus::Pending {
+                    // Mark as expired
+                    transfer.status = TransferStatus::Expired;
+                    transfer.updated_at = current_time;
+                    self.transfers.write(i, transfer);
+
+                    // Refund sender
+                    let sender_balance = self
+                        .currency_balances
+                        .read((transfer.sender, transfer.currency));
+                    let refund_amount = transfer.amount - transfer.partial_amount;
+                    self
+                        .currency_balances
+                        .write(
+                            (transfer.sender, transfer.currency), sender_balance + refund_amount,
+                        );
+
+                    // Update statistics
+                    let expired_count = self.total_expired_transfers.read();
+                    self.total_expired_transfers.write(expired_count + 1);
+
+                    // Record history
+                    self
+                        ._record_transfer_history(
+                            i,
+                            'expired',
+                            caller,
+                            TransferStatus::Pending,
+                            TransferStatus::Expired,
+                            'Transfer expired',
+                        );
+
+                    // Emit event
+                    self.emit(TransferExpired { transfer_id: i, timestamp: current_time });
+
+                    processed += 1;
+                }
+
+                i += 1;
+            }
+
+            processed
+        }
+
+        /// Assign agent to transfer (admin only)
+        fn assign_agent_to_transfer(
+            ref self: ContractState, transfer_id: u256, agent: ContractAddress,
+        ) -> bool {
+            let caller = get_caller_address();
+            let current_time = get_block_timestamp();
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+
+            // Validate agent exists and is active
+            assert(self.agent_exists.read(agent), TransferErrors::AGENT_NOT_FOUND);
+            let agent_data = self.agents.read(agent);
+            assert(agent_data.status == AgentStatus::Active, TransferErrors::AGENT_NOT_ACTIVE);
+
+            // Get transfer
+            let mut transfer = self.transfers.read(transfer_id);
+            assert(transfer.transfer_id != 0, TransferErrors::TRANSFER_NOT_FOUND);
+
+            // Update transfer
+            transfer.assigned_agent = agent;
+            transfer.updated_at = current_time;
+            self.transfers.write(transfer_id, transfer);
+
+            // Record history
+            self
+                ._record_transfer_history(
+                    transfer_id,
+                    'agent_assigned',
+                    caller,
+                    transfer.status,
+                    transfer.status,
+                    'Agent assigned',
+                );
+
+            // Emit event
+            self
+                .emit(
+                    AgentAssigned {
+                        transfer_id, agent, assigned_by: caller, timestamp: current_time,
+                    },
+                );
+
+            true
+        }
+
+        // Agent Management Functions
+        /// Register a new agent (admin only)
+        fn register_agent(
+            ref self: ContractState,
+            agent_address: ContractAddress,
+            name: felt252,
+            primary_currency: felt252,
+            secondary_currency: felt252,
+            primary_region: felt252,
+            secondary_region: felt252,
+            commission_rate: u256,
+        ) -> bool {
+            let caller = get_caller_address();
+            let current_time = get_block_timestamp();
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+
+            // Check if agent already exists
+            assert(!self.agent_exists.read(agent_address), TransferErrors::AGENT_ALREADY_EXISTS);
+
+            // Create agent
+            let agent = Agent {
+                agent_address,
+                name,
+                status: AgentStatus::Active,
+                primary_currency,
+                secondary_currency,
+                primary_region,
+                secondary_region,
+                commission_rate,
+                completed_transactions: 0,
+                total_volume: 0,
+                registered_at: current_time,
+                last_active: current_time,
+                rating: 1000 // Default rating
+            };
+
+            // Store agent
+            self.agents.write(agent_address, agent);
+            self.agent_exists.write(agent_address, true);
+
+            // Update region indices for primary region
+            if primary_region != 0 {
+                let region_count = self.agent_region_count.read(primary_region);
+                self.agent_by_region.write((primary_region, region_count), agent_address);
+                self.agent_region_count.write(primary_region, region_count + 1);
+            }
+
+            // Update region indices for secondary region if provided
+            if secondary_region != 0 {
+                let region_count = self.agent_region_count.read(secondary_region);
+                self.agent_by_region.write((secondary_region, region_count), agent_address);
+                self.agent_region_count.write(secondary_region, region_count + 1);
+            }
+
+            // Emit event
+            self
+                .emit(
+                    AgentRegistered {
+                        agent_address,
+                        name,
+                        commission_rate,
+                        registered_by: caller,
+                        timestamp: current_time,
+                    },
+                );
+
+            true
+        }
+
+        /// Update agent status (admin only)
+        fn update_agent_status(
+            ref self: ContractState, agent_address: ContractAddress, status: AgentStatus,
+        ) -> bool {
+            let caller = get_caller_address();
+            let current_time = get_block_timestamp();
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+
+            // Check if agent exists
+            assert(self.agent_exists.read(agent_address), TransferErrors::AGENT_NOT_FOUND);
+
+            let mut agent = self.agents.read(agent_address);
+            let old_status = agent.status;
+
+            // Update status
+            agent.status = status;
+            agent.last_active = current_time;
+            self.agents.write(agent_address, agent);
+
+            // Emit event
+            self
+                .emit(
+                    AgentStatusUpdated {
+                        agent: agent_address,
+                        old_status,
+                        new_status: status,
+                        updated_by: caller,
+                        timestamp: current_time,
+                    },
+                );
+
+            true
+        }
+
+        /// Get agent details
+        fn get_agent(self: @ContractState, agent_address: ContractAddress) -> Agent {
+            assert(self.agent_exists.read(agent_address), TransferErrors::AGENT_NOT_FOUND);
+            self.agents.read(agent_address)
+        }
+
+        /// Get agents by status
+        fn get_agents_by_status(
+            self: @ContractState, status: AgentStatus, limit: u32, offset: u32,
+        ) -> Array<Agent> {
+            let mut agents = ArrayTrait::new();
+            // Since we don't have a comprehensive agent list, we'll need to iterate through regions
+            // This is a simplified implementation - in production you might want a better indexing
+            // system
+            let mut _count = 0;
+            let mut _found = 0;
+
+            // For now, return empty array as we don't have a comprehensive agent index
+            // In a production system, you'd want to maintain a separate agent index
+            agents
+        }
+
+        /// Get agents by region
+        fn get_agents_by_region(
+            self: @ContractState, region: felt252, limit: u32, offset: u32,
+        ) -> Array<Agent> {
+            let mut agents = ArrayTrait::new();
+            let total_count = self.agent_region_count.read(region);
+
+            let mut i = offset;
+            let mut count = 0;
+
+            while i < total_count && count < limit {
+                let agent_address = self.agent_by_region.read((region, i));
+                let agent = self.agents.read(agent_address);
+                agents.append(agent);
+                count += 1;
+                i += 1;
+            }
+
+            agents
+        }
+
+        /// Check if agent is authorized for transfer
+        fn is_agent_authorized(
+            self: @ContractState, agent: ContractAddress, transfer_id: u256,
+        ) -> bool {
+            // Check if agent exists and is active
+            if !self.agent_exists.read(agent) {
+                return false;
+            }
+
+            let agent_data = self.agents.read(agent);
+            if agent_data.status != AgentStatus::Active {
+                return false;
+            }
+
+            // Get transfer to check if agent is assigned
+            let transfer = self.transfers.read(transfer_id);
+            if transfer.transfer_id == 0 {
+                return false;
+            }
+
+            // Agent must be assigned to this transfer
+            agent == transfer.assigned_agent
+        }
+
+        // Transfer History Functions
+        /// Get transfer history
+        fn get_transfer_history(
+            self: @ContractState, transfer_id: u256, limit: u32, offset: u32,
+        ) -> Array<TransferHistory> {
+            let mut history = ArrayTrait::new();
+            let total_count = self.transfer_history_count.read(transfer_id);
+
+            let mut i = offset;
+            let mut count = 0;
+
+            while i < total_count && count < limit {
+                let history_entry = self.transfer_history.read((transfer_id, i));
+                history.append(history_entry);
+                count += 1;
+                i += 1;
+            }
+
+            history
+        }
+
+        /// Search transfer history by actor
+        fn search_history_by_actor(
+            self: @ContractState, actor: ContractAddress, limit: u32, offset: u32,
+        ) -> Array<TransferHistory> {
+            let mut history = ArrayTrait::new();
+            let total_count = self.actor_history_count.read(actor);
+
+            let mut i = offset;
+            let mut count = 0;
+
+            while i < total_count && count < limit {
+                let (transfer_id, history_index) = self.actor_history.read((actor, i));
+                let history_entry = self.transfer_history.read((transfer_id, history_index));
+                history.append(history_entry);
+                count += 1;
+                i += 1;
+            }
+
+            history
+        }
+
+        /// Search transfer history by action
+        fn search_history_by_action(
+            self: @ContractState, action: felt252, limit: u32, offset: u32,
+        ) -> Array<TransferHistory> {
+            let mut history = ArrayTrait::new();
+            let total_count = self.action_history_count.read(action);
+
+            let mut i = offset;
+            let mut count = 0;
+
+            while i < total_count && count < limit {
+                let (transfer_id, history_index) = self.action_history.read((action, i));
+                let history_entry = self.transfer_history.read((transfer_id, history_index));
+                history.append(history_entry);
+                count += 1;
+                i += 1;
+            }
+
+            history
+        }
+
+        /// Get transfer statistics
+        fn get_transfer_statistics(self: @ContractState) -> (u256, u256, u256, u256) {
+            (
+                self.total_transfers.read(),
+                self.total_completed_transfers.read(),
+                self.total_cancelled_transfers.read(),
+                self.total_expired_transfers.read(),
+            )
+        }
+
+        /// Get agent statistics
+        fn get_agent_statistics(
+            self: @ContractState, agent: ContractAddress,
+        ) -> (u256, u256, u256) {
+            assert(self.agent_exists.read(agent), TransferErrors::AGENT_NOT_FOUND);
+            let agent_data = self.agents.read(agent);
+            (agent_data.completed_transactions, agent_data.total_volume, agent_data.rating)
+        }
+
         //contribution management
 
         fn contribute_round(ref self: ContractState, round_id: u256, amount: u256) {
@@ -1274,6 +2322,51 @@ mod StarkRemit {
             // Premium level - maximum limits
             self.daily_limits.write(3, 100000_000_000_000_000_000_000); // 100,000 tokens
             self.single_limits.write(3, 50000_000_000_000_000_000_000); // 50,000 tokens
+        }
+
+
+        fn _record_transfer_history(
+            ref self: ContractState,
+            transfer_id: u256,
+            action: felt252,
+            actor: ContractAddress,
+            previous_status: TransferStatus,
+            new_status: TransferStatus,
+            details: felt252,
+        ) {
+            let current_time = get_block_timestamp();
+
+            // Create history entry
+            let history = TransferHistory {
+                transfer_id,
+                action,
+                actor,
+                timestamp: current_time,
+                previous_status,
+                new_status,
+                details,
+            };
+
+            // Store in transfer history
+            let history_count = self.transfer_history_count.read(transfer_id);
+            self.transfer_history.write((transfer_id, history_count), history);
+            self.transfer_history_count.write(transfer_id, history_count + 1);
+
+            // Store in actor history
+            let actor_count = self.actor_history_count.read(actor);
+            self.actor_history.write((actor, actor_count), (transfer_id, history_count));
+            self.actor_history_count.write(actor, actor_count + 1);
+
+            // Store in action history
+            let action_count = self.action_history_count.read(action);
+            self.action_history.write((action, action_count), (transfer_id, history_count));
+            self.action_history_count.write(action, action_count + 1);
+
+            // Emit event
+            self
+                .emit(
+                    TransferHistoryRecorded { transfer_id, action, actor, timestamp: current_time },
+                );
         }
 
         // Generates and stores a new unique group ID for a savings group
