@@ -842,7 +842,7 @@ mod StarkRemit {
             true
         }
 
-         //mangage user profile
+        //mangage user profile
         /// Get the profile of the calling user
         fn get_my_profile(self: @ContractState) -> UserProfile {
             let caller = get_caller_address();

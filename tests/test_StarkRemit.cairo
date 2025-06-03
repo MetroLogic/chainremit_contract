@@ -151,8 +151,6 @@ fn test_all_functionalities_integrated() {
 
     println!("All functionalities integrated successfully");
 }
-
-
 // #[test]
 // fn test_update_and_get_my_profile() {
 //     let contract = ContractState::default();
@@ -181,7 +179,8 @@ fn test_all_functionalities_integrated() {
 //     assert(fetched_profile.email_hash == profile.email_hash, 'Email hash mismatch');
 //     assert(fetched_profile.phone_hash == profile.phone_hash, 'Phone hash mismatch');
 //     assert(fetched_profile.full_name == profile.full_name, 'Full name mismatch');
-//     assert(fetched_profile.preferred_currency == profile.preferred_currency, 'Currency mismatch');
+//     assert(fetched_profile.preferred_currency == profile.preferred_currency, 'Currency
+//     mismatch');
 //     // assert(fetched_profile.kyc_level == profile.kyc_level, 'KYC level mismatch');
 //     match (fetched_profile.kyc_level, profile.kyc_level) {
 //         (KYCLevel::Basic, KYCLevel::Basic) => {},
@@ -220,3 +219,5 @@ fn test_all_functionalities_integrated() {
 
 //     contract.update_my_profile(profile); // This should panic
 // }
+
+
