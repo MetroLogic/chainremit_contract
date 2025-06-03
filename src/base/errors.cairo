@@ -126,3 +126,59 @@ pub mod KYCErrors {
     /// Error triggered when KYC data not found for user
     pub const KYC_DATA_NOT_FOUND: felt252 = 'KYC: data not found';
 }
+
+pub mod TransferErrors {
+    /// Error triggered when transfer is not found
+    pub const TRANSFER_NOT_FOUND: felt252 = 'Transfer not found';
+
+    /// Error triggered when transfer has already expired
+    pub const TRANSFER_EXPIRED: felt252 = 'Transfer has expired';
+
+    /// Error triggered when transfer is already cancelled
+    pub const TRANSFER_ALREADY_CANCELLED: felt252 = 'Transfer already cancelled';
+
+    /// Error triggered when transfer is already completed
+    pub const TRANSFER_ALREADY_COMPLETED: felt252 = 'Transfer already completed';
+
+    /// Error triggered when transfer status is invalid for operation
+    pub const INVALID_TRANSFER_STATUS: felt252 = 'Invalid transfer status';
+
+    /// Error triggered when caller is not authorized for transfer operation
+    pub const UNAUTHORIZED_TRANSFER_OP: felt252 = 'Unauthorized transfer op';
+
+    /// Error triggered when transfer amount is invalid
+    pub const INVALID_TRANSFER_AMOUNT: felt252 = 'Invalid transfer amount';
+
+    /// Error triggered when transfer currency is not supported
+    pub const UNSUPPORTED_CURRENCY: felt252 = 'Unsupported currency';
+
+    /// Error triggered when partial amount exceeds total amount
+    pub const PARTIAL_AMOUNT_EXCEEDS: felt252 = 'Partial exceeds total';
+
+    /// Error triggered when agent is not found
+    pub const AGENT_NOT_FOUND: felt252 = 'Agent not found';
+
+    /// Error triggered when agent is not active
+    pub const AGENT_NOT_ACTIVE: felt252 = 'Agent not active';
+
+    /// Error triggered when agent is already registered
+    pub const AGENT_ALREADY_EXISTS: felt252 = 'Agent already exists';
+
+    /// Error triggered when agent is not authorized for operation
+    pub const AGENT_NOT_AUTHORIZED: felt252 = 'Agent not authorized';
+
+    /// Error triggered when transfer cannot be cancelled
+    pub const CANNOT_CANCEL_TRANSFER: felt252 = 'Cannot cancel transfer';
+
+    /// Error triggered when transfer expiry time is invalid
+    pub const INVALID_EXPIRY_TIME: felt252 = 'Invalid expiry time';
+
+    /// Error triggered when trying to assign invalid agent
+    pub const INVALID_AGENT_ASSIGNMENT: felt252 = 'Invalid agent assignment';
+
+    /// Error triggered when history entry is not found
+    pub const HISTORY_NOT_FOUND: felt252 = 'History not found';
+
+    /// Error triggered when search parameters are invalid
+    pub const INVALID_SEARCH_PARAMS: felt252 = 'Invalid search parameters';
+}
