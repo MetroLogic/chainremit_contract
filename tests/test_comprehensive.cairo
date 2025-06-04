@@ -72,6 +72,7 @@ fn test_data_structures_compilation() {
     // Test UserProfile struct
     let user_profile = UserProfile {
         address: 123.try_into().unwrap(),
+        user_address: 123.try_into().unwrap(),
         email_hash: 'email_hash',
         phone_hash: 'phone_hash',
         full_name: 'John Doe',
@@ -139,12 +140,11 @@ fn test_agent_status_enum() {
     let active = AgentStatus::Active;
     let inactive = AgentStatus::Inactive;
     let suspended = AgentStatus::Suspended;
-    let terminated = AgentStatus::Terminated;
 
     // Verify they can be compared
     assert(active != inactive, 'Agent status comparison failed');
-    assert(suspended != terminated, 'Agent status comparison failed');
     assert(active != suspended, 'Agent status comparison failed');
+    assert(inactive != suspended, 'Agent status comparison failed');
 
     println!("Agent status enum test passed");
 }

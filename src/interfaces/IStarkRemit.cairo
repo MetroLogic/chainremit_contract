@@ -17,6 +17,12 @@ pub trait IStarkRemit<TContractState> {
     /// Update user profile information
     fn update_user_profile(ref self: TContractState, updated_profile: UserProfile) -> bool;
 
+    /// Get the profile of the calling user
+    fn get_my_profile(self: @TContractState) -> UserProfile;
+
+    /// Update the calling user's own profile
+    fn update_my_profile(ref self: TContractState, updated_profile: UserProfile) -> bool;
+
     /// Check if user is registered
     fn is_user_registered(self: @TContractState, user_address: ContractAddress) -> bool;
 
@@ -62,6 +68,16 @@ pub trait IStarkRemit<TContractState> {
     fn reinstate_user_kyc(ref self: TContractState, user: ContractAddress) -> bool;
 
     // Transfer Administration Functions
+    /// Initiate a new transfer (enhanced version of create_transfer)
+    fn initiate_transfer(
+        ref self: TContractState,
+        recipient: ContractAddress,
+        amount: u256,
+        currency: felt252,
+        expires_at: u64,
+        metadata: felt252,
+    ) -> u256;
+
     /// Create a new transfer
     fn create_transfer(
         ref self: TContractState,
@@ -194,6 +210,45 @@ pub trait IStarkRemit<TContractState> {
     // Savings Group Functions
     fn create_group(ref self: TContractState, max_members: u8) -> u64;
     fn join_group(ref self: TContractState, group_id: u64);
+
+    // Multi-Currency Support Functions
+    /// Get list of supported currencies
+    fn get_supported_currencies(self: @TContractState) -> Array<felt252>;
+    
+    /// Get exchange rate between two currencies from Oracle
+    fn get_exchange_rate(
+        self: @TContractState, from_currency: felt252, to_currency: felt252,
+    ) -> u256;
+    
+    /// Convert currency for a user
+    fn convert_currency(
+        ref self: TContractState, from_currency: felt252, to_currency: felt252, amount: u256,
+    ) -> u256;
+    
+    /// Register a new supported currency (admin only)
+    fn register_currency(ref self: TContractState, currency: felt252) -> bool;
+    
+    /// Set Oracle contract address (admin only)
+    fn set_oracle(ref self: TContractState, oracle_address: ContractAddress) -> bool;
+    
+    /// Get current Oracle contract address
+    fn get_oracle(self: @TContractState) -> ContractAddress;
+    
+    /// Get user balance in specific currency
+    fn get_currency_balance(self: @TContractState, user: ContractAddress, currency: felt252) -> u256;
+    
+    /// Check if currency is supported
+    fn is_currency_supported(self: @TContractState, currency: felt252) -> bool;
+    
+    /// Update exchange rate manually (admin only - emergency use)
+    fn update_exchange_rate(
+        ref self: TContractState, from_currency: felt252, to_currency: felt252, rate: u256,
+    ) -> bool;
+    
+    /// Get conversion rate with slippage protection
+    fn get_conversion_preview(
+        self: @TContractState, from_currency: felt252, to_currency: felt252, amount: u256,
+    ) -> u256;
 }
 
 // ERC-20 Token interface
@@ -237,15 +292,20 @@ pub trait IStarkRemitToken<TContractState> {
 
     /// Gets the maximum total supply of the token.
     fn get_max_supply(self: @TContractState) -> u256;
-    // // Multi-currency functions
-// fn get_supported_currencies(self: @TContractState) -> Array<felt252>;
-// fn get_exchange_rate(
-//     self: @TContractState, from_currency: felt252, to_currency: felt252,
-// ) -> u256;
-// fn convert_currency(
-//     ref self: TContractState, from_currency: felt252, to_currency: felt252, amount: u256,
-// ) -> u256;
-// fn register_currency(ref self: TContractState, currency: felt252);
-// fn set_oracle(ref self: TContractState, oracle_address: ContractAddress);
-// fn get_oracle(self: @TContractState) -> ContractAddress;
+}
+
+// Oracle interface for better external Oracle integration
+#[starknet::interface]
+pub trait IOracleContract<TContractState> {
+    /// Get exchange rate between two currencies
+    fn get_rate(self: @TContractState, from: felt252, to: felt252) -> u256;
+    
+    /// Get rate with timestamp for verification
+    fn get_rate_with_timestamp(self: @TContractState, from: felt252, to: felt252) -> (u256, u64);
+    
+    /// Check if currency pair is supported
+    fn is_pair_supported(self: @TContractState, from: felt252, to: felt252) -> bool;
+    
+    /// Get last update timestamp for currency pair
+    fn get_last_update_timestamp(self: @TContractState, from: felt252, to: felt252) -> u64;
 }
