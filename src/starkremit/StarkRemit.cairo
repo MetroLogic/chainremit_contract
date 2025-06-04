@@ -3,20 +3,20 @@
 mod StarkRemit {
     // Import necessary libraries and traits
     use starknet::storage::{
-        Map, StorageMapReadAccess, StorageMapWriteAccess,
-        StoragePointerReadAccess, StoragePointerWriteAccess,
+        Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
+        StoragePointerWriteAccess,
     };
     use starknet::{ContractAddress, get_block_timestamp, get_caller_address};
     use starkremit_contract::base::errors::{
-        ERC20Errors, KYCErrors, MintBurnErrors, RegistrationErrors, TransferErrors, GroupErrors,
+        ERC20Errors, GroupErrors, KYCErrors, MintBurnErrors, RegistrationErrors, TransferErrors,
     };
     use starkremit_contract::base::types::{
-        Agent, AgentStatus, KYCLevel, KycLevel, KycStatus, RegistrationRequest, RegistrationStatus,
-        SavingsGroup, Transfer as TransferData, TransferHistory, TransferStatus, UserKycData,
-        UserProfile, ContributionRound, RoundStatus, MemberContribution,
+        Agent, AgentStatus, ContributionRound, KYCLevel, KycLevel, KycStatus, MemberContribution,
+        RegistrationRequest, RegistrationStatus, RoundStatus, SavingsGroup,
+        Transfer as TransferData, TransferHistory, TransferStatus, UserKycData, UserProfile,
     };
-    use starkremit_contract::interfaces::{IStarkRemit};
     use starkremit_contract::interfaces::IOracle::{IOracleDispatcher, IOracleDispatcherTrait};
+    use starkremit_contract::interfaces::IStarkRemit;
 
     // Fixed-point scaler for currency conversions (18 decimals)
     const FIXED_POINT_SCALER: u256 = 1_000_000_000_000_000_000;
@@ -888,10 +888,7 @@ mod StarkRemit {
             // Emit update event
             self
                 .emit(
-                    UserProfileUpdated {
-                        user_address: caller,
-                        updated_fields: 'profile_updated',
-                    },
+                    UserProfileUpdated { user_address: caller, updated_fields: 'profile_updated' },
                 );
 
             true
@@ -1183,7 +1180,9 @@ mod StarkRemit {
             assert(recipient != caller, 'Cannot transfer to self');
             assert(amount > 0, TransferErrors::INVALID_TRANSFER_AMOUNT);
             assert(expires_at > current_time, 'Expiry must be in future');
-            assert(expires_at <= current_time + 86400 * 30, 'Expiry too far in future'); // Max 30 days
+            assert(
+                expires_at <= current_time + 86400 * 30, 'Expiry too far in future',
+            ); // Max 30 days
             assert(self.supported_currencies.read(currency), TransferErrors::UNSUPPORTED_CURRENCY);
 
             // Enhanced user validation
@@ -1194,13 +1193,20 @@ mod StarkRemit {
             if self.kyc_enforcement_enabled.read() {
                 InternalFunctions::_validate_kyc_and_limits(@self, caller, amount);
                 InternalFunctions::_validate_kyc_and_limits(@self, recipient, amount);
-                
+
                 // Additional KYC checks for large amounts
                 if amount > 10000_000_000_000_000_000_000 { // > 10,000 tokens
                     let (_caller_status, caller_level) = self.get_kyc_status(caller);
                     let (_recipient_status, recipient_level) = self.get_kyc_status(recipient);
-                    assert(caller_level == KycLevel::Enhanced || caller_level == KycLevel::Premium, 'KYC level insufficient');
-                    assert(recipient_level == KycLevel::Enhanced || recipient_level == KycLevel::Premium, 'Recipient KYC insufficient');
+                    assert(
+                        caller_level == KycLevel::Enhanced || caller_level == KycLevel::Premium,
+                        'KYC level insufficient',
+                    );
+                    assert(
+                        recipient_level == KycLevel::Enhanced
+                            || recipient_level == KycLevel::Premium,
+                        'Recipient KYC insufficient',
+                    );
                 }
             }
 
@@ -1253,13 +1259,13 @@ mod StarkRemit {
             // Record detailed history with enhanced metadata
             InternalFunctions::_record_transfer_history(
                 ref self,
-                    transfer_id,
+                transfer_id,
                 'initiated',
-                    caller,
-                    TransferStatus::Pending,
-                    TransferStatus::Pending,
+                caller,
+                TransferStatus::Pending,
+                TransferStatus::Pending,
                 'Transfer initiated',
-                );
+            );
 
             // Reserve funds with enhanced tracking
             self.currency_balances.write((caller, currency), sender_balance - amount);
@@ -1270,14 +1276,12 @@ mod StarkRemit {
             }
 
             // Emit enhanced event
-            self.emit(TransferCreated {
-                    transfer_id,
-                sender: caller, 
-                recipient, 
-                amount, 
-                currency, 
-                expires_at,
-            });
+            self
+                .emit(
+                    TransferCreated {
+                        transfer_id, sender: caller, recipient, amount, currency, expires_at,
+                    },
+                );
 
             transfer_id
         }
@@ -1317,7 +1321,7 @@ mod StarkRemit {
 
             // Create transfer
             let transfer = TransferData {
-                    transfer_id,
+                transfer_id,
                 sender: caller,
                 recipient,
                 amount,
@@ -1350,21 +1354,24 @@ mod StarkRemit {
             // Record history
             InternalFunctions::_record_transfer_history(
                 ref self,
-                    transfer_id,
+                transfer_id,
                 'created',
-                            caller,
-                            TransferStatus::Pending,
+                caller,
+                TransferStatus::Pending,
                 TransferStatus::Pending,
                 'Transfer created',
-                        );
+            );
 
             // Reserve funds
             self.currency_balances.write((caller, currency), sender_balance - amount);
 
-                    // Emit event
-            self.emit(TransferCreated {
-                transfer_id, sender: caller, recipient, amount, currency, expires_at,
-            });
+            // Emit event
+            self
+                .emit(
+                    TransferCreated {
+                        transfer_id, sender: caller, recipient, amount, currency, expires_at,
+                    },
+                );
 
             transfer_id
         }
@@ -1379,7 +1386,9 @@ mod StarkRemit {
             assert(transfer.transfer_id != 0, TransferErrors::TRANSFER_NOT_FOUND);
 
             // Validate transfer can be cancelled
-            assert(transfer.status == TransferStatus::Pending, TransferErrors::INVALID_TRANSFER_STATUS);
+            assert(
+                transfer.status == TransferStatus::Pending, TransferErrors::INVALID_TRANSFER_STATUS,
+            );
             assert(transfer.sender == caller, TransferErrors::UNAUTHORIZED_TRANSFER_OP);
 
             // Update transfer status
@@ -1389,7 +1398,9 @@ mod StarkRemit {
 
             // Refund the sender
             let sender_balance = self.currency_balances.read((transfer.sender, transfer.currency));
-            self.currency_balances.write((transfer.sender, transfer.currency), sender_balance + transfer.amount);
+            self
+                .currency_balances
+                .write((transfer.sender, transfer.currency), sender_balance + transfer.amount);
 
             // Update statistics
             let cancelled_count = self.total_cancelled_transfers.read();
@@ -1407,12 +1418,15 @@ mod StarkRemit {
             );
 
             // Emit event
-            self.emit(TransferCancelled {
-                transfer_id,
-                cancelled_by: caller,
-                timestamp: current_time,
-                reason: 'user_cancelled',
-            });
+            self
+                .emit(
+                    TransferCancelled {
+                        transfer_id,
+                        cancelled_by: caller,
+                        timestamp: current_time,
+                        reason: 'user_cancelled',
+                    },
+                );
 
             true
         }
@@ -1427,12 +1441,16 @@ mod StarkRemit {
             assert(transfer.transfer_id != 0, TransferErrors::TRANSFER_NOT_FOUND);
 
             // Validate transfer can be completed
-            assert(transfer.status == TransferStatus::Pending || transfer.status == TransferStatus::PartialComplete, TransferErrors::INVALID_TRANSFER_STATUS);
-            
+            assert(
+                transfer.status == TransferStatus::Pending
+                    || transfer.status == TransferStatus::PartialComplete,
+                TransferErrors::INVALID_TRANSFER_STATUS,
+            );
+
             // Only recipient or assigned agent can complete
             let zero_address: ContractAddress = 0.try_into().unwrap();
-            let is_authorized = caller == transfer.recipient || 
-                               (transfer.assigned_agent != zero_address && caller == transfer.assigned_agent);
+            let is_authorized = caller == transfer.recipient
+                || (transfer.assigned_agent != zero_address && caller == transfer.assigned_agent);
             assert(is_authorized, TransferErrors::UNAUTHORIZED_TRANSFER_OP);
 
             // Update transfer status
@@ -1441,9 +1459,15 @@ mod StarkRemit {
             self.transfers.write(transfer_id, transfer);
 
             // Transfer funds to recipient
-            let recipient_balance = self.currency_balances.read((transfer.recipient, transfer.currency));
+            let recipient_balance = self
+                .currency_balances
+                .read((transfer.recipient, transfer.currency));
             let amount_to_transfer = transfer.amount - transfer.partial_amount;
-            self.currency_balances.write((transfer.recipient, transfer.currency), recipient_balance + amount_to_transfer);
+            self
+                .currency_balances
+                .write(
+                    (transfer.recipient, transfer.currency), recipient_balance + amount_to_transfer,
+                );
 
             // Update statistics
             let completed_count = self.total_completed_transfers.read();
@@ -1470,11 +1494,12 @@ mod StarkRemit {
             );
 
             // Emit event
-            self.emit(TransferCompleted {
-                transfer_id,
-                completed_by: caller,
-                timestamp: current_time,
-            });
+            self
+                .emit(
+                    TransferCompleted {
+                        transfer_id, completed_by: caller, timestamp: current_time,
+                    },
+                );
 
             true
         }
@@ -1491,34 +1516,45 @@ mod StarkRemit {
             assert(transfer.transfer_id != 0, TransferErrors::TRANSFER_NOT_FOUND);
 
             // Validate transfer can be partially completed
-            assert(transfer.status == TransferStatus::Pending || transfer.status == TransferStatus::PartialComplete, TransferErrors::INVALID_TRANSFER_STATUS);
-            
+            assert(
+                transfer.status == TransferStatus::Pending
+                    || transfer.status == TransferStatus::PartialComplete,
+                TransferErrors::INVALID_TRANSFER_STATUS,
+            );
+
             // Only recipient or assigned agent can complete
             let zero_address: ContractAddress = 0.try_into().unwrap();
-            let is_authorized = caller == transfer.recipient || 
-                               (transfer.assigned_agent != zero_address && caller == transfer.assigned_agent);
+            let is_authorized = caller == transfer.recipient
+                || (transfer.assigned_agent != zero_address && caller == transfer.assigned_agent);
             assert(is_authorized, TransferErrors::UNAUTHORIZED_TRANSFER_OP);
 
             // Validate partial amount
             assert(partial_amount > 0, TransferErrors::INVALID_TRANSFER_AMOUNT);
-            assert(transfer.partial_amount + partial_amount <= transfer.amount, TransferErrors::PARTIAL_AMOUNT_EXCEEDS);
+            assert(
+                transfer.partial_amount + partial_amount <= transfer.amount,
+                TransferErrors::PARTIAL_AMOUNT_EXCEEDS,
+            );
 
             // Update transfer
             transfer.partial_amount += partial_amount;
             transfer.updated_at = current_time;
-            
+
             // Update status if fully completed
             if transfer.partial_amount == transfer.amount {
                 transfer.status = TransferStatus::Completed;
             } else {
                 transfer.status = TransferStatus::PartialComplete;
             }
-            
+
             self.transfers.write(transfer_id, transfer);
 
             // Transfer funds to recipient
-            let recipient_balance = self.currency_balances.read((transfer.recipient, transfer.currency));
-            self.currency_balances.write((transfer.recipient, transfer.currency), recipient_balance + partial_amount);
+            let recipient_balance = self
+                .currency_balances
+                .read((transfer.recipient, transfer.currency));
+            self
+                .currency_balances
+                .write((transfer.recipient, transfer.currency), recipient_balance + partial_amount);
 
             // Record history
             InternalFunctions::_record_transfer_history(
@@ -1532,12 +1568,15 @@ mod StarkRemit {
             );
 
             // Emit event
-            self.emit(TransferPartialCompleted {
-                transfer_id,
-                partial_amount,
-                total_amount: transfer.amount,
-                timestamp: current_time,
-            });
+            self
+                .emit(
+                    TransferPartialCompleted {
+                        transfer_id,
+                        partial_amount,
+                        total_amount: transfer.amount,
+                        timestamp: current_time,
+                    },
+                );
 
             true
         }
@@ -1552,7 +1591,9 @@ mod StarkRemit {
             assert(transfer.transfer_id != 0, TransferErrors::TRANSFER_NOT_FOUND);
 
             // Validate transfer can request cash-out
-            assert(transfer.status == TransferStatus::Pending, TransferErrors::INVALID_TRANSFER_STATUS);
+            assert(
+                transfer.status == TransferStatus::Pending, TransferErrors::INVALID_TRANSFER_STATUS,
+            );
             assert(caller == transfer.recipient, TransferErrors::UNAUTHORIZED_TRANSFER_OP);
 
             // Update transfer status
@@ -1572,11 +1613,10 @@ mod StarkRemit {
             );
 
             // Emit event
-            self.emit(CashOutRequested {
-                transfer_id,
-                requested_by: caller,
-                timestamp: current_time,
-            });
+            self
+                .emit(
+                    CashOutRequested { transfer_id, requested_by: caller, timestamp: current_time },
+                );
 
             true
         }
@@ -1591,15 +1631,22 @@ mod StarkRemit {
             assert(transfer.transfer_id != 0, TransferErrors::TRANSFER_NOT_FOUND);
 
             // Validate transfer can complete cash-out
-            assert(transfer.status == TransferStatus::CashOutRequested, TransferErrors::INVALID_TRANSFER_STATUS);
-            
+            assert(
+                transfer.status == TransferStatus::CashOutRequested,
+                TransferErrors::INVALID_TRANSFER_STATUS,
+            );
+
             // Must be assigned agent
             let zero_address: ContractAddress = 0.try_into().unwrap();
-            assert(transfer.assigned_agent != zero_address, TransferErrors::INVALID_AGENT_ASSIGNMENT);
+            assert(
+                transfer.assigned_agent != zero_address, TransferErrors::INVALID_AGENT_ASSIGNMENT,
+            );
             assert(caller == transfer.assigned_agent, TransferErrors::UNAUTHORIZED_TRANSFER_OP);
 
             // Validate agent is authorized
-            assert(self.is_agent_authorized(caller, transfer_id), TransferErrors::AGENT_NOT_AUTHORIZED);
+            assert(
+                self.is_agent_authorized(caller, transfer_id), TransferErrors::AGENT_NOT_AUTHORIZED,
+            );
 
             // Update transfer status
             transfer.status = TransferStatus::CashOutCompleted;
@@ -1629,11 +1676,7 @@ mod StarkRemit {
             );
 
             // Emit event
-            self.emit(CashOutCompleted {
-                transfer_id,
-                agent: caller,
-                timestamp: current_time,
-            });
+            self.emit(CashOutCompleted { transfer_id, agent: caller, timestamp: current_time });
 
             true
         }
@@ -1661,7 +1704,7 @@ mod StarkRemit {
                 transfers.append(transfer);
                 count += 1;
                 i += 1;
-            };
+            }
 
             transfers
         }
@@ -1682,7 +1725,7 @@ mod StarkRemit {
                 transfers.append(transfer);
                 count += 1;
                 i += 1;
-            };
+            }
 
             transfers
         }
@@ -1698,7 +1741,9 @@ mod StarkRemit {
         }
 
         /// Get expired transfers (simplified implementation)
-        fn get_expired_transfers(self: @ContractState, limit: u32, offset: u32) -> Array<TransferData> {
+        fn get_expired_transfers(
+            self: @ContractState, limit: u32, offset: u32,
+        ) -> Array<TransferData> {
             let mut transfers = ArrayTrait::new();
             // This is a simplified implementation
             // In production, you'd want proper indexing by expiry
@@ -1709,7 +1754,7 @@ mod StarkRemit {
         fn process_expired_transfers(ref self: ContractState, limit: u32) -> u32 {
             let caller = get_caller_address();
             assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
-            
+
             // This is a simplified implementation
             // In production, you'd iterate through transfers and mark expired ones
             0
@@ -1749,12 +1794,12 @@ mod StarkRemit {
             );
 
             // Emit event
-            self.emit(AgentAssigned {
-                transfer_id, 
-                agent, 
-                assigned_by: caller, 
-                timestamp: current_time,
-            });
+            self
+                .emit(
+                    AgentAssigned {
+                        transfer_id, agent, assigned_by: caller, timestamp: current_time,
+                    },
+                );
 
             true
         }
@@ -2046,7 +2091,9 @@ mod StarkRemit {
             self.emit(RoundCompleted { round_id });
         }
 
-        fn add_round_to_schedule(ref self: ContractState, recipient: ContractAddress, deadline: u64) {
+        fn add_round_to_schedule(
+            ref self: ContractState, recipient: ContractAddress, deadline: u64,
+        ) {
             let caller = get_caller_address();
             assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
 
@@ -2056,11 +2103,7 @@ mod StarkRemit {
             self.rotation_schedule.write(round_id, recipient);
 
             let round = ContributionRound {
-                round_id,
-                recipient,
-                deadline,
-                total_contributions: 0,
-                status: RoundStatus::Active,
+                round_id, recipient, deadline, total_contributions: 0, status: RoundStatus::Active,
             };
 
             self.rounds.write(round_id, round);
@@ -2085,7 +2128,7 @@ mod StarkRemit {
                 let member = self.member_by_index.read(i);
                 members.append(member);
                 i += 1;
-            };
+            }
 
             members
         }
@@ -2108,7 +2151,12 @@ mod StarkRemit {
             let round = self.rounds.read(round_id);
             assert(round.status == RoundStatus::Completed, 'Round not completed');
 
-            self.emit(RoundDisbursed { round_id, recipient: round.recipient, amount: round.total_contributions });
+            self
+                .emit(
+                    RoundDisbursed {
+                        round_id, recipient: round.recipient, amount: round.total_contributions,
+                    },
+                );
         }
 
         // Savings Group Functions
@@ -2117,13 +2165,13 @@ mod StarkRemit {
             let group_id = self._new_group_id();
 
             let group = SavingsGroup {
-                        id: group_id,
-                        creator: caller,
+                id: group_id,
+                creator: caller,
                 max_members,
                 member_count: 1,
                 total_savings: 0,
                 created_at: get_block_timestamp(),
-                        is_active: true,
+                is_active: true,
             };
 
             self.groups.write(group_id, group);
@@ -2145,7 +2193,7 @@ mod StarkRemit {
         /// Get list of supported currencies
         fn get_supported_currencies(self: @ContractState) -> Array<felt252> {
             let mut currencies = ArrayTrait::new();
-            
+
             // Add some common currencies (this would be dynamic in a real implementation)
             currencies.append('USD');
             currencies.append('EUR');
@@ -2156,7 +2204,7 @@ mod StarkRemit {
             currencies.append('ZAR');
             currencies.append('XOF'); // West African CFA Franc
             currencies.append('XAF'); // Central African CFA Franc
-            
+
             currencies
         }
 
@@ -2173,7 +2221,9 @@ mod StarkRemit {
             ref self: ContractState, from_currency: felt252, to_currency: felt252, amount: u256,
         ) -> u256 {
             let caller = get_caller_address();
-            MultiCurrencyFunctions::convert_currency(ref self, caller, from_currency, to_currency, amount)
+            MultiCurrencyFunctions::convert_currency(
+                ref self, caller, from_currency, to_currency, amount,
+            )
         }
 
         /// Register a new supported currency (admin only)
@@ -2197,7 +2247,9 @@ mod StarkRemit {
         }
 
         /// Get user balance in specific currency
-        fn get_currency_balance(self: @ContractState, user: ContractAddress, currency: felt252) -> u256 {
+        fn get_currency_balance(
+            self: @ContractState, user: ContractAddress, currency: felt252,
+        ) -> u256 {
             self.currency_balances.read((user, currency))
         }
 
@@ -2213,7 +2265,7 @@ mod StarkRemit {
             let caller = get_caller_address();
             assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
             assert(rate > 0, 'Invalid rate');
-            
+
             // Emit event for rate update
             self.emit(ExchangeRateUpdated { from_currency, to_currency, rate });
             true
@@ -2237,21 +2289,21 @@ mod StarkRemit {
         /// Update the calling user's own profile
         fn update_my_profile(ref self: ContractState, updated_profile: UserProfile) -> bool {
             let caller = get_caller_address();
-            
+
             // Validate that user is updating their own profile
             assert(updated_profile.user_address == caller, 'Cannot update other profile');
-            
+
             // Validate user is registered
             assert(self.is_user_registered(caller), RegistrationErrors::USER_NOT_REGISTERED);
-            
+
             // Store updated profile
             self.user_profiles.write(caller, updated_profile);
-            
+
             // Emit event
-            self.emit(UserProfileUpdated {
-                user_address: caller,
-                updated_fields: 'profile_updated',
-            });
+            self
+                .emit(
+                    UserProfileUpdated { user_address: caller, updated_fields: 'profile_updated' },
+                );
 
             true
         }
@@ -2448,5 +2500,4 @@ mod StarkRemit {
             converted
         }
     }
-
-    }
+}

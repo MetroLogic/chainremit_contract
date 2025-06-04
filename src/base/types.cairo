@@ -30,6 +30,7 @@ pub struct UserProfile {
 #[derive(Copy, Drop, Serde, starknet::Store)]
 pub enum KYCLevel {
     /// No verification
+    #[default]
     None,
     /// Basic verification (email/phone)
     Basic,
@@ -43,6 +44,7 @@ pub enum KYCLevel {
 #[derive(Copy, Drop, Serde, starknet::Store)]
 pub enum RegistrationStatus {
     /// Registration not started
+    #[default]
     NotStarted,
     /// Registration in progress
     InProgress,

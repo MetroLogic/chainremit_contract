@@ -6,35 +6,35 @@ pub trait IOracle<TContractState> {
     /// Get exchange rate between two currencies
     /// Returns the rate as a fixed-point number (with 18 decimal precision)
     /// @param from Source currency identifier
-    /// @param to Target currency identifier 
+    /// @param to Target currency identifier
     /// @return Exchange rate (target_amount = source_amount * rate / 10^18)
     fn get_rate(self: @TContractState, from: felt252, to: felt252) -> u256;
-    
+
     /// Get rate with timestamp for verification and freshness checks
     /// @param from Source currency identifier
     /// @param to Target currency identifier
     /// @return (rate, timestamp) Exchange rate and last update timestamp
     fn get_rate_with_timestamp(self: @TContractState, from: felt252, to: felt252) -> (u256, u64);
-    
+
     /// Check if currency pair is supported by the Oracle
     /// @param from Source currency identifier
     /// @param to Target currency identifier
     /// @return true if pair is supported, false otherwise
     fn is_pair_supported(self: @TContractState, from: felt252, to: felt252) -> bool;
-    
+
     /// Get last update timestamp for specific currency pair
     /// @param from Source currency identifier
     /// @param to Target currency identifier
     /// @return Last update timestamp for this pair
     fn get_last_update_timestamp(self: @TContractState, from: felt252, to: felt252) -> u64;
-    
+
     /// Update exchange rate (admin/authorized updater only)
     /// @param from Source currency identifier
     /// @param to Target currency identifier
     /// @param rate New exchange rate
     /// @return true if update successful
     fn update_rate(ref self: TContractState, from: felt252, to: felt252, rate: u256) -> bool;
-    
+
     /// Add support for new currency pair (admin only)
     /// @param from Source currency identifier
     /// @param to Target currency identifier
@@ -43,23 +43,25 @@ pub trait IOracle<TContractState> {
     fn add_currency_pair(
         ref self: TContractState, from: felt252, to: felt252, initial_rate: u256,
     ) -> bool;
-    
+
     /// Remove support for currency pair (admin only)
     /// @param from Source currency identifier
     /// @param to Target currency identifier
     /// @return true if successfully removed
     fn remove_currency_pair(ref self: TContractState, from: felt252, to: felt252) -> bool;
-    
+
     /// Get all supported currency pairs
     /// @return Array of (from, to) currency pairs
     fn get_supported_pairs(self: @TContractState) -> Array<(felt252, felt252)>;
-    
+
     /// Set rate update authority (admin only)
     /// @param updater Address authorized to update rates
     /// @param authorized true to authorize, false to revoke
     /// @return true if successful
-    fn set_rate_updater(ref self: TContractState, updater: ContractAddress, authorized: bool) -> bool;
-    
+    fn set_rate_updater(
+        ref self: TContractState, updater: ContractAddress, authorized: bool,
+    ) -> bool;
+
     /// Check if address is authorized to update rates
     /// @param updater Address to check
     /// @return true if authorized
@@ -69,11 +71,11 @@ pub trait IOracle<TContractState> {
 /// Oracle Contract Implementation
 #[starknet::contract]
 mod Oracle {
-    use starknet::{ContractAddress, get_caller_address, get_block_timestamp};
     use starknet::storage::{
-        Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePathEntry,
-        StoragePointerReadAccess, StoragePointerWriteAccess,
+        Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
+        StoragePointerWriteAccess,
     };
+    use starknet::{ContractAddress, get_block_timestamp, get_caller_address};
     use super::IOracle;
 
     /// Exchange rate data structure
@@ -180,7 +182,9 @@ mod Oracle {
             rate_data.rate
         }
 
-        fn get_rate_with_timestamp(self: @ContractState, from: felt252, to: felt252) -> (u256, u64) {
+        fn get_rate_with_timestamp(
+            self: @ContractState, from: felt252, to: felt252,
+        ) -> (u256, u64) {
             // Handle same currency case
             if from == to {
                 return (1_000_000_000_000_000_000, get_block_timestamp());
@@ -224,13 +228,16 @@ mod Oracle {
             rate_data.last_updated = get_block_timestamp();
             self.exchange_rates.write((from, to), rate_data);
 
-            self.emit(RateUpdated {
-                from_currency: from,
-                to_currency: to,
-                old_rate,
-                new_rate: rate,
-                timestamp: get_block_timestamp(),
-            });
+            self
+                .emit(
+                    RateUpdated {
+                        from_currency: from,
+                        to_currency: to,
+                        old_rate,
+                        new_rate: rate,
+                        timestamp: get_block_timestamp(),
+                    },
+                );
 
             true
         }
@@ -247,9 +254,7 @@ mod Oracle {
             assert(!existing_rate.is_active, Errors::PAIR_ALREADY_EXISTS);
 
             let rate_data = ExchangeRateData {
-                rate: initial_rate,
-                last_updated: get_block_timestamp(),
-                is_active: true,
+                rate: initial_rate, last_updated: get_block_timestamp(), is_active: true,
             };
 
             self.exchange_rates.write((from, to), rate_data);
@@ -259,12 +264,15 @@ mod Oracle {
             self.supported_pairs.write(count, (from, to));
             self.pair_count.write(count + 1);
 
-            self.emit(CurrencyPairAdded {
-                from_currency: from,
-                to_currency: to,
-                initial_rate,
-                timestamp: get_block_timestamp(),
-            });
+            self
+                .emit(
+                    CurrencyPairAdded {
+                        from_currency: from,
+                        to_currency: to,
+                        initial_rate,
+                        timestamp: get_block_timestamp(),
+                    },
+                );
 
             true
         }
@@ -280,11 +288,12 @@ mod Oracle {
             rate_data.is_active = false;
             self.exchange_rates.write((from, to), rate_data);
 
-            self.emit(CurrencyPairRemoved {
-                from_currency: from,
-                to_currency: to,
-                timestamp: get_block_timestamp(),
-            });
+            self
+                .emit(
+                    CurrencyPairRemoved {
+                        from_currency: from, to_currency: to, timestamp: get_block_timestamp(),
+                    },
+                );
 
             true
         }
@@ -301,7 +310,7 @@ mod Oracle {
                     pairs.append(pair);
                 }
                 i += 1;
-            };
+            }
 
             pairs
         }
@@ -314,11 +323,7 @@ mod Oracle {
 
             self.rate_updaters.write(updater, authorized);
 
-            self.emit(RateUpdaterChanged {
-                updater,
-                authorized,
-                timestamp: get_block_timestamp(),
-            });
+            self.emit(RateUpdaterChanged { updater, authorized, timestamp: get_block_timestamp() });
 
             true
         }
@@ -327,4 +332,4 @@ mod Oracle {
             self.rate_updaters.read(updater)
         }
     }
-} 
+}

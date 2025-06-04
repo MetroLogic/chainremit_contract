@@ -5,8 +5,8 @@ pub mod base {
 
 pub mod interfaces {
     pub mod IERC20;
-    pub mod IStarkRemit;
     pub mod IOracle;
+    pub mod IStarkRemit;
 }
 
 pub mod utils {
