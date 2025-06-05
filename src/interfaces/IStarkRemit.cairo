@@ -200,6 +200,15 @@ pub trait IStarkRemit<TContractState> {
     // Savings Group Functions
     fn create_group(ref self: TContractState, max_members: u8) -> u64;
     fn join_group(ref self: TContractState, group_id: u64);
+
+    //loan request
+    fn requestLoan(ref self: TContractState, requester: ContractAddress, amount: u256) -> u256;
+
+    // approve a loan
+    fn approveLoan(ref self: TContractState, loan_id: u256) -> u128;
+
+    // reject a loan
+    fn rejectLoan(ref self: TContractState, loan_id: u256) -> u128;
 }
 
 // ERC-20 Token interface

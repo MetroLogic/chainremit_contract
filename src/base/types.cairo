@@ -221,3 +221,19 @@ pub struct SavingsGroup {
     pub member_count: u8, // Current number of members
     pub is_active: bool // Group active status
 }
+
+#[derive(PartialEq, Copy)]
+pub enum LoanStatus {
+    Pending,
+    Approved,
+    Reject,
+}
+
+#[derive(Copy, Drop, Serde, starknet::Store)]
+pub struct LoanRequest {
+    pub id: u256,
+    pub requester: ContractAddress,
+    pub amount: u256,
+    pub status: LoanStatus,
+    pub created_at: u64,
+}
