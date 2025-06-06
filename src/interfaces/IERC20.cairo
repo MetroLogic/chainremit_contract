@@ -31,3 +31,8 @@ pub trait IERC20<TContractState> {
         ref self: TContractState, sender: ContractAddress, recipient: ContractAddress, amount: u256,
     ) -> bool;
 }
+
+#[starknet::interface]
+pub trait IERC20Mintable<TContractState> {
+    fn mint(ref self: TContractState, recipient: ContractAddress, amount: u256);
+}

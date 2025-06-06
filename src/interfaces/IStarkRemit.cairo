@@ -1,54 +1,40 @@
 use starknet::ContractAddress;
-use starkremit_contract::base::types::{
-    Agent, AgentStatus, KYCLevel, KycLevel, KycStatus, RegistrationRequest, RegistrationStatus,
-    Transfer as TransferData, TransferHistory, TransferStatus, UserProfile,
-};
+use starkremit_contract::base::types::*;
 
-// Comprehensive StarkRemit interface combining all functionality
 #[starknet::interface]
-pub trait IStarkRemit<TContractState> {
-    // User Registration Functions
-    /// Register a new user with the platform
+pub trait IStarkRemit<TContractState> { // // User Registration Functions
+    // Get the contract owner address
+    fn get_owner(self: @TContractState) -> ContractAddress;
+    // Register a new user with the platform
     fn register_user(ref self: TContractState, registration_data: RegistrationRequest) -> bool;
 
-    /// Get user profile by address
+    //  Get user profile by address
     fn get_user_profile(self: @TContractState, user_address: ContractAddress) -> UserProfile;
 
-    /// Update user profile information
+    //  Update user profile information
     fn update_user_profile(ref self: TContractState, updated_profile: UserProfile) -> bool;
 
-    /// Get the profile of the calling user
-    fn get_my_profile(self: @TContractState) -> UserProfile;
-
-    /// Update the calling user's own profile
-    fn update_my_profile(ref self: TContractState, updated_profile: UserProfile) -> bool;
-
-    /// Check if user is registered
+    //  Check if user is registered
     fn is_user_registered(self: @TContractState, user_address: ContractAddress) -> bool;
 
-    /// Get user registration status
+    //  Get user registration status
     fn get_registration_status(
         self: @TContractState, user_address: ContractAddress,
     ) -> RegistrationStatus;
 
-    /// Update user KYC level (admin only)
+    //  Update user KYC level (admin only)
     fn update_kyc_level(
         ref self: TContractState, user_address: ContractAddress, kyc_level: KYCLevel,
     ) -> bool;
 
-    /// Deactivate user account (admin only)
+    //  Deactivate user account (admin only)
     fn deactivate_user(ref self: TContractState, user_address: ContractAddress) -> bool;
 
-    /// Reactivate user account (admin only)
+    //  Reactivate user account (admin only)
     fn reactivate_user(ref self: TContractState, user_address: ContractAddress) -> bool;
 
-    /// Get total registered users count
+    //  Get total registered users count
     fn get_total_users(self: @TContractState) -> u256;
-
-    /// Validate registration data
-    fn validate_registration_data(
-        self: @TContractState, registration_data: RegistrationRequest,
-    ) -> bool;
 
     // KYC Management Functions
     fn update_kyc_status(
@@ -66,9 +52,8 @@ pub trait IStarkRemit<TContractState> {
     fn is_kyc_enforcement_enabled(self: @TContractState) -> bool;
     fn suspend_user_kyc(ref self: TContractState, user: ContractAddress) -> bool;
     fn reinstate_user_kyc(ref self: TContractState, user: ContractAddress) -> bool;
-
     // Transfer Administration Functions
-    /// Initiate a new transfer (enhanced version of create_transfer)
+    //  Initiate a new transfer (enhanced version of create_transfer)
     fn initiate_transfer(
         ref self: TContractState,
         recipient: ContractAddress,
@@ -78,7 +63,7 @@ pub trait IStarkRemit<TContractState> {
         metadata: felt252,
     ) -> u256;
 
-    /// Create a new transfer
+    //  Create a new transfer
     fn create_transfer(
         ref self: TContractState,
         recipient: ContractAddress,
@@ -88,54 +73,54 @@ pub trait IStarkRemit<TContractState> {
         metadata: felt252,
     ) -> u256;
 
-    /// Cancel an existing transfer
+    //  Cancel an existing transfer
     fn cancel_transfer(ref self: TContractState, transfer_id: u256) -> bool;
 
-    /// Complete a transfer (mark as completed)
+    //  Complete a transfer (mark as completed)
     fn complete_transfer(ref self: TContractState, transfer_id: u256) -> bool;
 
-    /// Partially complete a transfer
+    //  Partially complete a transfer
     fn partial_complete_transfer(
         ref self: TContractState, transfer_id: u256, partial_amount: u256,
     ) -> bool;
 
-    /// Request cash-out for a transfer
+    //  Request cash-out for a transfer
     fn request_cash_out(ref self: TContractState, transfer_id: u256) -> bool;
 
-    /// Complete cash-out (agent only)
+    //  Complete cash-out (agent only)
     fn complete_cash_out(ref self: TContractState, transfer_id: u256) -> bool;
 
-    /// Get transfer details
+    //  Get transfer details
     fn get_transfer(self: @TContractState, transfer_id: u256) -> TransferData;
 
-    /// Get transfers by sender
+    //  Get transfers by sender
     fn get_transfers_by_sender(
         self: @TContractState, sender: ContractAddress, limit: u32, offset: u32,
     ) -> Array<TransferData>;
 
-    /// Get transfers by recipient
+    //  Get transfers by recipient
     fn get_transfers_by_recipient(
         self: @TContractState, recipient: ContractAddress, limit: u32, offset: u32,
     ) -> Array<TransferData>;
 
-    /// Get transfers by status
+    //  Get transfers by status
     fn get_transfers_by_status(
         self: @TContractState, status: TransferStatus, limit: u32, offset: u32,
     ) -> Array<TransferData>;
 
-    /// Get expired transfers
+    //  Get expired transfers
     fn get_expired_transfers(self: @TContractState, limit: u32, offset: u32) -> Array<TransferData>;
 
-    /// Process expired transfers (admin only)
+    //  Process expired transfers (admin only)
     fn process_expired_transfers(ref self: TContractState, limit: u32) -> u32;
 
-    /// Assign agent to transfer (admin only)
+    //  Assign agent to transfer (admin only)
     fn assign_agent_to_transfer(
         ref self: TContractState, transfer_id: u256, agent: ContractAddress,
     ) -> bool;
 
     // Agent Management Functions
-    /// Register a new agent (admin only)
+    //  Register a new agent (admin only)
     fn register_agent(
         ref self: TContractState,
         agent_address: ContractAddress,
@@ -147,51 +132,51 @@ pub trait IStarkRemit<TContractState> {
         commission_rate: u256,
     ) -> bool;
 
-    /// Update agent status (admin only)
+    //  Update agent status (admin only)
     fn update_agent_status(
         ref self: TContractState, agent_address: ContractAddress, status: AgentStatus,
     ) -> bool;
 
-    /// Get agent details
+    //  Get agent details
     fn get_agent(self: @TContractState, agent_address: ContractAddress) -> Agent;
 
-    /// Get agents by status
+    //  Get agents by status
     fn get_agents_by_status(
         self: @TContractState, status: AgentStatus, limit: u32, offset: u32,
     ) -> Array<Agent>;
 
-    /// Get agents by region
+    //  Get agents by region
     fn get_agents_by_region(
         self: @TContractState, region: felt252, limit: u32, offset: u32,
     ) -> Array<Agent>;
 
-    /// Check if agent is authorized for transfer
+    //  Check if agent is authorized for transfer
     fn is_agent_authorized(
         self: @TContractState, agent: ContractAddress, transfer_id: u256,
     ) -> bool;
 
     // Transfer History Functions
-    /// Get transfer history
+    //  Get transfer history
     fn get_transfer_history(
         self: @TContractState, transfer_id: u256, limit: u32, offset: u32,
     ) -> Array<TransferHistory>;
 
-    /// Search transfer history by actor
+    //  Search transfer history by actor
     fn search_history_by_actor(
         self: @TContractState, actor: ContractAddress, limit: u32, offset: u32,
     ) -> Array<TransferHistory>;
 
-    /// Search transfer history by action
+    //  Search transfer history by action
     fn search_history_by_action(
         self: @TContractState, action: felt252, limit: u32, offset: u32,
     ) -> Array<TransferHistory>;
 
-    /// Get transfer statistics
+    //  Get transfer statistics
     fn get_transfer_statistics(
         self: @TContractState,
     ) -> (u256, u256, u256, u256); // total, completed, cancelled, expired
 
-    /// Get agent statistics
+    //  Get agent statistics
     fn get_agent_statistics(
         self: @TContractState, agent: ContractAddress,
     ) -> (u256, u256, u256); // total_transfers, total_volume, rating
@@ -210,104 +195,4 @@ pub trait IStarkRemit<TContractState> {
     // Savings Group Functions
     fn create_group(ref self: TContractState, max_members: u8) -> u64;
     fn join_group(ref self: TContractState, group_id: u64);
-
-    // Multi-Currency Support Functions
-    /// Get list of supported currencies
-    fn get_supported_currencies(self: @TContractState) -> Array<felt252>;
-
-    /// Get exchange rate between two currencies from Oracle
-    fn get_exchange_rate(
-        self: @TContractState, from_currency: felt252, to_currency: felt252,
-    ) -> u256;
-
-    /// Convert currency for a user
-    fn convert_currency(
-        ref self: TContractState, from_currency: felt252, to_currency: felt252, amount: u256,
-    ) -> u256;
-
-    /// Register a new supported currency (admin only)
-    fn register_currency(ref self: TContractState, currency: felt252) -> bool;
-
-    /// Set Oracle contract address (admin only)
-    fn set_oracle(ref self: TContractState, oracle_address: ContractAddress) -> bool;
-
-    /// Get current Oracle contract address
-    fn get_oracle(self: @TContractState) -> ContractAddress;
-
-    /// Get user balance in specific currency
-    fn get_currency_balance(
-        self: @TContractState, user: ContractAddress, currency: felt252,
-    ) -> u256;
-
-    /// Check if currency is supported
-    fn is_currency_supported(self: @TContractState, currency: felt252) -> bool;
-
-    /// Update exchange rate manually (admin only - emergency use)
-    fn update_exchange_rate(
-        ref self: TContractState, from_currency: felt252, to_currency: felt252, rate: u256,
-    ) -> bool;
-
-    /// Get conversion rate with slippage protection
-    fn get_conversion_preview(
-        self: @TContractState, from_currency: felt252, to_currency: felt252, amount: u256,
-    ) -> u256;
-}
-
-// ERC-20 Token interface
-#[starknet::interface]
-pub trait IStarkRemitToken<TContractState> {
-    // Standard ERC-20 functions
-    fn name(self: @TContractState) -> felt252;
-    fn symbol(self: @TContractState) -> felt252;
-    fn decimals(self: @TContractState) -> u8;
-    fn total_supply(self: @TContractState) -> u256;
-    fn balance_of(self: @TContractState, account: ContractAddress) -> u256;
-    fn allowance(self: @TContractState, owner: ContractAddress, spender: ContractAddress) -> u256;
-    fn transfer(ref self: TContractState, recipient: ContractAddress, amount: u256) -> bool;
-    fn approve(ref self: TContractState, spender: ContractAddress, amount: u256) -> bool;
-    fn transfer_from(
-        ref self: TContractState, sender: ContractAddress, recipient: ContractAddress, amount: u256,
-    ) -> bool;
-
-    // Token Supply Management Functions
-    /// Mints new tokens to a specified recipient.
-    /// Callable only by authorized minters.
-    fn mint(ref self: TContractState, recipient: ContractAddress, amount: u256) -> bool;
-
-    /// Burns (destroys) a specified amount of tokens from the caller's balance.
-    fn burn(ref self: TContractState, amount: u256) -> bool;
-
-    /// Adds a new authorized minter.
-    /// Callable only by the contract admin.
-    fn add_minter(ref self: TContractState, minter_address: ContractAddress) -> bool;
-
-    /// Removes an authorized minter.
-    /// Callable only by the contract admin.
-    fn remove_minter(ref self: TContractState, minter_address: ContractAddress) -> bool;
-
-    /// Checks if an account is an authorized minter.
-    fn is_minter(self: @TContractState, account: ContractAddress) -> bool;
-
-    /// Sets the maximum total supply of the token.
-    /// Callable only by the contract admin.
-    fn set_max_supply(ref self: TContractState, new_max_supply: u256) -> bool;
-
-    /// Gets the maximum total supply of the token.
-    fn get_max_supply(self: @TContractState) -> u256;
-}
-
-// Oracle interface for better external Oracle integration
-#[starknet::interface]
-pub trait IOracleContract<TContractState> {
-    /// Get exchange rate between two currencies
-    fn get_rate(self: @TContractState, from: felt252, to: felt252) -> u256;
-
-    /// Get rate with timestamp for verification
-    fn get_rate_with_timestamp(self: @TContractState, from: felt252, to: felt252) -> (u256, u64);
-
-    /// Check if currency pair is supported
-    fn is_pair_supported(self: @TContractState, from: felt252, to: felt252) -> bool;
-
-    /// Get last update timestamp for currency pair
-    fn get_last_update_timestamp(self: @TContractState, from: felt252, to: felt252) -> u64;
 }

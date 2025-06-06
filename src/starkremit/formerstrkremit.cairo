@@ -1,9 +1,3 @@
-use core::num::traits::Zero;
-use openzeppelin::access::accesscontrol::AccessControlComponent;
-use openzeppelin::access::ownable::OwnableComponent;
-use openzeppelin::introspection::src5::SRC5Component;
-use openzeppelin::upgrades::UpgradeableComponent;
-use openzeppelin::upgrades::interface::IUpgradeable;
 use starknet::storage::{
     Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePathEntry, StoragePointerReadAccess,
     StoragePointerWriteAccess,
@@ -15,39 +9,23 @@ use starkremit_contract::base::errors::{
 use starkremit_contract::base::events::*;
 use starkremit_contract::base::types::{
     Agent, AgentStatus, ContributionRound, KYCLevel, KycLevel, KycStatus, MemberContribution,
-    RegistrationRequest, RegistrationStatus, RoundStatus, SavingsGroup, TransferData,
+    RegistrationRequest, RegistrationStatus, RoundStatus, SavingsGroup, Transfer as TransferData,
     TransferHistory, TransferStatus, UserKycData, UserProfile,
 };
 use starkremit_contract::interfaces::{IERC20, IStarkRemit};
 
+
 #[starknet::contract]
-pub mod StarkRemit {
+mod StarkRemit {
     use super::*;
 
-    component!(path: AccessControlComponent, storage: accesscontrol, event: AccessControlEvent);
-    component!(path: SRC5Component, storage: src5, event: Src5Event);
-    component!(path: UpgradeableComponent, storage: upgradeable, event: UpgradeableEvent);
-
-    #[abi(embed_v0)]
-    impl AccessControlImpl =
-        AccessControlComponent::AccessControlImpl<ContractState>;
-    impl AccessControlInternalImpl = AccessControlComponent::InternalImpl<ContractState>;
-
-    impl UpgradeableInternalImpl = UpgradeableComponent::InternalImpl<ContractState>;
-
-    const PROTOCOL_OWNER_ROLE: felt252 = selector!("PROTOCOL_OWNER");
-    const ADMIN_ROLE: felt252 = selector!("ADMIN");
+    // Fixed-point scaler for currency conversions (18 decimals)
+    const FIXED_POINT_SCALER: u256 = 1_000_000_000_000_000_000;
 
     // Event definitions
     #[event]
-    #[derive(Drop, starknet::Event)]
+    #[derive(Copy, Drop, starknet::Event)]
     enum Event {
-        #[flat]
-        Src5Event: SRC5Component::Event,
-        #[flat]
-        AccessControlEvent: AccessControlComponent::Event,
-        #[flat]
-        UpgradeableEvent: UpgradeableComponent::Event,
         Transfer: Transfer, // Standard ERC20 transfer event
         Approval: Approval, // Standard ERC20 approval event
         CurrencyRegistered: CurrencyRegistered, // Event for currency registration
@@ -92,15 +70,6 @@ pub mod StarkRemit {
     // Contract storage definition
     #[storage]
     struct Storage {
-        #[substorage(v0)]
-        upgradeable: UpgradeableComponent::Storage,
-        #[substorage(v0)]
-        src5: SRC5Component::Storage,
-        #[substorage(v0)]
-        accesscontrol: AccessControlComponent::Storage,
-        owner: ContractAddress, // Admin address for contract management
-        oracle_address: ContractAddress, // Address of the oracle contract for exchange rates
-        token_address: ContractAddress, // Address of the token contract
         // ERC20 standard storage
         admin: ContractAddress, // Admin with special privileges
         name: felt252, // Token name
@@ -112,6 +81,7 @@ pub mod StarkRemit {
         // Multi-currency support storage
         currency_balances: Map<(ContractAddress, felt252), u256>, // User balances by currency
         supported_currencies: Map<felt252, bool>, // Registered currencies
+        oracle_address: ContractAddress, // Oracle contract address for exchange rates
         // User registration storage
         user_profiles: Map<ContractAddress, UserProfile>, // User profile data
         email_registry: Map<
@@ -190,37 +160,265 @@ pub mod StarkRemit {
     #[constructor]
     fn constructor(
         ref self: ContractState,
-        owner: ContractAddress, // Admin address
-        oracle_address: ContractAddress, // Oracle contract address
-        token_address: ContractAddress // Address of the token contract
+        admin: ContractAddress, // Admin address
+        name: felt252, // Token name
+        symbol: felt252, // Token symbol
+        initial_supply: u256, // Initial token supply
+        max_supply: u256, // Maximum token supply
+        base_currency: felt252, // Base currency identifier
+        oracle_address: ContractAddress // Oracle contract address
     ) {
+        // Initialize ERC20 standard fields
+        self.admin.write(admin);
+        self.name.write(name);
+        self.symbol.write(symbol);
+        self.decimals.write(18); // Standard 18 decimals for ERC20
+        self.total_supply.write(initial_supply);
+        self.balances.write(admin, initial_supply);
+
+        // Initialize multi-currency support
+        self.supported_currencies.write(base_currency, true);
+        self.currency_balances.write((admin, base_currency), initial_supply);
         self.oracle_address.write(oracle_address);
-        self.owner.write(owner);
-        self.token_address.write(token_address);
-        self.accesscontrol.initializer();
-        self.accesscontrol._grant_role(PROTOCOL_OWNER_ROLE, owner);
+
+        // Initialize user registration system
+        self.total_users.write(0);
+        self.registration_enabled.write(true);
+
+        // Initialize KYC with default settings
+        self.kyc_enforcement_enabled.write(false);
+        InternalFunctions::_set_default_transaction_limits(ref self);
+
+        // Initialize transfer administration
+        self.next_transfer_id.write(1); // Start transfer IDs from 1
+        self.total_transfers.write(0);
+        self.total_completed_transfers.write(0);
+        self.total_cancelled_transfers.write(0);
+        self.total_expired_transfers.write(0);
+
+        // Initialize Token Supply Management
+        // Max supply must be greater than or equal to initial supply
+        assert(max_supply >= initial_supply, MintBurnErrors::MAX_SUPPLY_TOO_LOW);
+        self.max_supply.write(max_supply);
+        self.minters.write(admin, true); // The deployer/admin is an initial minter
+
+        // Emit transfer event for initial supply
+        let zero_address: ContractAddress = 0.try_into().unwrap();
+        self.emit(Transfer { from: zero_address, to: admin, value: initial_supply });
     }
 
+    // Implementation of the ERC20 standard interface
     #[abi(embed_v0)]
-    fn grant_admin_role(ref self: ContractState, admin: ContractAddress) {
-        self.accesscontrol.assert_only_role(ADMIN_ROLE);
-        self.accesscontrol._grant_role(ADMIN_ROLE, admin);
-        self.admin.write(admin);
+    impl IStarkRemitTokenImpl of IStarkRemit::IStarkRemitToken<ContractState> {
+        // Returns the token name
+        fn name(self: @ContractState) -> felt252 {
+            self.name.read()
+        }
+
+        // Returns the token symbol
+        fn symbol(self: @ContractState) -> felt252 {
+            self.symbol.read()
+        }
+
+        // Returns the number of decimals used for display
+        fn decimals(self: @ContractState) -> u8 {
+            self.decimals.read()
+        }
+
+        // Returns the total token supply
+        fn total_supply(self: @ContractState) -> u256 {
+            self.total_supply.read()
+        }
+
+        // Returns the token balance of a specific account
+        fn balance_of(self: @ContractState, account: ContractAddress) -> u256 {
+            self.balances.read(account)
+        }
+
+        // Returns the amount approved for a spender by an owner
+        fn allowance(
+            self: @ContractState, owner: ContractAddress, spender: ContractAddress,
+        ) -> u256 {
+            self.allowances.read((owner, spender))
+        }
+
+        // Transfers tokens from caller to recipient
+        fn transfer(ref self: ContractState, recipient: ContractAddress, amount: u256) -> bool {
+            let caller = get_caller_address();
+
+            // Validate KYC if enforcement is enabled
+            if self.kyc_enforcement_enabled.read() {
+                InternalFunctions::_validate_kyc_and_limits(@self, caller, amount);
+                InternalFunctions::_validate_kyc_and_limits(@self, recipient, amount);
+            }
+
+            let caller_balance = self.balances.read(caller);
+            assert(caller_balance >= amount, ERC20Errors::INSUFFICIENT_BALANCE);
+
+            // Update balances
+            self.balances.write(caller, caller_balance - amount);
+            let recipient_balance = self.balances.read(recipient);
+            self.balances.write(recipient, recipient_balance + amount);
+
+            // Record usage for KYC limits
+            if self.kyc_enforcement_enabled.read() {
+                InternalFunctions::_record_daily_usage(ref self, caller, amount);
+            }
+
+            self.emit(Transfer { from: caller, to: recipient, value: amount });
+            true
+        }
+
+        // Approves a spender to spend tokens on behalf of the caller
+        fn approve(ref self: ContractState, spender: ContractAddress, amount: u256) -> bool {
+            let caller = get_caller_address();
+            self.allowances.write((caller, spender), amount);
+            self.emit(Approval { owner: caller, spender, value: amount });
+            true
+        }
+
+        // Transfers tokens on behalf of another account if approved
+        fn transfer_from(
+            ref self: ContractState,
+            sender: ContractAddress,
+            recipient: ContractAddress,
+            amount: u256,
+        ) -> bool {
+            let caller = get_caller_address();
+            let allowance = self.allowances.read((sender, caller));
+            assert(allowance >= amount, ERC20Errors::INSUFFICIENT_ALLOWANCE);
+
+            // Validate KYC if enforcement is enabled
+            if self.kyc_enforcement_enabled.read() {
+                InternalFunctions::_validate_kyc_and_limits(@self, sender, amount);
+                InternalFunctions::_validate_kyc_and_limits(@self, recipient, amount);
+            }
+
+            let sender_balance = self.balances.read(sender);
+            assert(sender_balance >= amount, ERC20Errors::INSUFFICIENT_BALANCE);
+
+            // Update allowance and balances
+            self.allowances.write((sender, caller), allowance - amount);
+            self.balances.write(sender, sender_balance - amount);
+            let recipient_balance = self.balances.read(recipient);
+            self.balances.write(recipient, recipient_balance + amount);
+
+            // Record usage for KYC limits
+            if self.kyc_enforcement_enabled.read() {
+                InternalFunctions::_record_daily_usage(ref self, sender, amount);
+            }
+
+            self.emit(Transfer { from: sender, to: recipient, value: amount });
+            true
+        }
+
+        /// Mints new tokens to a specified recipient.
+        /// - Caller must be an authorized minter.
+        /// - Minting cannot exceed the `max_supply`.
+        /// - Recipient cannot be the zero address.
+        /// - Amount must be greater than zero.
+        fn mint(ref self: ContractState, recipient: ContractAddress, amount: u256) -> bool {
+            let caller = get_caller_address();
+            assert(self.minters.read(caller), MintBurnErrors::NOT_MINTER);
+
+            let zero_address: ContractAddress = 0.try_into().unwrap();
+            assert(recipient != zero_address, MintBurnErrors::MINT_TO_ZERO);
+            assert(amount > 0, MintBurnErrors::MINT_ZERO_AMOUNT);
+
+            let current_total_supply = self.total_supply.read();
+            let new_total_supply = current_total_supply + amount;
+            assert(new_total_supply <= self.max_supply.read(), MintBurnErrors::MAX_SUPPLY_EXCEEDED);
+
+            self.total_supply.write(new_total_supply);
+            let recipient_balance = self.balances.read(recipient);
+            self.balances.write(recipient, recipient_balance + amount);
+
+            self.emit(Minted { minter: caller, recipient, amount });
+            self.emit(Transfer { from: zero_address, to: recipient, value: amount });
+            true
+        }
+
+        /// Burns (destroys) a specified amount of tokens from the caller's balance.
+        /// - Amount must be greater than zero.
+        /// - Caller must have sufficient balance.
+        fn burn(ref self: ContractState, amount: u256) -> bool {
+            let caller = get_caller_address();
+            assert(amount > 0, MintBurnErrors::BURN_ZERO_AMOUNT);
+
+            let caller_balance = self.balances.read(caller);
+            assert(caller_balance >= amount, MintBurnErrors::INSUFFICIENT_BALANCE_BURN);
+
+            self.balances.write(caller, caller_balance - amount);
+            let current_total_supply = self.total_supply.read();
+            self.total_supply.write(current_total_supply - amount);
+
+            let zero_address: ContractAddress = 0.try_into().unwrap();
+            self.emit(Burned { account: caller, amount });
+            self.emit(Transfer { from: caller, to: zero_address, value: amount });
+            true
+        }
+
+        /// Adds a new authorized minter. Callable only by the contract admin.
+        fn add_minter(ref self: ContractState, minter_address: ContractAddress) -> bool {
+            let caller = get_caller_address();
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+            let zero_address: ContractAddress = 0.try_into().unwrap();
+            assert(minter_address != zero_address, MintBurnErrors::INVALID_MINTER_ADDRESS);
+
+            self.minters.write(minter_address, true);
+            self.emit(MinterAdded { account: minter_address, added_by: caller });
+            true
+        }
+
+        /// Removes an authorized minter. Callable only by the contract admin.
+        fn remove_minter(ref self: ContractState, minter_address: ContractAddress) -> bool {
+            let caller = get_caller_address();
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+            let zero_address: ContractAddress = 0.try_into().unwrap();
+            assert(minter_address != zero_address, MintBurnErrors::INVALID_MINTER_ADDRESS);
+            // Optional: Add logic to prevent removing the last minter or the admin itself without
+            // care.
+            // For now, allowing removal.
+
+            self.minters.write(minter_address, false);
+            self.emit(MinterRemoved { account: minter_address, removed_by: caller });
+            true
+        }
+
+        /// Checks if an account is an authorized minter.
+        fn is_minter(self: @ContractState, account: ContractAddress) -> bool {
+            self.minters.read(account)
+        }
+
+        /// Sets the maximum total supply of the token. Callable only by the contract admin.
+        /// Max supply cannot be set lower than the current total supply.
+        fn set_max_supply(ref self: ContractState, new_max_supply: u256) -> bool {
+            let caller = get_caller_address();
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+            assert(new_max_supply >= self.total_supply.read(), MintBurnErrors::MAX_SUPPLY_TOO_LOW);
+
+            self.max_supply.write(new_max_supply);
+            self.emit(MaxSupplyUpdated { new_max_supply, updated_by: caller });
+            true
+        }
+
+        /// Gets the maximum total supply of the token.
+        fn get_max_supply(self: @ContractState) -> u256 {
+            self.max_supply.read()
+        }
     }
 
     // Implementation of the StarkRemit interface with KYC functions
     #[abi(embed_v0)]
     impl IStarkRemitImpl of IStarkRemit::IStarkRemit<ContractState> {
-        fn get_owner(self: @ContractState) -> ContractAddress {
-            self.owner.read()
-        }
         /// Register a new user with the platform
         /// Validates all data and prevents duplicate registrations
         fn register_user(ref self: ContractState, registration_data: RegistrationRequest) -> bool {
             let caller = get_caller_address();
+            let zero_address: ContractAddress = 0.try_into().unwrap();
 
             // Validate caller is not zero address
-            assert(caller.is_zero(), RegistrationErrors::ZERO_ADDRESS);
+            assert(caller != zero_address, RegistrationErrors::ZERO_ADDRESS);
 
             // Check if registration is enabled
             assert(self.registration_enabled.read(), 'Registration disabled');
@@ -245,11 +443,11 @@ pub mod StarkRemit {
 
             // Check for duplicate email
             let existing_email_user = self.email_registry.read(registration_data.email_hash);
-            assert(existing_email_user.is_zero(), RegistrationErrors::EMAIL_ALREADY_EXISTS);
+            assert(existing_email_user == zero_address, RegistrationErrors::EMAIL_ALREADY_EXISTS);
 
             // Check for duplicate phone
             let existing_phone_user = self.phone_registry.read(registration_data.phone_hash);
-            assert(existing_phone_user.is_zero(), RegistrationErrors::PHONE_ALREADY_EXISTS);
+            assert(existing_phone_user == zero_address, RegistrationErrors::PHONE_ALREADY_EXISTS);
 
             // Check if preferred currency is supported
             assert(
@@ -303,6 +501,30 @@ pub mod StarkRemit {
             true
         }
 
+        //mangage user profile
+        /// Get the profile of the calling user
+        fn get_my_profile(self: @ContractState) -> UserProfile {
+            let caller = get_caller_address();
+            self.get_user_profile(caller)
+        }
+
+        /// Update the calling user's own profile
+        fn update_my_profile(ref self: ContractState, updated_profile: UserProfile) -> bool {
+            let caller = get_caller_address();
+            // Ensure the caller is updating their own profile
+            assert(updated_profile.user_address == caller, 'Cannot update other profile');
+            // Validate user is registered
+            assert(self.is_user_registered(caller), RegistrationErrors::USER_NOT_REGISTERED);
+            // Store updated profile
+            self.user_profiles.write(caller, updated_profile);
+            // Emit event
+            self
+                .emit(
+                    UserProfileUpdated { user_address: caller, updated_fields: 'profile_updated' },
+                );
+            true
+        }
+
         /// Get user profile by address
         fn get_user_profile(self: @ContractState, user_address: ContractAddress) -> UserProfile {
             let status = self.registration_status.read(user_address);
@@ -343,7 +565,9 @@ pub mod StarkRemit {
             if updated_profile.email_hash != current_profile.email_hash {
                 let zero_address: ContractAddress = 0.try_into().unwrap();
                 let existing_email_user = self.email_registry.read(updated_profile.email_hash);
-                assert(existing_email_user.is_zero(), RegistrationErrors::EMAIL_ALREADY_EXISTS);
+                assert(
+                    existing_email_user == zero_address, RegistrationErrors::EMAIL_ALREADY_EXISTS,
+                );
 
                 // Update email registry
                 self.email_registry.write(current_profile.email_hash, zero_address);
@@ -353,7 +577,9 @@ pub mod StarkRemit {
             if updated_profile.phone_hash != current_profile.phone_hash {
                 let zero_address: ContractAddress = 0.try_into().unwrap();
                 let existing_phone_user = self.phone_registry.read(updated_profile.phone_hash);
-                assert(existing_phone_user.is_zero(), RegistrationErrors::PHONE_ALREADY_EXISTS);
+                assert(
+                    existing_phone_user == zero_address, RegistrationErrors::PHONE_ALREADY_EXISTS,
+                );
 
                 // Update phone registry
                 self.phone_registry.write(current_profile.phone_hash, zero_address);
@@ -394,6 +620,119 @@ pub mod StarkRemit {
             self.registration_status.read(user_address)
         }
 
+        /// Update user KYC level (admin only)
+        fn update_kyc_level(
+            ref self: ContractState, user_address: ContractAddress, kyc_level: KYCLevel,
+        ) -> bool {
+            let caller = get_caller_address();
+
+            // Verify caller is admin
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+
+            // Verify user is registered
+            assert(self.is_user_registered(user_address), RegistrationErrors::USER_NOT_FOUND);
+
+            let mut user_profile = self.user_profiles.read(user_address);
+            let old_level = user_profile.kyc_level;
+
+            // Update KYC level
+            user_profile.kyc_level = kyc_level;
+            self.user_profiles.write(user_address, user_profile);
+
+            // Emit KYC update event
+            self
+                .emit(
+                    KYCLevelUpdated {
+                        user_address, old_level, new_level: kyc_level, admin: caller,
+                    },
+                );
+
+            true
+        }
+
+        /// Deactivate user account (admin only)
+        fn deactivate_user(ref self: ContractState, user_address: ContractAddress) -> bool {
+            let caller = get_caller_address();
+
+            // Verify caller is admin
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+
+            // Verify user is registered
+            assert(self.is_user_registered(user_address), RegistrationErrors::USER_NOT_FOUND);
+
+            let mut user_profile = self.user_profiles.read(user_address);
+            user_profile.is_active = false;
+            self.user_profiles.write(user_address, user_profile);
+
+            // Update registration status
+            self.registration_status.write(user_address, RegistrationStatus::Suspended);
+
+            // Emit deactivation event
+            self.emit(UserDeactivated { user_address, admin: caller });
+
+            true
+        }
+
+        /// Reactivate user account (admin only)
+        fn reactivate_user(ref self: ContractState, user_address: ContractAddress) -> bool {
+            let caller = get_caller_address();
+
+            // Verify caller is admin
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+
+            // Verify user exists
+            let status = self.registration_status.read(user_address);
+            match status {
+                RegistrationStatus::Suspended => {},
+                _ => { assert(false, 'User not suspended'); },
+            }
+
+            let mut user_profile = self.user_profiles.read(user_address);
+            user_profile.is_active = true;
+            self.user_profiles.write(user_address, user_profile);
+
+            // Update registration status
+            self.registration_status.write(user_address, RegistrationStatus::Completed);
+
+            // Emit reactivation event
+            self.emit(UserReactivated { user_address, admin: caller });
+
+            true
+        }
+
+        /// Get total registered users count
+        fn get_total_users(self: @ContractState) -> u256 {
+            self.total_users.read()
+        }
+
+        /// Validate registration data
+        fn validate_registration_data(
+            self: @ContractState, registration_data: RegistrationRequest,
+        ) -> bool {
+            // Check that required fields are not empty (0)
+            if registration_data.email_hash == 0 {
+                return false;
+            }
+
+            if registration_data.phone_hash == 0 {
+                return false;
+            }
+
+            if registration_data.full_name == 0 {
+                return false;
+            }
+
+            if registration_data.preferred_currency == 0 {
+                return false;
+            }
+
+            if registration_data.country_code == 0 {
+                return false;
+            }
+
+            true
+        }
+
         /// Update KYC status for a user (admin only)
         fn update_kyc_status(
             ref self: ContractState,
@@ -403,7 +742,8 @@ pub mod StarkRemit {
             verification_hash: felt252,
             expires_at: u64,
         ) -> bool {
-            self.accesscontrol.assert_only_role(ADMIN_ROLE);
+            let caller = get_caller_address();
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
 
             let current_data = self.user_kyc_data.read(user);
             let old_status = current_data.status;
@@ -463,7 +803,7 @@ pub mod StarkRemit {
         /// Set KYC enforcement (admin only)
         fn set_kyc_enforcement(ref self: ContractState, enabled: bool) -> bool {
             let caller = get_caller_address();
-            self.accesscontrol.assert_only_role(ADMIN_ROLE);
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
 
             self.kyc_enforcement_enabled.write(enabled);
             self.emit(KycEnforcementEnabled { enabled, updated_by: caller });
@@ -479,7 +819,7 @@ pub mod StarkRemit {
         /// Suspend user's KYC (admin only)
         fn suspend_user_kyc(ref self: ContractState, user: ContractAddress) -> bool {
             let caller = get_caller_address();
-            self.accesscontrol.assert_only_role(ADMIN_ROLE);
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
 
             let mut kyc_data = self.user_kyc_data.read(user);
             let old_status = kyc_data.status;
@@ -504,7 +844,7 @@ pub mod StarkRemit {
         /// Reinstate user's KYC (admin only)
         fn reinstate_user_kyc(ref self: ContractState, user: ContractAddress) -> bool {
             let caller = get_caller_address();
-            self.accesscontrol.assert_only_role(ADMIN_ROLE);
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
 
             let mut kyc_data = self.user_kyc_data.read(user);
             let old_status = kyc_data.status;
@@ -527,92 +867,6 @@ pub mod StarkRemit {
                 );
 
             true
-        }
-
-
-        /// Update user KYC level (admin only)
-        fn update_kyc_level(
-            ref self: ContractState, user_address: ContractAddress, kyc_level: KYCLevel,
-        ) -> bool {
-            let caller = get_caller_address();
-
-            // Verify caller is admin
-            self.accesscontrol.assert_only_role(ADMIN_ROLE);
-
-            // Verify user is registered
-            assert(self.is_user_registered(user_address), RegistrationErrors::USER_NOT_FOUND);
-
-            let mut user_profile = self.user_profiles.read(user_address);
-            let old_level = user_profile.kyc_level;
-
-            // Update KYC level
-            user_profile.kyc_level = kyc_level;
-            self.user_profiles.write(user_address, user_profile);
-
-            // Emit KYC update event
-            self
-                .emit(
-                    KYCLevelUpdated {
-                        user_address, old_level, new_level: kyc_level, admin: caller,
-                    },
-                );
-
-            true
-        }
-
-        /// Deactivate user account (admin only)
-        fn deactivate_user(ref self: ContractState, user_address: ContractAddress) -> bool {
-            let caller = get_caller_address();
-
-            // Verify caller is admin
-            self.accesscontrol.assert_only_role(ADMIN_ROLE);
-
-            // Verify user is registered
-            assert(self.is_user_registered(user_address), RegistrationErrors::USER_NOT_FOUND);
-
-            let mut user_profile = self.user_profiles.read(user_address);
-            user_profile.is_active = false;
-            self.user_profiles.write(user_address, user_profile);
-
-            // Update registration status
-            self.registration_status.write(user_address, RegistrationStatus::Suspended);
-
-            // Emit deactivation event
-            self.emit(UserDeactivated { user_address, admin: caller });
-
-            true
-        }
-
-        /// Reactivate user account (admin only)
-        fn reactivate_user(ref self: ContractState, user_address: ContractAddress) -> bool {
-            let caller = get_caller_address();
-
-            // Verify caller is admin
-            self.accesscontrol.assert_only_role(ADMIN_ROLE);
-
-            // Verify user exists
-            let status = self.registration_status.read(user_address);
-            match status {
-                RegistrationStatus::Suspended => {},
-                _ => { assert(false, 'User not suspended'); },
-            }
-
-            let mut user_profile = self.user_profiles.read(user_address);
-            user_profile.is_active = true;
-            self.user_profiles.write(user_address, user_profile);
-
-            // Update registration status
-            self.registration_status.write(user_address, RegistrationStatus::Completed);
-
-            // Emit reactivation event
-            self.emit(UserReactivated { user_address, admin: caller });
-
-            true
-        }
-
-        /// Get total registered users count
-        fn get_total_users(self: @ContractState) -> u256 {
-            self.total_users.read()
         }
 
 
@@ -741,6 +995,7 @@ pub mod StarkRemit {
 
             transfer_id
         }
+
         /// Create a new transfer
         fn create_transfer(
             ref self: ContractState,
@@ -1208,7 +1463,7 @@ pub mod StarkRemit {
         /// Process expired transfers (admin only)
         fn process_expired_transfers(ref self: ContractState, limit: u32) -> u32 {
             let caller = get_caller_address();
-            self.accesscontrol.assert_only_role(ADMIN_ROLE);
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
 
             // This is a simplified implementation
             // In production, you'd iterate through transfers and mark expired ones
@@ -1221,7 +1476,7 @@ pub mod StarkRemit {
         ) -> bool {
             let caller = get_caller_address();
             let current_time = get_block_timestamp();
-            self.accesscontrol.assert_only_role(ADMIN_ROLE);
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
 
             // Get transfer and validate it exists
             let mut transfer = self.transfers.read(transfer_id);
@@ -1273,7 +1528,7 @@ pub mod StarkRemit {
         ) -> bool {
             let caller = get_caller_address();
             let current_time = get_block_timestamp();
-            self.accesscontrol.assert_only_role(ADMIN_ROLE);
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
 
             // Check if agent already exists
             assert(!self.agent_exists.read(agent_address), TransferErrors::AGENT_ALREADY_EXISTS);
@@ -1334,7 +1589,7 @@ pub mod StarkRemit {
         ) -> bool {
             let caller = get_caller_address();
             let current_time = get_block_timestamp();
-            self.accesscontrol.assert_only_role(ADMIN_ROLE);
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
 
             // Check if agent exists
             assert(self.agent_exists.read(agent_address), TransferErrors::AGENT_NOT_FOUND);
@@ -1535,7 +1790,7 @@ pub mod StarkRemit {
 
         fn complete_round(ref self: ContractState, round_id: u256) {
             let caller = get_caller_address();
-            self.accesscontrol.assert_only_role(ADMIN_ROLE);
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
 
             let mut round = self.rounds.read(round_id);
             assert(round.status == RoundStatus::Active, 'Round is not active');
@@ -1550,7 +1805,7 @@ pub mod StarkRemit {
             ref self: ContractState, recipient: ContractAddress, deadline: u64,
         ) {
             let caller = get_caller_address();
-            self.accesscontrol.assert_only_role(ADMIN_ROLE);
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
 
             let round_id = self.round_ids.read() + 1;
             self.round_ids.write(round_id);
@@ -1590,7 +1845,7 @@ pub mod StarkRemit {
 
         fn add_member(ref self: ContractState, address: ContractAddress) {
             let caller = get_caller_address();
-            self.accesscontrol.assert_only_role(ADMIN_ROLE);
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
             assert(!self.is_member(address), 'Already a member');
 
             self.members.write(address, true);
@@ -1601,7 +1856,7 @@ pub mod StarkRemit {
 
         fn disburse_round_contribution(ref self: ContractState, round_id: u256) {
             let caller = get_caller_address();
-            self.accesscontrol.assert_only_role(ADMIN_ROLE);
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
 
             let round = self.rounds.read(round_id);
             assert(round.status == RoundStatus::Completed, 'Round not completed');
@@ -1643,40 +1898,102 @@ pub mod StarkRemit {
 
             self.group_members.write((group_id, caller), true);
         }
-    }
 
+        // Enhanced Multi-Currency Support Functions
+        /// Get list of supported currencies
+        fn get_supported_currencies(self: @ContractState) -> Array<felt252> {
+            let mut currencies = ArrayTrait::new();
+
+            // Add some common currencies (this would be dynamic in a real implementation)
+            currencies.append('USD');
+            currencies.append('EUR');
+            currencies.append('GBP');
+            currencies.append('NGN');
+            currencies.append('KES');
+            currencies.append('GHS');
+            currencies.append('ZAR');
+            currencies.append('XOF'); // West African CFA Franc
+            currencies.append('XAF'); // Central African CFA Franc
+
+            currencies
+        }
+
+        /// Get exchange rate between two currencies from Oracle
+        fn get_exchange_rate(
+            self: @ContractState, from_currency: felt252, to_currency: felt252,
+        ) -> u256 {
+            // let oracle = IOracleDispatcher { contract_address: self.oracle_address.read() };
+            // oracle.get_rate(from_currency, to_currency)
+            0 // Placeholder for actual Oracle call
+        }
+
+        /// Convert currency for a user
+        fn convert_currency(
+            ref self: ContractState, from_currency: felt252, to_currency: felt252, amount: u256,
+        ) -> u256 {
+            let caller = get_caller_address();
+            MultiCurrencyFunctions::convert_currency(
+                ref self, caller, from_currency, to_currency, amount,
+            )
+        }
+
+        /// Register a new supported currency (admin only)
+        fn register_currency(ref self: ContractState, currency: felt252) -> bool {
+            MultiCurrencyFunctions::register_currency(ref self, currency);
+            self.emit(CurrencyRegistered { currency, admin: get_caller_address() });
+            true
+        }
+
+        /// Set Oracle contract address (admin only)
+        fn set_oracle(ref self: ContractState, oracle_address: ContractAddress) -> bool {
+            let caller = get_caller_address();
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+            self.oracle_address.write(oracle_address);
+            true
+        }
+
+        /// Get current Oracle contract address
+        fn get_oracle(self: @ContractState) -> ContractAddress {
+            self.oracle_address.read()
+        }
+
+        /// Get user balance in specific currency
+        fn get_currency_balance(
+            self: @ContractState, user: ContractAddress, currency: felt252,
+        ) -> u256 {
+            self.currency_balances.read((user, currency))
+        }
+
+        /// Check if currency is supported
+        fn is_currency_supported(self: @ContractState, currency: felt252) -> bool {
+            self.supported_currencies.read(currency)
+        }
+
+        /// Update exchange rate manually (admin only - emergency use)
+        fn update_exchange_rate(
+            ref self: ContractState, from_currency: felt252, to_currency: felt252, rate: u256,
+        ) -> bool {
+            let caller = get_caller_address();
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+            assert(rate > 0, 'Invalid rate');
+
+            // Emit event for rate update
+            self.emit(ExchangeRateUpdated { from_currency, to_currency, rate });
+            true
+        }
+
+        /// Get conversion rate with slippage protection
+        fn get_conversion_preview(
+            self: @ContractState, from_currency: felt252, to_currency: felt252, amount: u256,
+        ) -> u256 {
+            let rate = self.get_exchange_rate(from_currency, to_currency);
+            amount * rate / FIXED_POINT_SCALER
+        }
+    }
 
     // Internal helper functions
     #[generate_trait]
     impl InternalFunctions of InternalFunctionsTrait {
-        /// Validate registration data
-        fn validate_registration_data(
-            self: @ContractState, registration_data: RegistrationRequest,
-        ) -> bool {
-            // Check that required fields are not empty (0)
-            if registration_data.email_hash == 0 {
-                return false;
-            }
-
-            if registration_data.phone_hash == 0 {
-                return false;
-            }
-
-            if registration_data.full_name == 0 {
-                return false;
-            }
-
-            if registration_data.preferred_currency == 0 {
-                return false;
-            }
-
-            if registration_data.country_code == 0 {
-                return false;
-            }
-
-            true
-        }
-
         fn _validate_kyc_and_limits(self: @ContractState, user: ContractAddress, amount: u256) {
             // Check KYC validity
             assert(self.is_kyc_valid(user), KYCErrors::INVALID_KYC_STATUS);
@@ -1802,6 +2119,67 @@ pub mod StarkRemit {
             self.group_count.write(group_id + 1);
 
             group_id
+        }
+    }
+
+    // Multi-currency functions
+    #[generate_trait]
+    impl MultiCurrencyFunctions of MultiCurrencyFunctionsTrait {
+        // Registers a new supported currency
+        // Only callable by admin
+        fn register_currency(ref self: ContractState, currency: felt252) {
+            let caller = get_caller_address();
+            // Validate caller is admin
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin); // "Only admin" in felt252
+
+            // Register the currency
+            self.supported_currencies.write(currency, true);
+        }
+
+        // Converts tokens from one currency to another
+        // Returns the amount of tokens received in the target currency
+        fn convert_currency(
+            ref self: ContractState,
+            user: ContractAddress,
+            from_currency: felt252,
+            to_currency: felt252,
+            amount: u256,
+        ) -> u256 {
+            // Validate currencies are supported
+            assert(
+                self.supported_currencies.read(from_currency),
+                0x556e737570706f727465645f736f75726365 // "Unsupported_source" in felt252
+            );
+            assert(
+                self.supported_currencies.read(to_currency),
+                0x556e737570706f727465645f746172676574 // "Unsupported_target" in felt252
+            );
+
+            // Verify user has sufficient balance in source currency
+            let from_balance = self.currency_balances.read((user, from_currency));
+            assert(from_balance >= amount, ERC20Errors::INSUFFICIENT_BALANCE);
+
+            // Get exchange rate from oracle
+            // let oracle = IOracleDispatcher { contract_address: self.oracle_address.read() };
+            // let rate: u256 = oracle.get_rate(from_currency, to_currency);
+
+            // Calculate converted amount using fixed-point arithmetic
+            let converted = 0; // amount * rate / FIXED_POINT_SCALER;
+
+            // Update currency balances
+            self.currency_balances.write((user, from_currency), from_balance - amount);
+            let to_balance = self.currency_balances.read((user, to_currency));
+            self.currency_balances.write((user, to_currency), to_balance + converted);
+
+            // Emit conversion event
+            self
+                .emit(
+                    TokenConverted {
+                        user, from_currency, to_currency, amount_in: amount, amount_out: converted,
+                    },
+                );
+
+            converted
         }
     }
 }

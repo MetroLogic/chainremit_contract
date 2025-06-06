@@ -1,11 +1,11 @@
 pub mod base {
     pub mod errors;
+    pub mod events;
     pub mod types;
 }
 
 pub mod interfaces {
     pub mod IERC20;
-    pub mod IOracle;
     pub mod IStarkRemit;
 }
 
@@ -16,4 +16,8 @@ pub mod utils {
 
 pub mod starkremit {
     pub mod StarkRemit;
+}
+
+pub mod presets {
+    pub mod ERC20;
 }

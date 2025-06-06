@@ -121,7 +121,7 @@ pub enum TransferStatus {
 
 /// Transfer data structure for managing transfers
 #[derive(Copy, Drop, Serde, starknet::Store)]
-pub struct Transfer {
+pub struct TransferData {
     /// Unique transfer ID
     pub transfer_id: u256,
     /// Sender address
@@ -207,15 +207,6 @@ pub struct Agent {
     pub rating: u256,
 }
 
-/// Round status for contribution rounds
-#[derive(Copy, Drop, Serde, starknet::Store, PartialEq)]
-pub enum RoundStatus {
-    #[default]
-    Active,
-    Completed,
-    Cancelled,
-}
-
 /// Contribution round data structure
 #[derive(Copy, Drop, Serde, starknet::Store)]
 pub struct ContributionRound {
@@ -260,3 +251,17 @@ pub struct SavingsGroup {
     /// Whether the group is active
     pub is_active: bool,
 }
+
+
+// Enum for the status of a contribution round
+#[derive(Copy, Drop, Serde, PartialEq, starknet::Store)]
+pub enum RoundStatus {
+    Active,
+    Completed,
+    Cancelled,
+}
+// Struct for a contribution round
+
+// Struct for a member's contribution
+
+
