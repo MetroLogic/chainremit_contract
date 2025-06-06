@@ -310,7 +310,7 @@ mod Oracle {
                     pairs.append(pair);
                 }
                 i += 1;
-            };
+            }
 
             pairs
         }
