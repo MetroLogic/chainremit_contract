@@ -186,7 +186,6 @@ pub mod StarkRemit {
     }
 
     // Contract constructor
-    // Initializes the token with basic ERC20 fields and multi-currency support
     #[constructor]
     fn constructor(
         ref self: ContractState,
@@ -201,19 +200,19 @@ pub mod StarkRemit {
         self.accesscontrol._grant_role(PROTOCOL_OWNER_ROLE, owner);
     }
 
-    #[abi(embed_v0)]
-    fn grant_admin_role(ref self: ContractState, admin: ContractAddress) {
-        self.accesscontrol.assert_only_role(ADMIN_ROLE);
-        self.accesscontrol._grant_role(ADMIN_ROLE, admin);
-        self.admin.write(admin);
-    }
-
     // Implementation of the StarkRemit interface with KYC functions
     #[abi(embed_v0)]
     impl IStarkRemitImpl of IStarkRemit::IStarkRemit<ContractState> {
+        fn grant_admin_role(ref self: ContractState, admin: ContractAddress) {
+            self.accesscontrol.assert_only_role(ADMIN_ROLE);
+            self.accesscontrol._grant_role(ADMIN_ROLE, admin);
+            self.admin.write(admin);
+        }
+
         fn get_owner(self: @ContractState) -> ContractAddress {
             self.owner.read()
         }
+
         /// Register a new user with the platform
         /// Validates all data and prevents duplicate registrations
         fn register_user(ref self: ContractState, registration_data: RegistrationRequest) -> bool {
@@ -529,7 +528,6 @@ pub mod StarkRemit {
             true
         }
 
-
         /// Update user KYC level (admin only)
         fn update_kyc_level(
             ref self: ContractState, user_address: ContractAddress, kyc_level: KYCLevel,
@@ -614,7 +612,6 @@ pub mod StarkRemit {
         fn get_total_users(self: @ContractState) -> u256 {
             self.total_users.read()
         }
-
 
         // Transfer Administration Functions
         /// Initiate a new transfer (enhanced version of create_transfer)
@@ -741,6 +738,7 @@ pub mod StarkRemit {
 
             transfer_id
         }
+
         /// Create a new transfer
         fn create_transfer(
             ref self: ContractState,
@@ -1511,8 +1509,7 @@ pub mod StarkRemit {
             (agent_data.completed_transactions, agent_data.total_volume, agent_data.rating)
         }
 
-        //contribution management
-
+        // Contribution Management
         fn contribute_round(ref self: ContractState, round_id: u256, amount: u256) {
             let caller = get_caller_address();
             assert(self.is_member(caller), 'Caller is not a member');
@@ -1645,7 +1642,6 @@ pub mod StarkRemit {
         }
     }
 
-
     // Internal helper functions
     #[generate_trait]
     impl InternalFunctions of InternalFunctionsTrait {
@@ -1748,7 +1744,6 @@ pub mod StarkRemit {
             self.daily_limits.write(3, 100000_000_000_000_000_000_000); // 100,000 tokens
             self.single_limits.write(3, 50000_000_000_000_000_000_000); // 50,000 tokens
         }
-
 
         fn _record_transfer_history(
             ref self: ContractState,

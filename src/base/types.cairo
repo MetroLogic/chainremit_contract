@@ -110,6 +110,7 @@ pub struct TransactionLimits {
 #[derive(Copy, Drop, Serde, starknet::Store, PartialEq)]
 pub enum TransferStatus {
     #[default]
+    None,
     Pending,
     Completed,
     Cancelled,
