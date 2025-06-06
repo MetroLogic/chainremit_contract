@@ -207,9 +207,9 @@ pub struct Agent {
 // Struct for a member's contribution
 #[derive(Copy, Drop, Serde, PartialEq, starknet::Store)]
 pub struct MemberContribution {
-    member: ContractAddress,
-    amount: u256,
-    contributed_at: u64,
+    pub member: ContractAddress,
+    pub amount: u256,
+    pub contributed_at: u64,
 }
 
 // Savings group record
@@ -221,3 +221,23 @@ pub struct SavingsGroup {
     pub member_count: u8, // Current number of members
     pub is_active: bool // Group active status
 }
+
+
+// Enum for the status of a contribution round
+#[derive(Copy, Drop, Serde, PartialEq, starknet::Store)]
+pub enum RoundStatus {
+    Active,
+    Completed,
+}
+
+// Struct for a contribution round
+#[derive(Copy, Drop, Serde, PartialEq, starknet::Store)]
+pub struct ContributionRound {
+    pub round_id: u256,
+    pub total_contributions: u256,
+    pub status: RoundStatus,
+    pub deadline: u64,
+}
+// Struct for a member's contribution
+
+
