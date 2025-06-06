@@ -201,6 +201,15 @@ pub mod StarkRemit {
         self.accesscontrol._grant_role(PROTOCOL_OWNER_ROLE, owner);
     }
 
+    #[abi(embed_v0)]
+    fn grant_admin_role(
+        ref self: ContractState, admin: ContractAddress,
+    ) {
+        self.accesscontrol.assert_only_role(ADMIN_ROLE);
+        self.accesscontrol._grant_role(ADMIN_ROLE, admin);
+        self.admin.write(admin);
+    }
+
     // Implementation of the StarkRemit interface with KYC functions
     #[abi(embed_v0)]
     impl IStarkRemitImpl of IStarkRemit::IStarkRemit<ContractState> {
@@ -396,8 +405,8 @@ pub mod StarkRemit {
             verification_hash: felt252,
             expires_at: u64,
         ) -> bool {
-            let caller = get_caller_address();
-            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+            self.accesscontrol.assert_only_role(ADMIN_ROLE);
+
 
             let current_data = self.user_kyc_data.read(user);
             let old_status = current_data.status;
@@ -457,7 +466,7 @@ pub mod StarkRemit {
         /// Set KYC enforcement (admin only)
         fn set_kyc_enforcement(ref self: ContractState, enabled: bool) -> bool {
             let caller = get_caller_address();
-            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+            self.accesscontrol.assert_only_role(ADMIN_ROLE);
 
             self.kyc_enforcement_enabled.write(enabled);
             self.emit(KycEnforcementEnabled { enabled, updated_by: caller });
@@ -473,7 +482,7 @@ pub mod StarkRemit {
         /// Suspend user's KYC (admin only)
         fn suspend_user_kyc(ref self: ContractState, user: ContractAddress) -> bool {
             let caller = get_caller_address();
-            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+            self.accesscontrol.assert_only_role(ADMIN_ROLE);
 
             let mut kyc_data = self.user_kyc_data.read(user);
             let old_status = kyc_data.status;
@@ -498,7 +507,7 @@ pub mod StarkRemit {
         /// Reinstate user's KYC (admin only)
         fn reinstate_user_kyc(ref self: ContractState, user: ContractAddress) -> bool {
             let caller = get_caller_address();
-            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+            self.accesscontrol.assert_only_role(ADMIN_ROLE);
 
             let mut kyc_data = self.user_kyc_data.read(user);
             let old_status = kyc_data.status;
@@ -531,7 +540,7 @@ pub mod StarkRemit {
             let caller = get_caller_address();
 
             // Verify caller is admin
-            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+            self.accesscontrol.assert_only_role(ADMIN_ROLE);
 
             // Verify user is registered
             assert(self.is_user_registered(user_address), RegistrationErrors::USER_NOT_FOUND);
@@ -559,7 +568,7 @@ pub mod StarkRemit {
             let caller = get_caller_address();
 
             // Verify caller is admin
-            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+            self.accesscontrol.assert_only_role(ADMIN_ROLE);
 
             // Verify user is registered
             assert(self.is_user_registered(user_address), RegistrationErrors::USER_NOT_FOUND);
@@ -582,7 +591,7 @@ pub mod StarkRemit {
             let caller = get_caller_address();
 
             // Verify caller is admin
-            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+            self.accesscontrol.assert_only_role(ADMIN_ROLE);
 
             // Verify user exists
             let status = self.registration_status.read(user_address);
@@ -1202,7 +1211,7 @@ pub mod StarkRemit {
         /// Process expired transfers (admin only)
         fn process_expired_transfers(ref self: ContractState, limit: u32) -> u32 {
             let caller = get_caller_address();
-            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+            self.accesscontrol.assert_only_role(ADMIN_ROLE);
 
             // This is a simplified implementation
             // In production, you'd iterate through transfers and mark expired ones
@@ -1215,7 +1224,7 @@ pub mod StarkRemit {
         ) -> bool {
             let caller = get_caller_address();
             let current_time = get_block_timestamp();
-            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+            self.accesscontrol.assert_only_role(ADMIN_ROLE);
 
             // Get transfer and validate it exists
             let mut transfer = self.transfers.read(transfer_id);
@@ -1267,7 +1276,7 @@ pub mod StarkRemit {
         ) -> bool {
             let caller = get_caller_address();
             let current_time = get_block_timestamp();
-            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+            self.accesscontrol.assert_only_role(ADMIN_ROLE);
 
             // Check if agent already exists
             assert(!self.agent_exists.read(agent_address), TransferErrors::AGENT_ALREADY_EXISTS);
@@ -1328,7 +1337,7 @@ pub mod StarkRemit {
         ) -> bool {
             let caller = get_caller_address();
             let current_time = get_block_timestamp();
-            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+            self.accesscontrol.assert_only_role(ADMIN_ROLE);
 
             // Check if agent exists
             assert(self.agent_exists.read(agent_address), TransferErrors::AGENT_NOT_FOUND);
@@ -1529,7 +1538,7 @@ pub mod StarkRemit {
 
         fn complete_round(ref self: ContractState, round_id: u256) {
             let caller = get_caller_address();
-            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+            self.accesscontrol.assert_only_role(ADMIN_ROLE);
 
             let mut round = self.rounds.read(round_id);
             assert(round.status == RoundStatus::Active, 'Round is not active');
@@ -1544,7 +1553,7 @@ pub mod StarkRemit {
             ref self: ContractState, recipient: ContractAddress, deadline: u64,
         ) {
             let caller = get_caller_address();
-            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+            self.accesscontrol.assert_only_role(ADMIN_ROLE);
 
             let round_id = self.round_ids.read() + 1;
             self.round_ids.write(round_id);
@@ -1584,7 +1593,7 @@ pub mod StarkRemit {
 
         fn add_member(ref self: ContractState, address: ContractAddress) {
             let caller = get_caller_address();
-            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+            self.accesscontrol.assert_only_role(ADMIN_ROLE);
             assert(!self.is_member(address), 'Already a member');
 
             self.members.write(address, true);
@@ -1595,7 +1604,7 @@ pub mod StarkRemit {
 
         fn disburse_round_contribution(ref self: ContractState, round_id: u256) {
             let caller = get_caller_address();
-            assert(caller == self.admin.read(), ERC20Errors::NotAdmin);
+            self.accesscontrol.assert_only_role(ADMIN_ROLE);
 
             let round = self.rounds.read(round_id);
             assert(round.status == RoundStatus::Completed, 'Round not completed');
