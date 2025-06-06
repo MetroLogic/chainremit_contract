@@ -1728,7 +1728,7 @@ mod StarkRemit {
                 transfers.append(transfer);
                 count += 1;
                 i += 1;
-            }
+            };
 
             transfers
         }
@@ -1749,7 +1749,7 @@ mod StarkRemit {
                 transfers.append(transfer);
                 count += 1;
                 i += 1;
-            }
+            };
 
             transfers
         }
@@ -1969,7 +1969,7 @@ mod StarkRemit {
                 agents.append(agent);
                 count += 1;
                 i += 1;
-            }
+            };
 
             agents
         }
@@ -2014,7 +2014,7 @@ mod StarkRemit {
                 history.append(history_entry);
                 count += 1;
                 i += 1;
-            }
+            };
 
             history
         }
@@ -2035,7 +2035,7 @@ mod StarkRemit {
                 history.append(history_entry);
                 count += 1;
                 i += 1;
-            }
+            };
 
             history
         }
@@ -2056,7 +2056,7 @@ mod StarkRemit {
                 history.append(history_entry);
                 count += 1;
                 i += 1;
-            }
+            };
 
             history
         }
@@ -2152,7 +2152,7 @@ mod StarkRemit {
                 let member = self.member_by_index.read(i);
                 members.append(member);
                 i += 1;
-            }
+            };
 
             members
         }

@@ -1,4 +1,4 @@
-use snforge_std::{ContractClassTrait, DeclareResultTrait, declare};
+use snforge_std::{declare};
 #[feature("deprecated-starknet-consts")]
 use starknet::ContractAddress;
 use starkremit_contract::base::types::{

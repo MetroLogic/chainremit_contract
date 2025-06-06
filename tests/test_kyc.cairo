@@ -1,4 +1,3 @@
-use core::num::traits::Pow;
 use snforge_std::{
     ContractClassTrait, DeclareResultTrait, declare, start_cheat_block_timestamp,
     start_cheat_caller_address,
@@ -13,7 +12,7 @@ const ADMIN_ADDRESS: felt252 = 0x123;
 const USER_ADDRESS: felt252 = 0x456;
 const ORACLE_ADDRESS: felt252 = 0x789;
 const VERIFICATION_HASH: felt252 = 0xABC;
-const MAX_SUPPLY: u256 = 1_000_000_000 * 10_u256.pow(18); // 1B tokens with 18 decimals
+const MAX_SUPPLY: u256 = 1_000_000_000_u256 * 1_000_000_000_000_000_000_u256; // 1B tokens with 18 decimals
 
 fn deploy_starkremit_contract() -> IStarkRemitDispatcher {
     let contract = declare("StarkRemit").unwrap().contract_class();
