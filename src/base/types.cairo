@@ -121,7 +121,7 @@ pub enum TransferStatus {
 
 /// Transfer data structure for managing transfers
 #[derive(Copy, Drop, Serde, starknet::Store)]
-pub struct Transfer {
+pub struct TransferData {
     /// Unique transfer ID
     pub transfer_id: u256,
     /// Sender address
