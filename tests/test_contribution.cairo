@@ -1,12 +1,11 @@
 use core::array::ArrayTrait;
-use core::num::traits::Pow;
 use core::result::ResultTrait;
 use core::traits::TryInto;
 use snforge_std::{
     ContractClassTrait, DeclareResultTrait, declare, start_cheat_caller_address,
     stop_cheat_caller_address,
 };
-use starknet::{ContractAddress, contract_address_const, get_block_timestamp};
+use starknet::{ContractAddress, get_block_timestamp};
 use starkremit_contract::interfaces::IStarkRemit::{
     IStarkRemitDispatcher, IStarkRemitDispatcherTrait,
 };
@@ -23,8 +22,8 @@ const NAME: felt252 = 'StarkRemit Token';
 const SYMBOL: felt252 = 'SRT';
 const INITIAL_SUPPLY: u256 = 1000000000000000000000000; // 1,000,000 tokens with 18 decimals
 const BASE_CURRENCY: felt252 = 'USD';
-const MAX_SUPPLY: u256 = 1_000_000_000 * 10_u256.pow(18); // 1B tokens with 18 decimals
-
+// 1B tokens with 18 decimals: 1_000_000_000_000_000_000_000_000_000
+const MAX_SUPPLY: u256 = u256 { low: 0, high: 1_000_000_000 };
 // Helper function to create a contract address
 fn address(value: felt252) -> ContractAddress {
     value.try_into().unwrap()
