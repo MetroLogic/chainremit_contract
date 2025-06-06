@@ -195,5 +195,4 @@ pub trait IStarkRemit<TContractState> { // // User Registration Functions
     // Savings Group Functions
     fn create_group(ref self: TContractState, max_members: u8) -> u64;
     fn join_group(ref self: TContractState, group_id: u64);
-
 }

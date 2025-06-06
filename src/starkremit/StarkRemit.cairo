@@ -202,9 +202,7 @@ pub mod StarkRemit {
     }
 
     #[abi(embed_v0)]
-    fn grant_admin_role(
-        ref self: ContractState, admin: ContractAddress,
-    ) {
+    fn grant_admin_role(ref self: ContractState, admin: ContractAddress) {
         self.accesscontrol.assert_only_role(ADMIN_ROLE);
         self.accesscontrol._grant_role(ADMIN_ROLE, admin);
         self.admin.write(admin);
@@ -406,7 +404,6 @@ pub mod StarkRemit {
             expires_at: u64,
         ) -> bool {
             self.accesscontrol.assert_only_role(ADMIN_ROLE);
-
 
             let current_data = self.user_kyc_data.read(user);
             let old_status = current_data.status;
@@ -1646,10 +1643,9 @@ pub mod StarkRemit {
 
             self.group_members.write((group_id, caller), true);
         }
-
     }
 
-    
+
     // Internal helper functions
     #[generate_trait]
     impl InternalFunctions of InternalFunctionsTrait {
