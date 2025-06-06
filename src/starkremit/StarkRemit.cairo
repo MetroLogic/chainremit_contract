@@ -826,8 +826,17 @@ mod StarkRemit {
         fn update_my_profile(ref self: ContractState, updated_profile: UserProfile) -> bool {
             let caller = get_caller_address();
             // Ensure the caller is updating their own profile
-            assert(caller == updated_profile.address, 'Unauthorized update');
-            self.update_user_profile(updated_profile)
+            assert(updated_profile.user_address == caller, 'Cannot update other profile');
+            // Validate user is registered
+            assert(self.is_user_registered(caller), RegistrationErrors::USER_NOT_REGISTERED);
+            // Store updated profile
+            self.user_profiles.write(caller, updated_profile);
+            // Emit event
+            self
+                .emit(
+                    UserProfileUpdated { user_address: caller, updated_fields: 'profile_updated' },
+                );
+            true
         }
 
         /// Get user profile by address
@@ -2292,35 +2301,6 @@ mod StarkRemit {
         ) -> u256 {
             let rate = self.get_exchange_rate(from_currency, to_currency);
             amount * rate / FIXED_POINT_SCALER
-        }
-
-        // Enhanced User Profile Functions
-        /// Get the profile of the calling user
-        fn get_my_profile(self: @ContractState) -> UserProfile {
-            let caller = get_caller_address();
-            self.get_user_profile(caller)
-        }
-
-        /// Update the calling user's own profile
-        fn update_my_profile(ref self: ContractState, updated_profile: UserProfile) -> bool {
-            let caller = get_caller_address();
-
-            // Validate that user is updating their own profile
-            assert(updated_profile.user_address == caller, 'Cannot update other profile');
-
-            // Validate user is registered
-            assert(self.is_user_registered(caller), RegistrationErrors::USER_NOT_REGISTERED);
-
-            // Store updated profile
-            self.user_profiles.write(caller, updated_profile);
-
-            // Emit event
-            self
-                .emit(
-                    UserProfileUpdated { user_address: caller, updated_fields: 'profile_updated' },
-                );
-
-            true
         }
     }
 
