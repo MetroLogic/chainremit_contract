@@ -1,9 +1,4 @@
-use snforge_std::{ContractClassTrait, DeclareResultTrait, declare};
-#[feature("deprecated-starknet-consts")]
-use starknet::ContractAddress;
-use starkremit_contract::base::types::{
-    Agent, AgentStatus, KYCLevel, RegistrationRequest, RegistrationStatus, Transfer, TransferStatus,
-};
+use snforge_std::declare;
 
 
 // Test Constants
