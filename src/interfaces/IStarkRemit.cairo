@@ -200,6 +200,9 @@ pub trait IStarkRemit<TContractState> {
     // Savings Group Functions
     fn create_group(ref self: TContractState, max_members: u8) -> u64;
     fn join_group(ref self: TContractState, group_id: u64);
+
+    // pragma price assets getting
+    fn get_asset_price(self: @TContractState, asset_id: felt252) -> u128;
 }
 
 // ERC-20 Token interface
@@ -255,3 +258,4 @@ pub trait IStarkRemitToken<TContractState> {
 // fn set_oracle(ref self: TContractState, oracle_address: ContractAddress);
 // fn get_oracle(self: @TContractState) -> ContractAddress;
 }
+

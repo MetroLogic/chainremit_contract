@@ -2,6 +2,8 @@
 #[starknet::contract]
 mod StarkRemit {
     // Import necessary libraries and traits
+    use pragma_lib::abi::{IPragmaABIDispatcher, IPragmaABIDispatcherTrait};
+    use pragma_lib::types::{DataType, PragmaPricesResponse};
     use starknet::storage::{
         Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePathEntry,
         StoragePointerReadAccess, StoragePointerWriteAccess,
@@ -10,13 +12,13 @@ mod StarkRemit {
     use starkremit_contract::base::errors::{
         ERC20Errors, GroupErrors, KYCErrors, MintBurnErrors, RegistrationErrors, TransferErrors,
     };
+    use starkremit_contract::base::events::*;
     use starkremit_contract::base::types::{
         Agent, AgentStatus, KYCLevel, KycLevel, KycStatus, RegistrationRequest, RegistrationStatus,
         SavingsGroup, Transfer as TransferData, TransferHistory, TransferStatus, UserKycData,
         UserProfile,
     };
     use starkremit_contract::interfaces::{IERC20, IStarkRemit};
-
 
     // Fixed-point scaler for currency conversions (18 decimals)
     const FIXED_POINT_SCALER: u256 = 1_000_000_000_000_000_000;
@@ -89,323 +91,6 @@ mod StarkRemit {
         member: ContractAddress,
         amount: u256,
         contributed_at: u64,
-    }
-
-
-    //event
-
-    #[derive(Copy, Drop, starknet::Event)]
-    struct MemberAdded {
-        #[key]
-        address: ContractAddress,
-    }
-
-    #[derive(Copy, Drop, starknet::Event)]
-    struct ContributionMade {
-        #[key]
-        round_id: u256,
-        member: ContractAddress,
-        amount: u256,
-    }
-
-    #[derive(Copy, Drop, starknet::Event)]
-    struct RoundDisbursed {
-        #[key]
-        round_id: u256,
-        amount: u256,
-        recipient: ContractAddress,
-    }
-
-    #[derive(Copy, Drop, starknet::Event)]
-    struct RoundCompleted {
-        #[key]
-        round_id: u256,
-    }
-
-    #[derive(Copy, Drop, starknet::Event)]
-    struct ContributionMissed {
-        #[key]
-        round_id: u256,
-        member: ContractAddress,
-    }
-
-
-    // Standard ERC20 Transfer event
-    #[derive(Copy, Drop, starknet::Event)]
-    pub struct Transfer {
-        #[key]
-        from: ContractAddress, // Sender address
-        #[key]
-        to: ContractAddress, // Recipient address
-        value: u256 // Amount transferred
-    }
-
-    // Standard ERC20 Approval event
-    #[derive(Copy, Drop, starknet::Event)]
-    pub struct Approval {
-        #[key]
-        owner: ContractAddress, // Token owner
-        #[key]
-        spender: ContractAddress, // Approved spender
-        value: u256 // Approved amount
-    }
-
-    // Event emitted when a new currency is registered
-    #[derive(Copy, Drop, starknet::Event)]
-    pub struct CurrencyRegistered {
-        #[key]
-        currency: felt252, // Currency identifier
-        admin: ContractAddress // Admin who registered it
-    }
-
-    // Event emitted when exchange rate is updated
-    #[derive(Copy, Drop, starknet::Event)]
-    pub struct ExchangeRateUpdated {
-        #[key]
-        from_currency: felt252, // Source currency
-        #[key]
-        to_currency: felt252, // Target currency
-        rate: u256 // New exchange rate
-    }
-
-    // Event emitted when a token is converted between currencies
-    #[derive(Copy, Drop, starknet::Event)]
-    pub struct TokenConverted {
-        #[key]
-        user: ContractAddress, // User performing the conversion
-        from_currency: felt252, // Source currency
-        to_currency: felt252, // Target currency
-        amount_in: u256, // Input amount
-        amount_out: u256 // Output amount after conversion
-    }
-
-    // Event emitted when a new user is registered
-    #[derive(Copy, Drop, starknet::Event)]
-    pub struct UserRegistered {
-        #[key]
-        user_address: ContractAddress, // Registered user address
-        email_hash: felt252, // Email hash for privacy
-        preferred_currency: felt252, // User's preferred currency
-        registration_timestamp: u64 // Registration time
-    }
-
-    // Event emitted when user profile is updated
-    #[derive(Copy, Drop, starknet::Event)]
-    pub struct UserProfileUpdated {
-        #[key]
-        user_address: ContractAddress, // User address
-        updated_fields: felt252 // Indication of what was updated
-    }
-
-    // Event emitted when user is deactivated
-    #[derive(Copy, Drop, starknet::Event)]
-    pub struct UserDeactivated {
-        #[key]
-        user_address: ContractAddress, // Deactivated user address
-        admin: ContractAddress // Admin who performed the action
-    }
-
-    // Event emitted when user is reactivated
-    #[derive(Copy, Drop, starknet::Event)]
-    pub struct UserReactivated {
-        #[key]
-        user_address: ContractAddress, // Reactivated user address
-        admin: ContractAddress // Admin who performed the action
-    }
-
-    // Event emitted when user KYC level is updated
-    #[derive(Copy, Drop, starknet::Event)]
-    pub struct KYCLevelUpdated {
-        #[key]
-        user_address: ContractAddress, // User address
-        old_level: KYCLevel, // Previous KYC level
-        new_level: KYCLevel, // New KYC level
-        admin: ContractAddress // Admin who performed the update
-    }
-
-    #[derive(Copy, Drop, starknet::Event)]
-    pub struct KycStatusUpdated {
-        #[key]
-        user: ContractAddress,
-        old_status: KycStatus,
-        new_status: KycStatus,
-        old_level: KycLevel,
-        new_level: KycLevel,
-    }
-
-    #[derive(Copy, Drop, starknet::Event)]
-    pub struct KycEnforcementEnabled {
-        enabled: bool,
-        updated_by: ContractAddress,
-    }
-
-    // Transfer Administration Event Structs
-    #[derive(Copy, Drop, starknet::Event)]
-    pub struct TransferCreated {
-        #[key]
-        transfer_id: u256,
-        #[key]
-        sender: ContractAddress,
-        #[key]
-        recipient: ContractAddress,
-        amount: u256,
-        currency: felt252,
-        expires_at: u64,
-    }
-
-    #[derive(Copy, Drop, starknet::Event)]
-    pub struct TransferCancelled {
-        #[key]
-        transfer_id: u256,
-        #[key]
-        cancelled_by: ContractAddress,
-        timestamp: u64,
-        reason: felt252,
-    }
-
-    #[derive(Copy, Drop, starknet::Event)]
-    pub struct TransferCompleted {
-        #[key]
-        transfer_id: u256,
-        #[key]
-        completed_by: ContractAddress,
-        timestamp: u64,
-    }
-
-    #[derive(Copy, Drop, starknet::Event)]
-    pub struct TransferPartialCompleted {
-        #[key]
-        transfer_id: u256,
-        partial_amount: u256,
-        total_amount: u256,
-        timestamp: u64,
-    }
-
-    #[derive(Copy, Drop, starknet::Event)]
-    pub struct TransferExpired {
-        #[key]
-        transfer_id: u256,
-        timestamp: u64,
-    }
-
-    #[derive(Copy, Drop, starknet::Event)]
-    pub struct CashOutRequested {
-        #[key]
-        transfer_id: u256,
-        #[key]
-        requested_by: ContractAddress,
-        timestamp: u64,
-    }
-
-    #[derive(Copy, Drop, starknet::Event)]
-    pub struct CashOutCompleted {
-        #[key]
-        transfer_id: u256,
-        #[key]
-        agent: ContractAddress,
-        timestamp: u64,
-    }
-
-    #[derive(Copy, Drop, starknet::Event)]
-    pub struct AgentAssigned {
-        #[key]
-        transfer_id: u256,
-        #[key]
-        agent: ContractAddress,
-        #[key]
-        assigned_by: ContractAddress,
-        timestamp: u64,
-    }
-
-    #[derive(Copy, Drop, starknet::Event)]
-    pub struct AgentRegistered {
-        #[key]
-        agent_address: ContractAddress,
-        name: felt252,
-        commission_rate: u256,
-        registered_by: ContractAddress,
-        timestamp: u64,
-    }
-
-    #[derive(Copy, Drop, starknet::Event)]
-    pub struct AgentStatusUpdated {
-        #[key]
-        agent: ContractAddress,
-        old_status: AgentStatus,
-        new_status: AgentStatus,
-        updated_by: ContractAddress,
-        timestamp: u64,
-    }
-
-    #[derive(Copy, Drop, starknet::Event)]
-    pub struct TransferHistoryRecorded {
-        #[key]
-        transfer_id: u256,
-        action: felt252,
-        actor: ContractAddress,
-        timestamp: u64,
-    }
-
-    // Event emitted when a new group is created
-    #[derive(Copy, Drop, starknet::Event)]
-    pub struct GroupCreated {
-        #[key]
-        group_id: u64, // Unique group ID
-        creator: ContractAddress, // Address that created the group
-        max_members: u8 // Configured size limit
-    }
-
-    // Event emitted when a user joins a group
-    #[derive(Copy, Drop, starknet::Event)]
-    pub struct MemberJoined {
-        #[key]
-        group_id: u64, // Group being joined
-        #[key]
-        member: ContractAddress // Address that joined
-    }
-
-    // Event emitted when tokens are minted
-    #[derive(Copy, Drop, starknet::Event)]
-    pub struct Minted {
-        #[key]
-        minter: ContractAddress, // Address that performed the minting
-        #[key]
-        recipient: ContractAddress, // Address that received the minted tokens
-        amount: u256 // Amount of tokens minted
-    }
-
-    // Event emitted when tokens are burned
-    #[derive(Copy, Drop, starknet::Event)]
-    pub struct Burned {
-        #[key]
-        account: ContractAddress, // Address whose tokens were burned
-        amount: u256 // Amount of tokens burned
-    }
-
-    // Event emitted when a new minter is added
-    #[derive(Copy, Drop, starknet::Event)]
-    pub struct MinterAdded {
-        #[key]
-        account: ContractAddress, // Address added as a minter
-        #[key]
-        added_by: ContractAddress // Admin who added the minter
-    }
-
-    // Event emitted when a minter is removed
-    #[derive(Copy, Drop, starknet::Event)]
-    pub struct MinterRemoved {
-        #[key]
-        account: ContractAddress, // Address removed from minters
-        #[key]
-        removed_by: ContractAddress // Admin who removed the minter
-    }
-
-    // Event emitted when the maximum supply is updated
-    #[derive(Copy, Drop, starknet::Event)]
-    pub struct MaxSupplyUpdated {
-        new_max_supply: u256, // The new maximum supply
-        #[key]
-        updated_by: ContractAddress // Admin who updated the max supply
     }
 
 
@@ -497,7 +182,7 @@ mod StarkRemit {
         minters: Map<ContractAddress, bool> // Addresses authorized to mint tokens
     }
 
-    // Contract constructor
+    // Contract constructor pragma_contract
     // Initializes the token with basic ERC20 fields and multi-currency support
     #[constructor]
     fn constructor(
@@ -2100,11 +1785,15 @@ mod StarkRemit {
             let contribution = MemberContribution {
                 member: caller, amount, contributed_at: get_block_timestamp(),
             };
+            let contract_address = get_contract_address();
 
             self.member_contributions.write((round_id, caller), contribution);
             round.total_contributions += amount;
 
             self.rounds.write(round_id, round);
+
+            self.transfer_from(caller, contract_address, amount);
+
             self.emit(ContributionMade { round_id, member: caller, amount });
         }
 
@@ -2261,6 +1950,18 @@ mod StarkRemit {
 
             // Emit member joined event
             self.emit(MemberJoined { group_id, member: caller });
+        }
+
+        fn get_asset_price(self: @ContractState, asset_id: felt252) -> u128 {
+            // Retrieve the oracle dispatcher
+            let oracle_dispatcher = IPragmaABIDispatcher {
+                contract_address: self.oracle_address.read(),
+            };
+
+            let output: PragmaPricesResponse = oracle_dispatcher
+                .get_data_median(DataType::SpotEntry(asset_id));
+
+            return output.price;
         }
     }
 

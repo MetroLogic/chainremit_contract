@@ -24,6 +24,7 @@ const SYMBOL: felt252 = 'SRT';
 const INITIAL_SUPPLY: u256 = 1000000000000000000000000; // 1,000,000 tokens with 18 decimals
 const BASE_CURRENCY: felt252 = 'USD';
 const MAX_SUPPLY: u256 = 1_000_000_000 * 10_u256.pow(18); // 1B tokens with 18 decimals
+const ETH_USD: felt252 = 19514442401534788;
 
 // Helper function to create a contract address
 fn address(value: felt252) -> ContractAddress {
@@ -139,3 +140,12 @@ fn test_non_member_contribution() {
     stop_cheat_caller_address(contract_address);
 }
 
+#[test]
+fn test_get_asset_price_only() {
+    let (contract_address, admin_address) = setup();
+    let contract = IStarkRemitDispatcher { contract_address };
+
+    let eth_price = contract.get_asset_price(ETH_USD);
+    assert(eth_price > 0, 'Failed to get ETH price');
+    println!("ETH price: {}", eth_price);
+}

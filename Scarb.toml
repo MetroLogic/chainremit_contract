@@ -7,6 +7,8 @@ edition = "2024_07"
 
 [dependencies]
 starknet = "^2.8.4"
+pragma_lib = { git = "https://github.com/astraly-labs/pragma-lib" }
+
 
 [dev-dependencies]
 snforge_std = "0.39.0"
