@@ -66,6 +66,9 @@ pub mod RegistrationErrors {
 
     /// Error triggered when user is suspended
     pub const USER_SUSPENDED: felt252 = 'User account suspended';
+
+    /// Error triggered when user is not registered
+    pub const USER_NOT_REGISTERED: felt252 = 'User not registered';
 }
 
 pub mod KYCErrors {
@@ -181,6 +184,9 @@ pub mod TransferErrors {
 
     /// Error triggered when search parameters are invalid
     pub const INVALID_SEARCH_PARAMS: felt252 = 'Invalid search parameters';
+
+    /// Error triggered when agent is not assigned to transfer
+    pub const AGENT_NOT_ASSIGNED: felt252 = 'Agent not assigned';
 }
 
 pub mod GroupErrors {
@@ -189,6 +195,9 @@ pub mod GroupErrors {
 
     /// Error triggered when trying to join an inactive group
     pub const GROUP_INACTIVE: felt252 = 'GROUP: group is inactive';
+
+    /// Error triggered when trying to access an inactive group
+    pub const GROUP_NOT_ACTIVE: felt252 = 'GROUP: group is not active';
 
     /// Error triggered when trying to join a group twice
     pub const ALREADY_MEMBER: felt252 = 'GROUP: caller already a member';

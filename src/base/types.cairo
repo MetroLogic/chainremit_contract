@@ -4,8 +4,10 @@ use starknet::ContractAddress;
 /// User profile structure containing user information
 #[derive(Copy, Drop, Serde, starknet::Store)]
 pub struct UserProfile {
-    /// User's wallet address
+    /// User's contract address
     pub address: ContractAddress,
+    /// User's contract address (alias for compatibility)
+    pub user_address: ContractAddress,
     /// User's email hash for uniqueness verification
     pub email_hash: felt252,
     /// User's phone number hash for uniqueness verification
@@ -28,6 +30,7 @@ pub struct UserProfile {
 #[derive(Copy, Drop, Serde, starknet::Store)]
 pub enum KYCLevel {
     /// No verification
+    #[default]
     None,
     /// Basic verification (email/phone)
     Basic,
@@ -41,6 +44,7 @@ pub enum KYCLevel {
 #[derive(Copy, Drop, Serde, starknet::Store)]
 pub enum RegistrationStatus {
     /// Registration not started
+    #[default]
     NotStarted,
     /// Registration in progress
     InProgress,
@@ -147,13 +151,13 @@ pub struct Transfer {
 /// Transfer history entry for comprehensive tracking
 #[derive(Copy, Drop, Serde, starknet::Store)]
 pub struct TransferHistory {
-    /// Transfer ID this history belongs to
+    /// Transfer ID this history entry belongs to
     pub transfer_id: u256,
-    /// Action performed (created, updated, cancelled, etc.)
+    /// Action performed (created, completed, cancelled, etc.)
     pub action: felt252,
-    /// Who performed the action
+    /// Address that performed the action
     pub actor: ContractAddress,
-    /// Timestamp of the action
+    /// Timestamp when action was performed
     pub timestamp: u64,
     /// Previous status before this action
     pub previous_status: TransferStatus,
@@ -163,17 +167,16 @@ pub struct TransferHistory {
     pub details: felt252,
 }
 
-/// Agent status for managing cash-out agents
+/// Agent status for tracking agent availability
 #[derive(Copy, Drop, Serde, starknet::Store, PartialEq)]
 pub enum AgentStatus {
     #[default]
     Active,
     Inactive,
     Suspended,
-    Terminated,
 }
 
-/// Agent data structure for cash-out operations
+/// Agent data structure for managing cash-out agents
 #[derive(Copy, Drop, Serde, starknet::Store)]
 pub struct Agent {
     /// Agent's address
@@ -182,44 +185,71 @@ pub struct Agent {
     pub name: felt252,
     /// Current status of the agent
     pub status: AgentStatus,
-    /// Primary currency this agent handles
+    /// Primary currency the agent handles
     pub primary_currency: felt252,
-    /// Secondary currency this agent handles (0 if none)
+    /// Secondary currency the agent handles (optional)
     pub secondary_currency: felt252,
-    /// Primary region this agent covers
+    /// Primary region the agent operates in
     pub primary_region: felt252,
-    /// Secondary region this agent covers (0 if none)
+    /// Secondary region the agent operates in (optional)
     pub secondary_region: felt252,
-    /// Commission rate (as percentage in basis points)
+    /// Commission rate (in basis points, e.g., 100 = 1%)
     pub commission_rate: u256,
-    /// Total completed transactions
+    /// Number of completed transactions
     pub completed_transactions: u256,
-    /// Total volume handled
+    /// Total volume handled by the agent
     pub total_volume: u256,
-    /// Registration timestamp
+    /// Timestamp when agent was registered
     pub registered_at: u64,
-    /// Last activity timestamp
+    /// Timestamp of last activity
     pub last_active: u64,
-    /// Agent's rating (0-1000)
+    /// Agent rating (0-1000, where 1000 is perfect)
     pub rating: u256,
 }
 
-// Struct for a member's contribution
-#[derive(Copy, Drop, Serde, PartialEq, starknet::Store)]
+/// Contribution round data structure
+#[derive(Copy, Drop, Serde, starknet::Store)]
+pub struct ContributionRound {
+    /// Unique round ID
+    pub round_id: u256,
+    /// Recipient for this round
+    pub recipient: ContractAddress,
+    /// Deadline for contributions
+    pub deadline: u64,
+    /// Total contributions collected
+    pub total_contributions: u256,
+    /// Current status of the round
+    pub status: RoundStatus,
+}
+
+/// Member contribution data
+#[derive(Copy, Drop, Serde, starknet::Store)]
 pub struct MemberContribution {
+    /// Member who made the contribution
     pub member: ContractAddress,
+    /// Amount contributed
     pub amount: u256,
+    /// Timestamp when contribution was made
     pub contributed_at: u64,
 }
 
-// Savings group record
-#[derive(Copy, Drop, starknet::Store)]
+/// Savings group data structure
+#[derive(Copy, Drop, Serde, starknet::Store)]
 pub struct SavingsGroup {
-    pub id: u64, // Group identifier
-    pub creator: ContractAddress, // Group creator
-    pub max_members: u8, // Maximum number of members
-    pub member_count: u8, // Current number of members
-    pub is_active: bool // Group active status
+    /// Unique group ID
+    pub id: u64,
+    /// Address that created the group
+    pub creator: ContractAddress,
+    /// Maximum number of members allowed
+    pub max_members: u8,
+    /// Current member count
+    pub member_count: u32,
+    /// Total savings in the group
+    pub total_savings: u256,
+    /// Timestamp when group was created
+    pub created_at: u64,
+    /// Whether the group is active
+    pub is_active: bool,
 }
 
 
@@ -228,16 +258,10 @@ pub struct SavingsGroup {
 pub enum RoundStatus {
     Active,
     Completed,
+    Cancelled,
 }
-
 // Struct for a contribution round
-#[derive(Copy, Drop, Serde, PartialEq, starknet::Store)]
-pub struct ContributionRound {
-    pub round_id: u256,
-    pub total_contributions: u256,
-    pub status: RoundStatus,
-    pub deadline: u64,
-}
+
 // Struct for a member's contribution
 
 
