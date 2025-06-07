@@ -8,15 +8,18 @@ use starknet::storage::{
     Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePathEntry, StoragePointerReadAccess,
     StoragePointerWriteAccess,
 };
-use starknet::{ContractAddress, get_block_timestamp, get_caller_address, get_contract_address};
+use starknet::{
+    ContractAddress, contract_address_const, get_block_timestamp, get_caller_address,
+    get_contract_address,
+};
 use starkremit_contract::base::errors::{
     ERC20Errors, GroupErrors, KYCErrors, MintBurnErrors, RegistrationErrors, TransferErrors,
 };
 use starkremit_contract::base::events::*;
 use starkremit_contract::base::types::{
-    Agent, AgentStatus, ContributionRound, KYCLevel, KycLevel, KycStatus, MemberContribution,
-    RegistrationRequest, RegistrationStatus, RoundStatus, SavingsGroup, TransferData,
-    TransferHistory, TransferStatus, UserKycData, UserProfile,
+    Agent, AgentStatus, ContributionRound, KYCLevel, KycLevel, KycStatus, LoanRequest, LoanStatus,
+    MemberContribution, RegistrationRequest, RegistrationStatus, RoundStatus, SavingsGroup,
+    TransferData, TransferHistory, TransferStatus, UserKycData, UserProfile,
 };
 use starkremit_contract::interfaces::{IERC20, IStarkRemit};
 
@@ -89,27 +92,7 @@ pub mod StarkRemit {
         MaxSupplyUpdated: MaxSupplyUpdated,
         LoanRequested: LoanRequested,
     }
-    #[derive(Copy, Drop, starknet::Event)]
-    struct LoanRequested {
-        id: u256,
-        requester: ContractAddress,
-        amount: u256,
-        created_at: u64,
-    }
 
-    #[derive(Copy, Drop, starknet::Event)]
-    struct LoanApproved {
-        id: u256,
-        auth: ContractAddress,
-        created_at: u64,
-    }
-
-    #[derive(Copy, Drop, starknet::Event)]
-    struct LoanReject {
-        id: u256,
-        auth: ContractAddress,
-        created_at: u64,
-    }
 
     // Contract storage definition
     #[storage]
@@ -262,10 +245,10 @@ pub mod StarkRemit {
             // }
 
             // Validate registration data
-            assert(
-                self.validate_registration_data(registration_data),
-                RegistrationErrors::INCOMPLETE_DATA,
-            );
+            // assert(
+            //     self.validate_registration_data(registration_data),
+            //     RegistrationErrors::INCOMPLETE_DATA,
+            // );
 
             // Check for duplicate email
             let existing_email_user = self.email_registry.read(registration_data.email_hash);
@@ -1663,27 +1646,7 @@ pub mod StarkRemit {
             assert(group.is_active, GroupErrors::GROUP_NOT_ACTIVE);
             assert(!self.group_members.read((group_id, caller)), GroupErrors::ALREADY_MEMBER);
 
-            let group = self.groups.entry(group_id).read();
-
-            // Group must be active
-            assert(group.is_active, GroupErrors::GROUP_INACTIVE);
-
-            // Caller must not already be a member
-            assert(
-                !self.group_members.entry((group_id, caller)).read(), GroupErrors::ALREADY_MEMBER,
-            );
-
-            // Group must not be full
-            assert(group.member_count < group.max_members, GroupErrors::GROUP_FULL);
-
-            // Update number of members in the group
-            self.groups.entry(group_id).member_count.write(group.member_count + 1);
-
-            // Mark caller as member of the group
             self.group_members.write((group_id, caller), true);
-
-            // Emit member joined event
-            self.emit(MemberJoined { group_id, member: caller });
         }
 
         fn requestLoan(ref self: ContractState, requester: ContractAddress, amount: u256) -> u256 {

@@ -265,8 +265,6 @@ pub enum RoundStatus {
 
 // Struct for a member's contribution
 
-
-
 #[derive(PartialEq, Copy, Drop, Serde, starknet::Store)]
 pub enum LoanStatus {
     Pending,

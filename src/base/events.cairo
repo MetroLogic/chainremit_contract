@@ -314,3 +314,25 @@ pub struct MaxSupplyUpdated {
     #[key]
     pub updated_by: ContractAddress // Admin who updated the max supply
 }
+
+#[derive(Copy, Drop, starknet::Event)]
+pub struct LoanRequested {
+    pub id: u256,
+    pub requester: ContractAddress,
+    pub amount: u256,
+    pub created_at: u64,
+}
+
+#[derive(Copy, Drop, starknet::Event)]
+pub struct LoanApproved {
+    pub id: u256,
+    pub auth: ContractAddress,
+    pub created_at: u64,
+}
+
+#[derive(Copy, Drop, starknet::Event)]
+pub struct LoanReject {
+    pub id: u256,
+    pub auth: ContractAddress,
+    pub created_at: u64,
+}
