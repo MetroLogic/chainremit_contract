@@ -213,6 +213,7 @@ pub trait IStarkRemit<TContractState> {
 
     fn join_group(ref self: TContractState, group_id: u64);
 
+
     //loan request
     fn requestLoan(ref self: TContractState, requester: ContractAddress, amount: u256) -> u256;
 
@@ -232,4 +233,5 @@ pub trait IStarkRemit<TContractState> {
     fn get_user_active_Loan(self: @TContractState, user: ContractAddress) -> bool;
     // check if user has an active loan request
     fn has_active_loan_request(self: @TContractState, user: ContractAddress) -> bool;
+
 }
