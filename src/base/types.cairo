@@ -15,7 +15,7 @@ pub struct UserProfile {
     /// User's full name
     pub full_name: felt252,
     /// User's preferred currency
-    pub preferred_currency: felt252,
+    // pub preferred_currency: felt252,
     /// KYC verification level
     pub kyc_level: KYCLevel,
     /// Registration timestamp
@@ -66,7 +66,7 @@ pub struct RegistrationRequest {
     /// User's full name
     pub full_name: felt252,
     /// User's preferred currency
-    pub preferred_currency: felt252,
+    // pub preferred_currency: felt252,
     /// User's country code
     pub country_code: felt252,
 }
@@ -131,8 +131,6 @@ pub struct TransferData {
     pub recipient: ContractAddress,
     /// Transfer amount
     pub amount: u256,
-    /// Currency of the transfer
-    pub currency: felt252,
     /// Current status of the transfer
     pub status: TransferStatus,
     /// Timestamp when transfer was created
@@ -187,9 +185,9 @@ pub struct Agent {
     /// Current status of the agent
     pub status: AgentStatus,
     /// Primary currency the agent handles
-    pub primary_currency: felt252,
-    /// Secondary currency the agent handles (optional)
-    pub secondary_currency: felt252,
+    // pub primary_currency: felt252,
+    // /// Secondary currency the agent handles (optional)
+    // pub secondary_currency: felt252,
     /// Primary region the agent operates in
     pub primary_region: felt252,
     /// Secondary region the agent operates in (optional)
@@ -265,4 +263,18 @@ pub enum RoundStatus {
 
 // Struct for a member's contribution
 
+#[derive(PartialEq, Copy, Drop, Serde, starknet::Store)]
+pub enum LoanStatus {
+    Pending,
+    Approved,
+    Reject,
+}
 
+#[derive(Copy, Drop, Serde, starknet::Store)]
+pub struct LoanRequest {
+    pub id: u256,
+    pub requester: ContractAddress,
+    pub amount: u256,
+    pub status: LoanStatus,
+    pub created_at: u64,
+}

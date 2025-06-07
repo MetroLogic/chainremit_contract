@@ -69,7 +69,6 @@ pub trait IStarkRemit<TContractState> {
         ref self: TContractState,
         recipient: ContractAddress,
         amount: u256,
-        currency: felt252,
         expires_at: u64,
         metadata: felt252,
     ) -> u256;
@@ -79,7 +78,7 @@ pub trait IStarkRemit<TContractState> {
         ref self: TContractState,
         recipient: ContractAddress,
         amount: u256,
-        currency: felt252,
+        // currency: felt252,
         expires_at: u64,
         metadata: felt252,
     ) -> u256;
@@ -136,8 +135,8 @@ pub trait IStarkRemit<TContractState> {
         ref self: TContractState,
         agent_address: ContractAddress,
         name: felt252,
-        primary_currency: felt252,
-        secondary_currency: felt252,
+        // primary_currency: felt252,
+        // secondary_currency: felt252,
         primary_region: felt252,
         secondary_region: felt252,
         commission_rate: u256,
@@ -213,4 +212,25 @@ pub trait IStarkRemit<TContractState> {
     fn create_group(ref self: TContractState, max_members: u8) -> u64;
 
     fn join_group(ref self: TContractState, group_id: u64);
+
+
+    //loan request
+    fn requestLoan(ref self: TContractState, requester: ContractAddress, amount: u256) -> u256;
+
+    // approve a loan
+    fn approveLoan(ref self: TContractState, loan_id: u256) -> u256;
+
+    // reject a loan
+    fn rejectLoan(ref self: TContractState, loan_id: u256) -> u256;
+
+    // Get loan request details
+    fn getLoan(self: @TContractState, loan_id: u256) -> LoanRequest;
+
+    // get loan count
+    fn get_loan_count(self: @TContractState) -> u256;
+
+    // if user has an active loan
+    fn get_user_active_Loan(self: @TContractState, user: ContractAddress) -> bool;
+    // check if user has an active loan request
+    fn has_active_loan_request(self: @TContractState, user: ContractAddress) -> bool;
 }

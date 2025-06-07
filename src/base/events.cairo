@@ -92,7 +92,7 @@ pub struct UserRegistered {
     #[key]
     pub user_address: ContractAddress, // Registered user address
     pub email_hash: felt252, // Email hash for privacy
-    pub preferred_currency: felt252, // User's preferred currency
+    // pub preferred_currency: felt252, // User's preferred currency
     pub registration_timestamp: u64 // Registration time
 }
 
@@ -156,7 +156,6 @@ pub struct TransferCreated {
     #[key]
     pub recipient: ContractAddress,
     pub amount: u256,
-    pub currency: felt252,
     pub expires_at: u64,
 }
 
@@ -313,4 +312,26 @@ pub struct MaxSupplyUpdated {
     pub new_max_supply: u256, // The new maximum supply
     #[key]
     pub updated_by: ContractAddress // Admin who updated the max supply
+}
+
+#[derive(Copy, Drop, starknet::Event)]
+pub struct LoanRequested {
+    pub id: u256,
+    pub requester: ContractAddress,
+    pub amount: u256,
+    pub created_at: u64,
+}
+
+#[derive(Copy, Drop, starknet::Event)]
+pub struct LoanApproved {
+    pub id: u256,
+    pub auth: ContractAddress,
+    pub created_at: u64,
+}
+
+#[derive(Copy, Drop, starknet::Event)]
+pub struct LoanReject {
+    pub id: u256,
+    pub auth: ContractAddress,
+    pub created_at: u64,
 }

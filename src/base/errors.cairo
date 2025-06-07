@@ -45,7 +45,7 @@ pub mod RegistrationErrors {
     pub const INVALID_COUNTRY_CODE: felt252 = 'Invalid country code';
 
     /// Error triggered when preferred currency is not supported
-    pub const UNSUPPORTED_CURRENCY: felt252 = 'Unsupported currency';
+    // pub const UNSUPPORTED_CURRENCY: felt252 = 'Unsupported currency';
 
     /// Error triggered when user is not found
     pub const USER_NOT_FOUND: felt252 = 'User not found';
@@ -162,7 +162,7 @@ pub mod TransferErrors {
     pub const INVALID_TRANSFER_AMOUNT: felt252 = 'Invalid transfer amount';
 
     /// Error triggered when transfer currency is not supported
-    pub const UNSUPPORTED_CURRENCY: felt252 = 'Unsupported currency';
+    // pub const UNSUPPORTED_CURRENCY: felt252 = 'Unsupported currency';
 
     /// Error triggered when partial amount exceeds total amount
     pub const PARTIAL_AMOUNT_EXCEEDS: felt252 = 'Partial exceeds total';
