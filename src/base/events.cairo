@@ -92,7 +92,7 @@ pub struct UserRegistered {
     #[key]
     pub user_address: ContractAddress, // Registered user address
     pub email_hash: felt252, // Email hash for privacy
-    pub preferred_currency: felt252, // User's preferred currency
+    // pub preferred_currency: felt252, // User's preferred currency
     pub registration_timestamp: u64 // Registration time
 }
 
@@ -156,7 +156,6 @@ pub struct TransferCreated {
     #[key]
     pub recipient: ContractAddress,
     pub amount: u256,
-    pub currency: felt252,
     pub expires_at: u64,
 }
 

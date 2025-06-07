@@ -53,7 +53,6 @@ pub mod StarkRemit {
         UpgradeableEvent: UpgradeableComponent::Event,
         Transfer: Transfer, // Standard ERC20 transfer event
         Approval: Approval, // Standard ERC20 approval event
-        CurrencyRegistered: CurrencyRegistered, // Event for currency registration
         ExchangeRateUpdated: ExchangeRateUpdated, // Event for exchange rate updates
         TokenConverted: TokenConverted, // Event for token conversions
         UserRegistered: UserRegistered, // Event for user registration
@@ -114,9 +113,6 @@ pub mod StarkRemit {
         total_supply: u256, // Total token supply
         balances: Map<ContractAddress, u256>, // User token balances
         allowances: Map<(ContractAddress, ContractAddress), u256>, // Spending allowances
-        // Multi-currency support storage
-        currency_balances: Map<(ContractAddress, felt252), u256>, // User balances by currency
-        supported_currencies: Map<felt252, bool>, // Registered currencies
         // User registration storage
         user_profiles: Map<ContractAddress, UserProfile>, // User profile data
         email_registry: Map<
@@ -228,10 +224,10 @@ pub mod StarkRemit {
             let caller = get_caller_address();
 
             // Validate caller is not zero address
-            assert(caller.is_zero(), RegistrationErrors::ZERO_ADDRESS);
+            assert(!caller.is_zero(), RegistrationErrors::ZERO_ADDRESS);
 
             // Check if registration is enabled
-            assert(self.registration_enabled.read(), 'Registration disabled');
+            //assert(self.registration_enabled.read(), 'Registration disabled');
 
             // Check if user is already registered
 
@@ -258,12 +254,6 @@ pub mod StarkRemit {
             let existing_phone_user = self.phone_registry.read(registration_data.phone_hash);
             assert(existing_phone_user.is_zero(), RegistrationErrors::PHONE_ALREADY_EXISTS);
 
-            // Check if preferred currency is supported
-            assert(
-                self.supported_currencies.read(registration_data.preferred_currency),
-                RegistrationErrors::UNSUPPORTED_CURRENCY,
-            );
-
             // Set registration status to in progress
             self.registration_status.write(caller, RegistrationStatus::InProgress);
 
@@ -275,7 +265,6 @@ pub mod StarkRemit {
                 email_hash: registration_data.email_hash,
                 phone_hash: registration_data.phone_hash,
                 full_name: registration_data.full_name,
-                preferred_currency: registration_data.preferred_currency,
                 kyc_level: KYCLevel::None,
                 registration_timestamp: current_timestamp,
                 is_active: true,
@@ -302,7 +291,6 @@ pub mod StarkRemit {
                     UserRegistered {
                         user_address: caller,
                         email_hash: registration_data.email_hash,
-                        preferred_currency: registration_data.preferred_currency,
                         registration_timestamp: current_timestamp,
                     },
                 );
@@ -366,12 +354,6 @@ pub mod StarkRemit {
                 self.phone_registry.write(current_profile.phone_hash, zero_address);
                 self.phone_registry.write(updated_profile.phone_hash, caller);
             }
-
-            // Check if new preferred currency is supported
-            assert(
-                self.supported_currencies.read(updated_profile.preferred_currency),
-                RegistrationErrors::UNSUPPORTED_CURRENCY,
-            );
 
             // Store updated profile
             self.user_profiles.write(caller, updated_profile);
@@ -628,7 +610,6 @@ pub mod StarkRemit {
             ref self: ContractState,
             recipient: ContractAddress,
             amount: u256,
-            currency: felt252,
             expires_at: u64,
             metadata: felt252,
         ) -> u256 {
@@ -644,7 +625,6 @@ pub mod StarkRemit {
             assert(
                 expires_at <= current_time + 86400 * 30, 'Expiry too far in future',
             ); // Max 30 days
-            assert(self.supported_currencies.read(currency), TransferErrors::UNSUPPORTED_CURRENCY);
 
             // Enhanced user validation
             assert(self.is_user_registered(caller), 'Sender not registered');
@@ -671,13 +651,11 @@ pub mod StarkRemit {
                 }
             }
 
-            // Enhanced balance validation with slippage protection for currency conversion
-            let sender_balance = self.currency_balances.read((caller, currency));
-            assert(sender_balance >= amount, ERC20Errors::INSUFFICIENT_BALANCE);
+            // assert(sender_balance >= amount, ERC20Errors::INSUFFICIENT_BALANCE);
 
             // Check for sufficient balance with buffer (2% minimum remaining balance for fees)
-            let min_remaining = amount / 50; // 2% buffer
-            assert(sender_balance >= amount + min_remaining, 'Insufficient balance buffer');
+            // let min_remaining = amount / 50; // 2% buffer
+            // assert(sender_balance >= amount + min_remaining, 'Insufficient balance buffer');
 
             // Generate transfer ID with enhanced security
             let transfer_id = self.next_transfer_id.read();
@@ -689,7 +667,6 @@ pub mod StarkRemit {
                 sender: caller,
                 recipient,
                 amount,
-                currency,
                 status: TransferStatus::Pending,
                 created_at: current_time,
                 updated_at: current_time,
@@ -728,9 +705,6 @@ pub mod StarkRemit {
                 'Transfer initiated',
             );
 
-            // Reserve funds with enhanced tracking
-            self.currency_balances.write((caller, currency), sender_balance - amount);
-
             // Record usage for KYC limits with enhanced tracking
             if self.kyc_enforcement_enabled.read() {
                 InternalFunctions::_record_daily_usage(ref self, caller, amount);
@@ -739,9 +713,7 @@ pub mod StarkRemit {
             // Emit enhanced event
             self
                 .emit(
-                    TransferCreated {
-                        transfer_id, sender: caller, recipient, amount, currency, expires_at,
-                    },
+                    TransferCreated { transfer_id, sender: caller, recipient, amount, expires_at },
                 );
 
             transfer_id
@@ -752,7 +724,7 @@ pub mod StarkRemit {
             ref self: ContractState,
             recipient: ContractAddress,
             amount: u256,
-            currency: felt252,
+            // currency: felt252,
             expires_at: u64,
             metadata: felt252,
         ) -> u256 {
@@ -764,7 +736,6 @@ pub mod StarkRemit {
             assert(recipient != zero_address, TransferErrors::INVALID_TRANSFER_AMOUNT);
             assert(amount > 0, TransferErrors::INVALID_TRANSFER_AMOUNT);
             assert(expires_at > current_time, 'Expiry must be in future');
-            assert(self.supported_currencies.read(currency), TransferErrors::UNSUPPORTED_CURRENCY);
 
             // Validate KYC if enforcement is enabled
             if self.kyc_enforcement_enabled.read() {
@@ -773,8 +744,8 @@ pub mod StarkRemit {
             }
 
             // Check sender has sufficient balance
-            let sender_balance = self.currency_balances.read((caller, currency));
-            assert(sender_balance >= amount, ERC20Errors::INSUFFICIENT_BALANCE);
+
+            // assert(sender_balance >= amount, ERC20Errors::INSUFFICIENT_BALANCE);
 
             // Generate transfer ID
             let transfer_id = self.next_transfer_id.read();
@@ -786,7 +757,6 @@ pub mod StarkRemit {
                 sender: caller,
                 recipient,
                 amount,
-                currency,
                 status: TransferStatus::Pending,
                 created_at: current_time,
                 updated_at: current_time,
@@ -822,16 +792,10 @@ pub mod StarkRemit {
                 TransferStatus::Pending,
                 'Transfer created',
             );
-
-            // Reserve funds
-            self.currency_balances.write((caller, currency), sender_balance - amount);
-
             // Emit event
             self
                 .emit(
-                    TransferCreated {
-                        transfer_id, sender: caller, recipient, amount, currency, expires_at,
-                    },
+                    TransferCreated { transfer_id, sender: caller, recipient, amount, expires_at },
                 );
 
             transfer_id
@@ -856,12 +820,6 @@ pub mod StarkRemit {
             transfer.status = TransferStatus::Cancelled;
             transfer.updated_at = current_time;
             self.transfers.write(transfer_id, transfer);
-
-            // Refund the sender
-            let sender_balance = self.currency_balances.read((transfer.sender, transfer.currency));
-            self
-                .currency_balances
-                .write((transfer.sender, transfer.currency), sender_balance + transfer.amount);
 
             // Update statistics
             let cancelled_count = self.total_cancelled_transfers.read();
@@ -920,15 +878,16 @@ pub mod StarkRemit {
             self.transfers.write(transfer_id, transfer);
 
             // Transfer funds to recipient
-            let recipient_balance = self
-                .currency_balances
-                .read((transfer.recipient, transfer.currency));
-            let amount_to_transfer = transfer.amount - transfer.partial_amount;
-            self
-                .currency_balances
-                .write(
-                    (transfer.recipient, transfer.currency), recipient_balance + amount_to_transfer,
-                );
+            // let recipient_balance = self
+            //     .currency_balances
+            //     .read((transfer.recipient, transfer.currency));
+            // let amount_to_transfer = transfer.amount - transfer.partial_amount;
+            // self
+            //     .currency_balances
+            //     .write(
+            //         (transfer.recipient, transfer.currency), recipient_balance +
+            //         amount_to_transfer,
+            //     );
 
             // Update statistics
             let completed_count = self.total_completed_transfers.read();
@@ -1010,12 +969,13 @@ pub mod StarkRemit {
             self.transfers.write(transfer_id, transfer);
 
             // Transfer funds to recipient
-            let recipient_balance = self
-                .currency_balances
-                .read((transfer.recipient, transfer.currency));
-            self
-                .currency_balances
-                .write((transfer.recipient, transfer.currency), recipient_balance + partial_amount);
+            // let recipient_balance = self
+            //     .currency_balances
+            //     .read((transfer.recipient, transfer.currency));
+            // self
+            //     .currency_balances
+            //     .write((transfer.recipient, transfer.currency), recipient_balance +
+            //     partial_amount);
 
             // Record history
             InternalFunctions::_record_transfer_history(
@@ -1271,8 +1231,8 @@ pub mod StarkRemit {
             ref self: ContractState,
             agent_address: ContractAddress,
             name: felt252,
-            primary_currency: felt252,
-            secondary_currency: felt252,
+            // primary_currency: felt252,
+            // secondary_currency: felt252,
             primary_region: felt252,
             secondary_region: felt252,
             commission_rate: u256,
@@ -1289,8 +1249,8 @@ pub mod StarkRemit {
                 agent_address,
                 name,
                 status: AgentStatus::Active,
-                primary_currency,
-                secondary_currency,
+                // primary_currency,
+                // secondary_currency,
                 primary_region,
                 secondary_region,
                 commission_rate,
@@ -1650,7 +1610,10 @@ pub mod StarkRemit {
         }
 
         fn requestLoan(ref self: ContractState, requester: ContractAddress, amount: u256) -> u256 {
-            assert(requester != contract_address_const::<0>(), 'Zero address forbidden');
+            let caller = get_caller_address();
+
+            // Validate caller is not zero address
+            assert(!caller.is_zero(), RegistrationErrors::ZERO_ADDRESS);
             // assert(self.is_user_registered(requester), RegistrationErrors::USER_NOT_FOUND);
             // assert(self.is_kyc_valid(requester), KYCErrors::INVALID_KYC_STATUS);
             assert(amount > 0, 'loan amount is zero');
@@ -1698,7 +1661,7 @@ pub mod StarkRemit {
             // Ensure only the admin can approve a loan
             let caller = get_caller_address();
             let created_at = get_block_timestamp();
-            assert(caller == self.admin.read(), 'Zero address forbidden');
+            assert(caller == self.owner.read(), 'caller is not owner');
 
             let loan = self.loans.entry(loan_id).read();
             assert(self.loan_request.entry(loan.requester).read(), 'no loan request');
@@ -1736,11 +1699,11 @@ pub mod StarkRemit {
         fn rejectLoan(ref self: ContractState, loan_id: u256) -> u256 {
             // Ensure only the admin can approve a loan
             let caller = get_caller_address();
-            assert(caller == self.admin.read(), 'Zero address forbidden');
+            assert(caller == self.owner.read(), 'caller is not owner');
             let created_at = get_block_timestamp();
             let loan = self.loans.entry(loan_id).read();
-            assert(self.loan_request.entry(loan.requester).read(), 'no loan request');
-            assert(loan.status == LoanStatus::Pending, 'loan request is not pending');
+            // assert(self.loan_request.entry(loan.requester).read(), 'no loan request');
+            // assert(loan.status == LoanStatus::Pending, 'loan request is not pending');
 
             let loan = LoanRequest {
                 id: loan.id,

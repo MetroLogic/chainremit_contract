@@ -1,65 +1,100 @@
-use core::array::ArrayTrait;
-use core::num::traits::Pow;
+// // Test constants
+const ADMIN: felt252 = 'admin';
 use core::result::ResultTrait;
-use core::traits::TryInto;
+
+// OZ imports
+use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
+
+// snforge imports
 use snforge_std::{
-    ContractClassTrait, DeclareResultTrait, declare, start_cheat_caller_address,
-    stop_cheat_caller_address,
+    ContractClassTrait, DeclareResultTrait, EventSpyAssertionsTrait, declare, spy_events,
+    start_cheat_block_timestamp, start_cheat_caller_address, start_cheat_caller_address_global,
+    stop_cheat_caller_address, stop_cheat_caller_address_global,
 };
+
+// starknet imports
 use starknet::{ContractAddress, contract_address_const, get_contract_address};
-use starkremit_contract::base::types::{LoanStatus, RegistrationRequest};
+
+// starkremit imports
+use starkremit_contract::base::errors::*;
+use starkremit_contract::base::events::*;
+use starkremit_contract::base::types::*;
+use starkremit_contract::interfaces::IERC20::{
+    IERC20MintableDispatcher, IERC20MintableDispatcherTrait,
+};
 use starkremit_contract::interfaces::IStarkRemit::{
     IStarkRemitDispatcher, IStarkRemitDispatcherTrait,
 };
 
-// Test constants
-const ADMIN: felt252 = 'admin';
-const MEMBER1: felt252 = 'member1';
-const MEMBER2: felt252 = 'member2';
-const MEMBER3: felt252 = 'member3';
-const NON_MEMBER: felt252 = 'non_member';
-const CONTRIBUTION_AMOUNT: u256 = 100;
-const DEADLINE: u64 = 1000;
-const NAME: felt252 = 'StarkRemit Token';
-const SYMBOL: felt252 = 'SRT';
-const INITIAL_SUPPLY: u256 = 1000000000000000000000000; // 1,000,000 tokens with 18 decimals
-const BASE_CURRENCY: felt252 = 'USD';
-const MAX_SUPPLY: u256 = 1_000_000_000 * 10_u256.pow(18); // 1B tokens with 18 decimals
 
-fn address(value: felt252) -> ContractAddress {
-    value.try_into().unwrap()
+pub fn OWNER() -> ContractAddress {
+    contract_address_const::<'OWNER'>()
 }
-fn setup() -> (ContractAddress, ContractAddress) {
-    let admin_address: ContractAddress = address(ADMIN);
-    let oracle_address: ContractAddress = address('oracle');
+pub fn TOKEN_ADDRESS() -> ContractAddress {
+    contract_address_const::<'TOKEN_ADDRESS'>()
+}
 
-    let declare_result = declare("StarkRemit");
-    assert(declare_result.is_ok(), 'Contract declaration failed');
+pub fn ORACLE_ADDRESS() -> ContractAddress {
+    contract_address_const::<0x2a85bd616f912537c50a49a4076db02c00b29b2cdc8a197ce92ed1837fa875b>()
+}
 
-    let contract_class = declare_result.unwrap().contract_class();
+pub fn USER() -> ContractAddress {
+    contract_address_const::<'USER'>()
+}
 
-    let mut calldata = ArrayTrait::new();
-    calldata.append(admin_address.into());
-    calldata.append(NAME);
-    calldata.append(SYMBOL);
-    calldata.append(INITIAL_SUPPLY.low.into());
-    calldata.append(INITIAL_SUPPLY.high.into());
-    calldata.append(MAX_SUPPLY.low.into());
-    calldata.append(MAX_SUPPLY.high.into());
-    calldata.append(BASE_CURRENCY);
-    calldata.append(oracle_address.into());
+fn __setup__() -> (ContractAddress, IStarkRemitDispatcher, IERC20Dispatcher) {
+    let strk_token_name: ByteArray = "STARKNET_TOKEN";
 
-    let (contract_address, _) = contract_class.deploy(@calldata).unwrap();
+    let strk_token_symbol: ByteArray = "STRK";
 
-    (contract_address, admin_address)
+    let decimals: u8 = 18;
+
+    let erc20_class_hash = declare("ERC20Upgradeable").unwrap().contract_class();
+    let mut strk_constructor_calldata = array![];
+    strk_token_name.serialize(ref strk_constructor_calldata);
+    strk_token_symbol.serialize(ref strk_constructor_calldata);
+    decimals.serialize(ref strk_constructor_calldata);
+    OWNER().serialize(ref strk_constructor_calldata);
+
+    let (strk_contract_address, _) = erc20_class_hash.deploy(@strk_constructor_calldata).unwrap();
+
+    let strk_mintable_dispatcher = IERC20MintableDispatcher {
+        contract_address: strk_contract_address,
+    };
+    start_cheat_caller_address_global(OWNER());
+    strk_mintable_dispatcher.mint(USER(), 1_000_000_000_000_000_000);
+    stop_cheat_caller_address_global();
+
+    let ierc20_dispatcher = IERC20Dispatcher { contract_address: strk_contract_address };
+
+    let (starkremit_contract_address, starkremit_dispatcher) = deploy_starkremit_contract();
+    // let admin_address: ContractAddress = address(ADMIN);
+    return (starkremit_contract_address, starkremit_dispatcher, ierc20_dispatcher);
+}
+
+
+fn deploy_starkremit_contract() -> (ContractAddress, IStarkRemitDispatcher) {
+    let starkremit_class_hash = declare("StarkRemit").unwrap().contract_class();
+    let mut starkremit_constructor_calldata = array![];
+    OWNER().serialize(ref starkremit_constructor_calldata);
+    ORACLE_ADDRESS().serialize(ref starkremit_constructor_calldata);
+    TOKEN_ADDRESS().serialize(ref starkremit_constructor_calldata);
+    let (starkremit_contract_address, _) = starkremit_class_hash
+        .deploy(@starkremit_constructor_calldata)
+        .unwrap();
+
+    let starkremit_dispatcher = IStarkRemitDispatcher {
+        contract_address: starkremit_contract_address,
+    };
+
+    (starkremit_contract_address, starkremit_dispatcher)
 }
 
 #[test]
 fn test_loan_request() {
     // Setup
-    let (contract_address, admin_address) = setup();
-    let contract = IStarkRemitDispatcher { contract_address };
-
+    let (contract_address, contract, _) = __setup__();
+    let admin_address = USER();
     start_cheat_caller_address(contract_address, admin_address);
     let caller = get_contract_address();
     // register user struct
@@ -67,7 +102,6 @@ fn test_loan_request() {
         email_hash: 'kate@gmail.com',
         phone_hash: '4959398484845',
         full_name: 'kate michael',
-        preferred_currency: BASE_CURRENCY,
         country_code: '32445',
     };
 
@@ -89,9 +123,8 @@ fn test_loan_request() {
 #[should_panic(expected: ('loan amount is zero',))]
 fn test_loan_request_zero_amount() {
     // Setup
-    let (contract_address, admin_address) = setup();
-    let contract = IStarkRemitDispatcher { contract_address };
-
+    let (contract_address, contract, _) = __setup__();
+    let admin_address = USER();
     start_cheat_caller_address(contract_address, admin_address);
     let caller = get_contract_address();
     // new user struct
@@ -99,7 +132,6 @@ fn test_loan_request_zero_amount() {
         email_hash: 'kate@gmail.com',
         phone_hash: '4959398484845',
         full_name: 'kate michael',
-        preferred_currency: BASE_CURRENCY,
         country_code: '32445',
     };
 
@@ -116,9 +148,8 @@ fn test_loan_request_zero_amount() {
 #[test]
 fn test_approve_loan_request() {
     // Setup
-    let (contract_address, admin_address) = setup();
-    let contract = IStarkRemitDispatcher { contract_address };
-
+    let (contract_address, contract, _) = __setup__();
+    let admin_address = USER();
     start_cheat_caller_address(contract_address, admin_address);
     let caller = get_contract_address();
     // register new user struct
@@ -126,7 +157,6 @@ fn test_approve_loan_request() {
         email_hash: 'kate@gmail.com',
         phone_hash: '4959398484845',
         full_name: 'kate michael',
-        preferred_currency: BASE_CURRENCY,
         country_code: '32445',
     };
     // Register a user
@@ -140,28 +170,29 @@ fn test_approve_loan_request() {
     // assert that request status is pending
     assert(loan_data.status == LoanStatus::Pending, 'loan request is not pending');
     assert(contract.get_loan_count() == 1, 'loan count should be 1');
+    stop_cheat_caller_address(contract_address);
+    let owner = OWNER();
+    start_cheat_caller_address(contract_address, owner);
     contract.approveLoan(loan_request);
     let loan_data = contract.getLoan(loan_request);
     // assert that request status is approved
     assert(loan_data.status == LoanStatus::Approved, 'loan request is not pending');
 
-    stop_cheat_caller_address(contract_address);
+    stop_cheat_caller_address(owner);
 }
 
 #[test]
 #[should_panic(expected: ('User already has an active loan',))]
-fn test_active_loan_loan_request() {
+fn test_active_loan_request() {
     // Setup
-    let (contract_address, admin_address) = setup();
-    let contract = IStarkRemitDispatcher { contract_address };
-
+    let (contract_address, contract, _) = __setup__();
+    let admin_address = USER();
     start_cheat_caller_address(contract_address, admin_address);
     let caller = get_contract_address();
     let register_user = RegistrationRequest {
         email_hash: 'kate@gmail.com',
         phone_hash: '4959398484845',
         full_name: 'kate michael',
-        preferred_currency: BASE_CURRENCY,
         country_code: '32445',
     };
     // Register a user
@@ -175,29 +206,30 @@ fn test_active_loan_loan_request() {
     // assert that request status is pending
     assert(loan_data.status == LoanStatus::Pending, 'loan request is not pending');
     assert(contract.get_loan_count() == 1, 'loan count should be 1');
+    stop_cheat_caller_address(contract_address);
+    let owner = OWNER();
+    start_cheat_caller_address(contract_address, owner);
     contract.approveLoan(loan_request);
     let loan_data = contract.getLoan(loan_request);
     // assert that request status is approved
     assert(loan_data.status == LoanStatus::Approved, 'loan request is not pending');
 
     contract.requestLoan(caller, 700);
-    stop_cheat_caller_address(contract_address);
+    stop_cheat_caller_address(owner);
 }
 
 #[test]
 #[should_panic(expected: ('has pending loan request',))]
 fn test_loan_request_with_active_loan() {
     // Setup
-    let (contract_address, admin_address) = setup();
-    let contract = IStarkRemitDispatcher { contract_address };
-
+    let (contract_address, contract, _) = __setup__();
+    let admin_address = USER();
     start_cheat_caller_address(contract_address, admin_address);
     let caller = get_contract_address();
     let register_user = RegistrationRequest {
         email_hash: 'kate@gmail.com',
         phone_hash: '4959398484845',
         full_name: 'kate michael',
-        preferred_currency: BASE_CURRENCY,
         country_code: '32445',
     };
 
@@ -216,16 +248,14 @@ fn test_loan_request_with_active_loan() {
 #[test]
 fn test_reject_loan_request() {
     // Setup
-    let (contract_address, admin_address) = setup();
-    let contract = IStarkRemitDispatcher { contract_address };
-
+    let (contract_address, contract, _) = __setup__();
+    let admin_address = USER();
     start_cheat_caller_address(contract_address, admin_address);
     let caller = get_contract_address();
     let register_user = RegistrationRequest {
         email_hash: 'kate@gmail.com',
         phone_hash: '4959398484845',
         full_name: 'kate michael',
-        preferred_currency: BASE_CURRENCY,
         country_code: '32445',
     };
     // Register a user
@@ -239,12 +269,15 @@ fn test_reject_loan_request() {
     // assert that request status is pending
     assert(loan_data.status == LoanStatus::Pending, 'loan request is not pending');
     assert(contract.get_loan_count() == 1, 'loan count should be 1');
+    stop_cheat_caller_address(contract_address);
 
+    let owner = OWNER();
+    start_cheat_caller_address(contract_address, owner);
     // reject loan request
     contract.rejectLoan(loan_request);
     let loan_data = contract.getLoan(loan_request);
     // assert that request status is rejected
     assert(loan_data.status == LoanStatus::Reject, 'loan request is not rejected');
 
-    stop_cheat_caller_address(contract_address);
+    stop_cheat_caller_address(owner);
 }

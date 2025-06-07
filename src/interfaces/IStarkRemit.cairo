@@ -69,7 +69,6 @@ pub trait IStarkRemit<TContractState> {
         ref self: TContractState,
         recipient: ContractAddress,
         amount: u256,
-        currency: felt252,
         expires_at: u64,
         metadata: felt252,
     ) -> u256;
@@ -79,7 +78,7 @@ pub trait IStarkRemit<TContractState> {
         ref self: TContractState,
         recipient: ContractAddress,
         amount: u256,
-        currency: felt252,
+        // currency: felt252,
         expires_at: u64,
         metadata: felt252,
     ) -> u256;
@@ -136,8 +135,8 @@ pub trait IStarkRemit<TContractState> {
         ref self: TContractState,
         agent_address: ContractAddress,
         name: felt252,
-        primary_currency: felt252,
-        secondary_currency: felt252,
+        // primary_currency: felt252,
+        // secondary_currency: felt252,
         primary_region: felt252,
         secondary_region: felt252,
         commission_rate: u256,
