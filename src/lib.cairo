@@ -1,5 +1,6 @@
 pub mod base {
     pub mod errors;
+    pub mod events;
     pub mod types;
 }
 
@@ -15,4 +16,8 @@ pub mod utils {
 
 pub mod starkremit {
     pub mod StarkRemit;
+}
+
+pub mod presets {
+    pub mod ERC20;
 }
