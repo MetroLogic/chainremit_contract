@@ -77,7 +77,6 @@ pub mod RegistrationErrors {
     // pub const IMMUTABLE_TIMESTAMP: felt252 = 'Registration timestamp cannot be changed';
     pub const USER_NOT_SUSPENDED: felt252 = 'User is not suspended';
     pub const RECIPIENT_NOT_FOUND: felt252 = 'Recipient not found';
-  
 }
 
 pub mod KYCErrors {
