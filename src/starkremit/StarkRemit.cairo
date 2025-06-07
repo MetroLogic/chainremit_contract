@@ -2308,7 +2308,7 @@ mod StarkRemit {
             // );
 
             let created_at = get_block_timestamp();
-            // // Generate a unique loan requst ID
+            // Generate a unique loan requst ID
             let loan_id: u256 = self.loan_count.read();
 
             let loan = LoanRequest {
@@ -2338,7 +2338,6 @@ mod StarkRemit {
         // approve a loan
         fn approveLoan(ref self: ContractState, loan_id: u256) -> u256 {
             // Ensure only the admin can approve a loan
-            // let admin = self.admin.read();
             let caller = get_caller_address();
             let created_at = get_block_timestamp();
             assert(caller == self.admin.read(), 'Zero address forbidden');
@@ -2378,7 +2377,6 @@ mod StarkRemit {
 
         fn rejectLoan(ref self: ContractState, loan_id: u256) -> u256 {
             // Ensure only the admin can approve a loan
-            let admin = self.admin.read();
             let caller = get_caller_address();
             assert(caller == self.admin.read(), 'Zero address forbidden');
             let created_at = get_block_timestamp();

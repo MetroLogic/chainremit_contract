@@ -6,12 +6,8 @@ use snforge_std::{
     ContractClassTrait, DeclareResultTrait, declare, start_cheat_caller_address,
     stop_cheat_caller_address,
 };
-use starknet::{ContractAddress, contract_address_const, get_block_timestamp, get_contract_address};
-
-use starkremit_contract::base::types::{ // Agent, AgentStatus, KYCLevel, KycLevel, KycStatus, LoanRequest,
-    LoanStatus, RegistrationRequest // RegistrationStatus, SavingsGroup, Transfer as TransferData,
-    // TransferHistory, TransferStatus, UserKycData, UserProfile,
-};
+use starknet::{ContractAddress, contract_address_const, get_contract_address};
+use starkremit_contract::base::types::{LoanStatus, RegistrationRequest};
 use starkremit_contract::interfaces::IStarkRemit::{
     IStarkRemitDispatcher, IStarkRemitDispatcherTrait,
 };
@@ -63,9 +59,10 @@ fn test_loan_request() {
     // Setup
     let (contract_address, admin_address) = setup();
     let contract = IStarkRemitDispatcher { contract_address };
-    println!("Contract Address: {:?}", contract_address);
+
     start_cheat_caller_address(contract_address, admin_address);
     let caller = get_contract_address();
+    // register user struct
     let register_user = RegistrationRequest {
         email_hash: 'kate@gmail.com',
         phone_hash: '4959398484845',
@@ -73,7 +70,7 @@ fn test_loan_request() {
         preferred_currency: BASE_CURRENCY,
         country_code: '32445',
     };
-    println!("Caller name: {:?}", register_user);
+
     // Register a user
     let user = contract.register_user(register_user);
     assert(user, 'User registration failed');
@@ -81,11 +78,9 @@ fn test_loan_request() {
     //requestLoan
     let loan_request = contract.requestLoan(caller, 400);
     // request id
-    println!("id: {loan_request}");
     let loan_data = contract.getLoan(loan_request);
     assert(contract.get_loan_count() == 1, 'loan count should be 1');
     //assert that request status is pending
-    println!("Loan request status: {:?}", loan_data);
     assert(loan_data.status == LoanStatus::Pending, 'loan request is not pending');
 
     stop_cheat_caller_address(contract_address);
@@ -96,9 +91,10 @@ fn test_loan_request_zero_amount() {
     // Setup
     let (contract_address, admin_address) = setup();
     let contract = IStarkRemitDispatcher { contract_address };
-    println!("Contract Address: {:?}", contract_address);
+
     start_cheat_caller_address(contract_address, admin_address);
     let caller = get_contract_address();
+    // new user struct
     let register_user = RegistrationRequest {
         email_hash: 'kate@gmail.com',
         phone_hash: '4959398484845',
@@ -106,7 +102,7 @@ fn test_loan_request_zero_amount() {
         preferred_currency: BASE_CURRENCY,
         country_code: '32445',
     };
-    println!("Caller name: {:?}", register_user);
+
     // Register a user
     let user = contract.register_user(register_user);
     assert(user, 'User registration failed');
@@ -125,6 +121,7 @@ fn test_approve_loan_request() {
 
     start_cheat_caller_address(contract_address, admin_address);
     let caller = get_contract_address();
+    // register new user struct
     let register_user = RegistrationRequest {
         email_hash: 'kate@gmail.com',
         phone_hash: '4959398484845',
@@ -183,8 +180,8 @@ fn test_active_loan_loan_request() {
     // assert that request status is approved
     assert(loan_data.status == LoanStatus::Approved, 'loan request is not pending');
 
-    stop_cheat_caller_address(contract_address);
     contract.requestLoan(caller, 700);
+    stop_cheat_caller_address(contract_address);
 }
 
 #[test]
@@ -193,7 +190,7 @@ fn test_loan_request_with_active_loan() {
     // Setup
     let (contract_address, admin_address) = setup();
     let contract = IStarkRemitDispatcher { contract_address };
-    println!("Contract Address: {:?}", contract_address);
+
     start_cheat_caller_address(contract_address, admin_address);
     let caller = get_contract_address();
     let register_user = RegistrationRequest {
@@ -203,13 +200,14 @@ fn test_loan_request_with_active_loan() {
         preferred_currency: BASE_CURRENCY,
         country_code: '32445',
     };
-    println!("Caller name: {:?}", register_user);
+
     // Register a user
     let user = contract.register_user(register_user);
     assert(user, 'User registration failed');
 
     //requestLoan
-    let loan_request = contract.requestLoan(caller, 400);
+    //will panic user has a pending loan request
+    contract.requestLoan(caller, 400);
     contract.requestLoan(caller, 400);
 
     stop_cheat_caller_address(contract_address);
@@ -242,6 +240,7 @@ fn test_reject_loan_request() {
     assert(loan_data.status == LoanStatus::Pending, 'loan request is not pending');
     assert(contract.get_loan_count() == 1, 'loan count should be 1');
 
+    // reject loan request
     contract.rejectLoan(loan_request);
     let loan_data = contract.getLoan(loan_request);
     // assert that request status is rejected
