@@ -19,6 +19,7 @@ pub mod ERC20Errors {
 
     /// Error triggered when the caller is not the owner of the token
     pub const NotAdmin: felt252 = 'ERC20: not admin';
+    pub const INSUFFICIENT_BUFFER: felt252 = 'ERC20: insufficient buffer size';
 }
 
 pub mod RegistrationErrors {
@@ -69,6 +70,14 @@ pub mod RegistrationErrors {
 
     /// Error triggered when user is not registered
     pub const USER_NOT_REGISTERED: felt252 = 'User not registered';
+
+    pub const REGISTRATION_DISABLED: felt252 = 'Registration is disabled';
+    pub const UNAUTHORIZED_PROFILE_UPDATE: felt252 = 'Unauthorized profile update';
+    pub const IMMUTABLE_ADDRESS: felt252 = 'Address cannot be changed';
+    // pub const IMMUTABLE_TIMESTAMP: felt252 = 'Registration timestamp cannot be changed';
+    pub const USER_NOT_SUSPENDED: felt252 = 'User is not suspended';
+    pub const RECIPIENT_NOT_FOUND: felt252 = 'Recipient not found';
+  
 }
 
 pub mod KYCErrors {
@@ -128,6 +137,7 @@ pub mod KYCErrors {
 
     /// Error triggered when KYC data not found for user
     pub const KYC_DATA_NOT_FOUND: felt252 = 'KYC: data not found';
+    pub const INSUFFICIENT_RECIPIENT_KYC: felt252 = 'KYC: insufficient recipient KYC';
 }
 
 pub mod TransferErrors {
@@ -187,6 +197,9 @@ pub mod TransferErrors {
 
     /// Error triggered when agent is not assigned to transfer
     pub const AGENT_NOT_ASSIGNED: felt252 = 'Agent not assigned';
+    pub const SELF_TRANSFER: felt252 = 'Self transfer not allowed';
+    pub const INVALID_EXPIRY: felt252 = 'Invalid expiry';
+    pub const ExchangeRateUpdated: felt252 = 'Exchange rate updated';
 }
 
 pub mod GroupErrors {
