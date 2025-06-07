@@ -14,9 +14,9 @@ mod StarkRemit {
         ERC20Errors, GroupErrors, KYCErrors, MintBurnErrors, RegistrationErrors, TransferErrors,
     };
     use starkremit_contract::base::types::{
-        Agent, AgentStatus, KYCLevel, KycLevel, KycStatus, RegistrationRequest, RegistrationStatus,
-        SavingsGroup, Transfer as TransferData, TransferHistory, TransferStatus, UserKycData,
-        UserProfile,
+        Agent, AgentStatus, KYCLevel, KycLevel, KycStatus, LoanRequest, LoanStatus,
+        RegistrationRequest, RegistrationStatus, SavingsGroup, Transfer as TransferData,
+        TransferHistory, TransferStatus, UserKycData, UserProfile,
     };
     use starkremit_contract::interfaces::{IERC20, IStarkRemit};
 
@@ -67,7 +67,7 @@ mod StarkRemit {
         MinterAdded: MinterAdded,
         MinterRemoved: MinterRemoved,
         MaxSupplyUpdated: MaxSupplyUpdated,
-        LoanAdded: LoanAdded,
+        LoanRequested: LoanRequested,
     }
 
 
@@ -413,7 +413,7 @@ mod StarkRemit {
     }
 
     #[derive(Copy, Drop, starknet::Event)]
-    struct LoanRequest {
+    struct LoanRequested {
         id: u256,
         requester: ContractAddress,
         amount: u256,
@@ -423,14 +423,14 @@ mod StarkRemit {
     #[derive(Copy, Drop, starknet::Event)]
     struct LoanApproved {
         id: u256,
-        requester: ContractAddress,
+        auth: ContractAddress,
         created_at: u64,
     }
 
     #[derive(Copy, Drop, starknet::Event)]
     struct LoanReject {
         id: u256,
-        requester: ContractAddress,
+        auth: ContractAddress,
         created_at: u64,
     }
 
@@ -522,7 +522,8 @@ mod StarkRemit {
         minters: Map<ContractAddress, bool>, // Addresses authorized to mint tokens
         loan_count: u256,
         loans: Map<u256, LoanRequest>,
-        loan_addresses: Map<ContractAddress, bool>,
+        loan_request: Map<ContractAddress, bool>, // Track if a user has an active loan request
+        active_loan: Map<ContractAddress, bool> // Track active loan 
     }
 
     // Contract constructor
@@ -794,16 +795,15 @@ mod StarkRemit {
             assert(self.registration_enabled.read(), 'Registration disabled');
 
             // Check if user is already registered
-            let current_status = self.registration_status.read(caller);
-            match current_status {
-                RegistrationStatus::Completed => {
-                    assert(false, RegistrationErrors::USER_ALREADY_REGISTERED);
-                },
-                RegistrationStatus::Suspended => {
-                    assert(false, RegistrationErrors::USER_SUSPENDED);
-                },
-                _ => {} // Allow registration for NotStarted, InProgress, or Failed
-            }
+
+            //         assert(!self.registration_status.read(user_address),
+            //         RegistrationErrors::USER_ALREADY_REGISTERED);
+            //     },
+            //     RegistrationStatus::Suspended => {
+            //         assert(false, RegistrationErrors::USER_SUSPENDED);
+            //     },
+            //     _ => {} // Allow registration for NotStarted, InProgress, or Failed
+            // }
 
             // Validate registration data
             assert(
@@ -2291,15 +2291,21 @@ mod StarkRemit {
             self.emit(MemberJoined { group_id, member: caller });
         }
 
-        fn requestLoan(ref self: TContractState, requester: ContractAddress, amount: u256) -> u256 {
+        fn requestLoan(ref self: ContractState, requester: ContractAddress, amount: u256) -> u256 {
             assert(requester != contract_address_const::<0>(), 'Zero address forbidden');
-            assert(self.is_user_registered(caller), RegistrationErrors::USER_NOT_FOUND);
+            // assert(self.is_user_registered(requester), RegistrationErrors::USER_NOT_FOUND);
+            // assert(self.is_kyc_valid(requester), KYCErrors::INVALID_KYC_STATUS);
+            assert(amount > 0, 'loan amount is zero');
+            // Ensure the user has no active loans
+            assert(!self.active_loan.read(requester), 'User already has an active loan');
+            // Ensure the user has not requested a loan already
+            assert(!self.loan_request.read(requester), 'has pending loan request');
 
-            // Validate registration data
-            assert(
-                self.validate_registration_data(registration_data),
-                RegistrationErrors::INCOMPLETE_DATA,
-            );
+            // // Validate registration data
+            // assert(
+            //     self.validate_registration_data(registration_data),
+            //     RegistrationErrors::INCOMPLETE_DATA,
+            // );
 
             let created_at = get_block_timestamp();
             // // Generate a unique loan requst ID
@@ -2315,12 +2321,13 @@ mod StarkRemit {
 
             self.loan_count.write(loan_id + 1);
             self.loans.write(loan_id, loan);
-            self.org_addresses.write(requester, true);
+            self.active_loan.write(requester, false);
+            self.loan_request.write(requester, true);
 
             // Emit an event
             self
                 .emit(
-                    LoanAdded {
+                    LoanRequested {
                         id: loan_id, requester: requester, amount: amount, created_at: created_at,
                     },
                 );
@@ -2329,38 +2336,97 @@ mod StarkRemit {
         }
 
         // approve a loan
-        fn approveLoan(ref self: TContractState, loan_id: u256) -> u128 {
+        fn approveLoan(ref self: ContractState, loan_id: u256) -> u256 {
             // Ensure only the admin can approve a loan
-            let admin = self.admin.read();
+            // let admin = self.admin.read();
             let caller = get_caller_address();
+            let created_at = get_block_timestamp();
             assert(caller == self.admin.read(), 'Zero address forbidden');
 
-            let loan = self.loan.entry(loan_id).read();
-            assert(self.loan_addresses.entry(loan.requester).read(), 'no loan request');
+            let loan = self.loans.entry(loan_id).read();
+            assert(self.loan_request.entry(loan.requester).read(), 'no loan request');
             assert(loan.status == LoanStatus::Pending, 'loan request is not pending');
+            assert(loan.amount > 0, 'loan amount is zero');
 
-            let loan = LoanRequest { ..loan, status: LoanStatus::Approved };
+            let loan = LoanRequest {
+                id: loan.id,
+                requester: loan.requester,
+                amount: loan.amount,
+                status: LoanStatus::Approved,
+                created_at: loan.created_at,
+            };
+            // Update the active loan status
+            self.active_loan.write(loan.requester, true);
+            self.loan_request.write(loan.requester, false);
+            // Update the loan status to approved
+            self.loans.write(loan_id, loan);
+            self
+                .emit(
+                    LoanRequested {
+                        id: loan.id,
+                        requester: loan.requester,
+                        amount: loan.amount,
+                        created_at: created_at,
+                    },
+                );
+
             // Emit an event
-            self.emit(LoanApproved { id: loan_id, requester: requester, created_at: created_at });
+            // self.emit(LoanApproved { id: loan.id, auth: admin, created_at: created_at });
 
             loan_id
         }
 
-        fn rejectLoan(ref self: TContractState, loan_id: u256) -> u128 {
+        fn rejectLoan(ref self: ContractState, loan_id: u256) -> u256 {
             // Ensure only the admin can approve a loan
             let admin = self.admin.read();
             let caller = get_caller_address();
             assert(caller == self.admin.read(), 'Zero address forbidden');
-
-            let loan = self.loan.entry(loan_id).read();
-            assert(self.loan_addresses.entry(loan.requester).read(), 'no loan request');
+            let created_at = get_block_timestamp();
+            let loan = self.loans.entry(loan_id).read();
+            assert(self.loan_request.entry(loan.requester).read(), 'no loan request');
             assert(loan.status == LoanStatus::Pending, 'loan request is not pending');
 
-            let loan = LoanRequest { ..loan, status: LoanStatus::Approved };
+            let loan = LoanRequest {
+                id: loan.id,
+                requester: loan.requester,
+                amount: loan.amount,
+                created_at: loan.created_at,
+                status: LoanStatus::Reject,
+            };
+            // Update the active loan status
+            self.active_loan.write(loan.requester, false);
+            self.loan_request.write(loan.requester, false);
+            // Update the loan status to approved
+            self.loans.write(loan_id, loan);
+            self
+                .emit(
+                    LoanRequested {
+                        id: loan.id,
+                        requester: loan.requester,
+                        amount: loan.amount,
+                        created_at: created_at,
+                    },
+                );
             // Emit an event
-            self.emit(LoanReject { id: loan_id, requester: requester, created_at: created_at });
+            // self.emit(LoanReject { id: loan.id, auth: admin, created_at: created_at });
 
             loan_id
+        }
+
+        fn getLoan(self: @ContractState, loan_id: u256) -> LoanRequest {
+            let loan = self.loans.read(loan_id);
+            assert(loan.id >= 0, 'Loan request not found');
+            loan
+        }
+        fn get_loan_count(self: @ContractState) -> u256 {
+            self.loan_count.read()
+        }
+        fn get_user_active_Loan(self: @ContractState, user: ContractAddress) -> bool {
+            self.active_loan.entry(user).read()
+        }
+
+        fn has_active_loan_request(self: @ContractState, user: ContractAddress) -> bool {
+            self.loan_request.entry(user).read()
         }
     }
 

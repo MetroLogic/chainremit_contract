@@ -38,7 +38,7 @@ pub enum KYCLevel {
 }
 
 /// Registration status for tracking user onboarding progress
-#[derive(Copy, Drop, Serde, starknet::Store)]
+#[derive(Copy, Drop, Serde, Debug, starknet::Store)]
 pub enum RegistrationStatus {
     /// Registration not started
     NotStarted,
@@ -53,7 +53,7 @@ pub enum RegistrationStatus {
 }
 
 /// User registration request structure
-#[derive(Copy, Drop, Serde)]
+#[derive(Copy, Drop, Debug, Serde)]
 pub struct RegistrationRequest {
     /// User's email hash
     pub email_hash: felt252,
@@ -222,14 +222,15 @@ pub struct SavingsGroup {
     pub is_active: bool // Group active status
 }
 
-#[derive(PartialEq, Copy)]
+#[derive(PartialEq, Copy, Drop, Debug, Serde, starknet::Store)]
 pub enum LoanStatus {
     Pending,
     Approved,
     Reject,
+    Paid,
 }
 
-#[derive(Copy, Drop, Serde, starknet::Store)]
+#[derive(Copy, Drop, Debug, Serde, starknet::Store)]
 pub struct LoanRequest {
     pub id: u256,
     pub requester: ContractAddress,

@@ -1,7 +1,8 @@
 use starknet::ContractAddress;
 use starkremit_contract::base::types::{
-    Agent, AgentStatus, KYCLevel, KycLevel, KycStatus, MemberContribution, RegistrationRequest,
-    RegistrationStatus, Transfer as TransferData, TransferHistory, TransferStatus, UserProfile,
+    Agent, AgentStatus, KYCLevel, KycLevel, KycStatus, LoanRequest, MemberContribution,
+    RegistrationRequest, RegistrationStatus, Transfer as TransferData, TransferHistory,
+    TransferStatus, UserProfile,
 };
 
 // Comprehensive StarkRemit interface combining all functionality
@@ -205,10 +206,21 @@ pub trait IStarkRemit<TContractState> {
     fn requestLoan(ref self: TContractState, requester: ContractAddress, amount: u256) -> u256;
 
     // approve a loan
-    fn approveLoan(ref self: TContractState, loan_id: u256) -> u128;
+    fn approveLoan(ref self: TContractState, loan_id: u256) -> u256;
 
     // reject a loan
-    fn rejectLoan(ref self: TContractState, loan_id: u256) -> u128;
+    fn rejectLoan(ref self: TContractState, loan_id: u256) -> u256;
+
+    // Get loan request details
+    fn getLoan(self: @TContractState, loan_id: u256) -> LoanRequest;
+
+    // get loan count
+    fn get_loan_count(self: @TContractState) -> u256;
+
+    // if user has an active loan
+    fn get_user_active_Loan(self: @TContractState, user: ContractAddress) -> bool;
+    // check if user has an active loan request
+    fn has_active_loan_request(self: @TContractState, user: ContractAddress) -> bool;
 }
 
 // ERC-20 Token interface
