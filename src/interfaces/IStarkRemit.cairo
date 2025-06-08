@@ -233,4 +233,9 @@ pub trait IStarkRemit<TContractState> {
     fn get_user_active_Loan(self: @TContractState, user: ContractAddress) -> bool;
     // check if user has an active loan request
     fn has_active_loan_request(self: @TContractState, user: ContractAddress) -> bool;
+
+    fn repay_loan(ref self: TContractState, loan_id: u256, amount: u256) -> (u256, u256);
+    // fn get_loan_details(self: @TContractState, loan_id: u256) -> (
+//     LoanRequest, u256, u64, u256, i64
+// );
 }

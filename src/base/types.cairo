@@ -268,6 +268,7 @@ pub enum LoanStatus {
     Pending,
     Approved,
     Reject,
+    Completed,
 }
 
 #[derive(Copy, Drop, Serde, starknet::Store)]

@@ -23,6 +23,12 @@ use starkremit_contract::base::types::{
 };
 use starkremit_contract::interfaces::{IERC20, IStarkRemit};
 
+
+const INTEREST_RATE: u256 = 500; // 5% in basis points (0.05 * 10000)
+const LATE_PENALTY_RATE: u256 = 100; // 1% per day in basis points (0.01 * 10000)
+const LOAN_TERM_DAYS: u64 = 30 * 24 * 60 * 60; // 30 days in seconds
+
+
 #[starknet::contract]
 pub mod StarkRemit {
     use super::*;
@@ -90,6 +96,9 @@ pub mod StarkRemit {
         MinterRemoved: MinterRemoved,
         MaxSupplyUpdated: MaxSupplyUpdated,
         LoanRequested: LoanRequested,
+        LatePayment: LatePayment,
+        LoanRepaid: LoanRepaid,
+        // loan_id -> timestamp_of_last_payment
     }
 
 
@@ -187,7 +196,13 @@ pub mod StarkRemit {
         loan_count: u256,
         loans: Map<u256, LoanRequest>,
         loan_request: Map<ContractAddress, bool>, // Track if a user has an active loan request
-        active_loan: Map<ContractAddress, bool> // Track active loan 
+        active_loan: Map<ContractAddress, bool>, // Track active loan 
+        // Loan repayment tracking
+        loan_repayments: Map<u256, u256>, // loan_id -> amount_repaid
+        loan_due_dates: Map<u256, u64>, // loan_id -> due_date_timestamp
+        loan_interest_rates: Map<u256, u256>, // loan_id -> interest_rate_at_approval
+        loan_penalties: Map<u256, u256>, // loan_id -> total_penalties_incurred
+        loan_last_payment: Map<u256, u64>,
     }
 
     // Contract constructor
@@ -1656,6 +1671,7 @@ pub mod StarkRemit {
             loan_id
         }
 
+
         // approve a loan
         fn approveLoan(ref self: ContractState, loan_id: u256) -> u256 {
             // Ensure only the admin can approve a loan
@@ -1696,6 +1712,7 @@ pub mod StarkRemit {
             loan_id
         }
 
+
         fn rejectLoan(ref self: ContractState, loan_id: u256) -> u256 {
             // Ensure only the admin can approve a loan
             let caller = get_caller_address();
@@ -1734,7 +1751,7 @@ pub mod StarkRemit {
 
         fn getLoan(self: @ContractState, loan_id: u256) -> LoanRequest {
             let loan = self.loans.read(loan_id);
-            assert(loan.id >= 0, 'Loan request not found');
+            assert(loan.id == loan_id, 'Loan request not found');
             loan
         }
         fn get_loan_count(self: @ContractState) -> u256 {
@@ -1746,6 +1763,80 @@ pub mod StarkRemit {
 
         fn has_active_loan_request(self: @ContractState, user: ContractAddress) -> bool {
             self.loan_request.entry(user).read()
+        }
+
+
+        //loan repayment
+
+        fn repay_loan(ref self: ContractState, loan_id: u256, amount: u256) -> (u256, u256) {
+            let caller = get_caller_address();
+            let current_time = get_block_timestamp();
+
+            // Get loan and validate using getLoan for consistent behavior
+            let mut loan = self.getLoan(loan_id);
+
+            assert(loan.status == LoanStatus::Approved, 'Loan is not approved');
+            assert(loan.requester == caller, 'Not the loan owner');
+            assert(amount > 0, 'Amount must be positive');
+
+            // Get repayment details
+            let amount_repaid = self.loan_repayments.read(loan_id);
+            let due_date = self.loan_due_dates.read(loan_id);
+            let interest_rate = self.loan_interest_rates.read(loan_id);
+            let last_payment = self.loan_last_payment.read(loan_id);
+
+            // Calculate current balance (principal + interest - amount_repaid + penalties)
+            let days_elapsed = (current_time - last_payment).into()
+                / 864; // Convert to days * 100 (for better precision)
+            let interest = (loan.amount * interest_rate * days_elapsed) / (100 * 365 * 100);
+
+            // Calculate late penalties if any
+            let mut penalty = 0;
+
+            if current_time > due_date {
+                let days_late = ((current_time - due_date).into() / 864) + 1;
+                penalty = (loan.amount * LATE_PENALTY_RATE * days_late) / (100 * 100 * 100);
+                self.loan_penalties.write(loan_id, self.loan_penalties.read(loan_id) + penalty);
+
+                self
+                    .emit(
+                        LatePayment {
+                            loan_id, days_late, penalty_amount: penalty, timestamp: current_time,
+                        },
+                    );
+            }
+
+            let total_balance = loan.amount + interest + penalty - amount_repaid;
+            let actual_payment = if amount > total_balance {
+                total_balance
+            } else {
+                amount
+            };
+            let new_amount_repaid = amount_repaid + actual_payment;
+            let remaining_balance = total_balance - actual_payment;
+
+            self.loan_repayments.write(loan_id, new_amount_repaid);
+            self.loan_last_payment.write(loan_id, current_time);
+
+            let is_fully_repaid = remaining_balance == 0;
+            if is_fully_repaid {
+                loan.status = LoanStatus::Completed;
+                self.loans.write(loan_id, loan);
+                self.active_loan.write(caller, false);
+            }
+
+            self
+                .emit(
+                    LoanRepaid {
+                        loan_id,
+                        amount: actual_payment,
+                        remaining_balance,
+                        is_fully_repaid,
+                        timestamp: current_time,
+                    },
+                );
+
+            (actual_payment, remaining_balance)
         }
     }
 
