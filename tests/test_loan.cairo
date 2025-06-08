@@ -15,6 +15,7 @@ use snforge_std::{
 // starknet imports
 use starknet::{ContractAddress, contract_address_const, get_contract_address};
 
+
 // starkremit imports
 use starkremit_contract::base::errors::*;
 use starkremit_contract::base::events::*;
@@ -281,3 +282,179 @@ fn test_reject_loan_request() {
 
     stop_cheat_caller_address(owner);
 }
+
+
+const LOAN_AMOUNT: u256 = 400;
+
+
+#[test]
+fn test_full_repayment() {
+    // Setup
+    let (contract_address, contract, _) = __setup__();
+    let admin_address = USER();
+
+    // Register user
+    let register_user = RegistrationRequest {
+        email_hash: 'user@test.com',
+        phone_hash: '1234567890',
+        full_name: 'Test User',
+        country_code: '1',
+    };
+
+    start_cheat_caller_address(contract_address, admin_address);
+    let user_registered = contract.register_user(register_user);
+    assert(user_registered, 'User registration failed');
+
+    // Switch to user to request loan
+    let user_address = get_contract_address();
+    start_cheat_caller_address(contract_address, user_address);
+
+    // Request loan with the correct amount
+    let loan_id = contract.requestLoan(user_address, LOAN_AMOUNT);
+
+    // Verify loan was created
+    let loan = contract.getLoan(loan_id);
+    assert(loan.id == loan_id, 'Loan ID mismatch');
+    assert(loan.status == LoanStatus::Pending, 'Loan should be pending');
+    assert(contract.get_loan_count() == 1, 'Loan count should be 1');
+
+    // Switch to admin to approve loan
+    stop_cheat_caller_address(contract_address);
+    start_cheat_caller_address(contract_address, OWNER());
+
+    // Approve the loan
+    contract.approveLoan(loan_id);
+
+    // Verify loan is approved
+    let loan = contract.getLoan(loan_id);
+    assert(loan.status == LoanStatus::Approved, 'Loan should be approved');
+
+    // Switch back to user for repayment
+    stop_cheat_caller_address(contract_address);
+    start_cheat_caller_address(contract_address, user_address);
+
+    // Verify loan exists before repayment
+    let loan_before = contract.getLoan(loan_id);
+    assert(loan_before.id == loan_id, 'ID before repayment mismatch');
+
+    // Repay full amount
+    let (amount_repaid, remaining) = contract.repay_loan(loan_id, LOAN_AMOUNT);
+
+    // Verify repayment
+    assert(amount_repaid == LOAN_AMOUNT, 'Full amount should be repaid');
+    assert(remaining == 0, ' balance should be zero');
+
+    // Verify loan status is updated
+    let loan_after = contract.getLoan(loan_id);
+    assert(loan_after.status == LoanStatus::Completed, 'should be marked as completed');
+
+    stop_cheat_caller_address(contract_address);
+}
+
+
+#[test]
+fn test_partial_repayment() {
+    // Setup
+    let (contract_address, contract, _) = __setup__();
+    let admin_address = USER();
+    start_cheat_caller_address(contract_address, admin_address);
+    let caller = get_contract_address();
+
+    // Register user and request loan
+    let register_user = RegistrationRequest {
+        email_hash: 'user@test.com',
+        phone_hash: '1234567890',
+        full_name: 'Test User',
+        country_code: '1',
+    };
+    contract.register_user(register_user);
+
+    // Request and approve loan
+    let loan_id = contract.requestLoan(caller, LOAN_AMOUNT);
+    stop_cheat_caller_address(contract_address);
+
+    // Approve loan as owner
+    start_cheat_caller_address(contract_address, OWNER());
+    contract.approveLoan(loan_id);
+    stop_cheat_caller_address(contract_address);
+
+    // Make partial repayment
+    start_cheat_caller_address(contract_address, caller);
+    let partial_amount = LOAN_AMOUNT / 2;
+    let (amount_repaid, remaining) = contract.repay_loan(loan_id, partial_amount);
+
+    assert(amount_repaid == partial_amount, 'Partial amount should be repaid');
+    assert(remaining == LOAN_AMOUNT - partial_amount, 'Remaining bal should be correct');
+
+    // Check loan status is still approved
+    let loan = contract.getLoan(loan_id);
+    assert(loan.status == LoanStatus::Approved, 'Loan should still be approved');
+
+    stop_cheat_caller_address(contract_address);
+}
+
+
+#[test]
+#[should_panic(expected: ('Not the loan owner',))]
+fn test_repayment_by_non_borrower() {
+    // Setup
+    let (contract_address, contract, _) = __setup__();
+    let admin_address = USER();
+    start_cheat_caller_address(contract_address, admin_address);
+    let caller = get_contract_address();
+
+    // Register user and request loan
+    let register_user = RegistrationRequest {
+        email_hash: 'user@test.com',
+        phone_hash: '1234567890',
+        full_name: 'Test User',
+        country_code: '1',
+    };
+    contract.register_user(register_user);
+
+    // Request and approve loan
+    let loan_id = contract.requestLoan(caller, LOAN_AMOUNT);
+    stop_cheat_caller_address(contract_address);
+
+    // Approve loan as owner
+    start_cheat_caller_address(contract_address, OWNER());
+    contract.approveLoan(loan_id);
+    stop_cheat_caller_address(contract_address);
+
+    // Try to repay as non-borrower (should panic)
+    let non_borrower = contract_address;
+    start_cheat_caller_address(contract_address, non_borrower);
+    contract.repay_loan(loan_id, LOAN_AMOUNT);
+}
+
+#[test]
+#[should_panic(expected: ('Amount must be positive',))]
+fn test_repayment_zero_amount() {
+    // Setup
+    let (contract_address, contract, _) = __setup__();
+    let admin_address = USER();
+    start_cheat_caller_address(contract_address, admin_address);
+    let caller = get_contract_address();
+
+    // Register user and request loan
+    let register_user = RegistrationRequest {
+        email_hash: 'user@test.com',
+        phone_hash: '1234567890',
+        full_name: 'Test User',
+        country_code: '1',
+    };
+    contract.register_user(register_user);
+
+    // Request and approve loan
+    let loan_id = contract.requestLoan(caller, LOAN_AMOUNT);
+    stop_cheat_caller_address(contract_address);
+
+    // Approve loan as owner
+    start_cheat_caller_address(contract_address, OWNER());
+    contract.approveLoan(loan_id);
+    stop_cheat_caller_address(contract_address);
+
+    start_cheat_caller_address(contract_address, caller);
+    contract.repay_loan(loan_id, 0);
+}
+

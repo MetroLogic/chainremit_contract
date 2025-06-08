@@ -335,3 +335,21 @@ pub struct LoanReject {
     pub auth: ContractAddress,
     pub created_at: u64,
 }
+
+
+#[derive(Copy, Drop, starknet::Event)]
+pub struct LoanRepaid {
+    pub loan_id: u256,
+    pub amount: u256,
+    pub remaining_balance: u256,
+    pub is_fully_repaid: bool,
+    pub timestamp: u64,
+}
+
+#[derive(Copy, Drop, starknet::Event)]
+pub struct LatePayment {
+    pub loan_id: u256,
+    pub days_late: u256,
+    pub penalty_amount: u256,
+    pub timestamp: u64,
+}
