@@ -269,56 +269,8 @@ struct TransferHistory {
     new_status: TransferStatus,
     details: felt252,
 }
-```
 
-/home/knights/Desktop/starkRemit_contract
-├── Scarb.toml                    # Project manifest and dependencies
-├── .env.example                  # Environment variables template
-├── src/                          # Main contract source code
-│   ├── lib.cairo                 # Contract entry point and module declarations
-│   ├── core/                     # Core contract logic
-│   │   ├── remittance.cairo      # Remittance creation and management
-│   │   ├── escrow.cairo          # Escrow and fund locking mechanisms
-│   │   ├── kyc.cairo             # KYC and compliance verification
-│   │   └── dispute.cairo         # Dispute resolution system
-│   ├── interfaces/               # Contract interfaces and traits
-│   │   ├── IRemittance.cairo     # Main remittance interface
-│   │   ├── IEscrow.cairo         # Escrow service interface
-│   │   └── IOracle.cairo         # Price oracle interface
-│   ├── utils/                    # Utility functions and helpers
-│   │   ├── math.cairo            # Mathematical operations and validations
-│   │   ├── access_control.cairo  # Role-based access control
-│   │   └── events.cairo          # Event definitions and emissions
-│   └── storage/                  # Storage definitions and mappings
-│       ├── remittance_storage.cairo
-│       └── user_storage.cairo
-├── tests/                        # Comprehensive test suite
-│   ├── unit/                     # Unit tests for individual functions
-│   │   ├── test_remittance.cairo
-│   │   ├── test_escrow.cairo
-│   │   └── test_kyc.cairo
-│   ├── integration/              # Integration tests for complete workflows
-│   │   ├── test_full_remittance_flow.cairo
-│   │   └── test_dispute_resolution.cairo
-│   └── mocks/                    # Mock contracts for testing
-│       ├── mock_erc20.cairo
-│       └── mock_oracle.cairo
-├── scripts/                      # Deployment and utility scripts
-│   ├── deploy_local.sh
-│   ├── deploy_testnet.sh
-│   ├── create_remittance.sh
-│   ├── fund_remittance.sh
-│   ├── release_funds.sh
-│   ├── setup_oracle.sh
-│   └── verify_contract.sh
-├── docs/                         # Additional documentation
-│   ├── API.md                    # Detailed API documentation
-│   ├── SECURITY.md               # Security considerations and audit reports
-│   └── INTEGRATION.md            # Frontend integration guide
-├── package.json                  # Node.js dependencies for scripts
-└── README.md                     # This file
 ```
-
 **Directory Descriptions:**
 *   **`Scarb.toml`**: Defines project metadata, Cairo dependencies, and compilation settings.
 *   **`src/core/`**: Contains the main business logic for remittance processing, escrow management, and compliance.
