@@ -458,3 +458,236 @@ fn test_repayment_zero_amount() {
     contract.repay_loan(loan_id, 0);
 }
 
+#[test]
+fn test_loan_request_with_kyc_enforcement_disabled() {
+    // Setup
+    let (contract_address, contract, _) = __setup__();
+    let admin_address = USER();
+    start_cheat_caller_address(contract_address, admin_address);
+    let caller = get_contract_address();
+
+    // Register user
+    let register_user = RegistrationRequest {
+        email_hash: 'user@test.com',
+        phone_hash: '1234567890',
+        full_name: 'Test User',
+        country_code: '1',
+    };
+    let user = contract.register_user(register_user);
+    assert(user, 'User registration failed');
+
+    // Ensure KYC enforcement is disabled
+    stop_cheat_caller_address(contract_address);
+    start_cheat_caller_address(contract_address, OWNER());
+    contract.set_kyc_enforcement(false);
+    stop_cheat_caller_address(contract_address);
+    start_cheat_caller_address(contract_address, admin_address);
+
+    // User should be able to request loan even without valid KYC when enforcement is disabled
+    let loan_request = contract.requestLoan(caller, 400);
+    let loan_data = contract.getLoan(loan_request);
+    assert(loan_data.status == LoanStatus::Pending, 'Loan request should be pending');
+    assert(contract.get_loan_count() == 1, 'Loan count should be 1');
+
+    stop_cheat_caller_address(contract_address);
+}
+
+#[test]
+#[should_panic(expected: ('KYC: invalid status',))]
+fn test_loan_request_with_kyc_enforcement_enabled_invalid_kyc() {
+    // Setup
+    let (contract_address, contract, _) = __setup__();
+    let admin_address = USER();
+    start_cheat_caller_address(contract_address, admin_address);
+    let caller = get_contract_address();
+
+    // Register user
+    let register_user = RegistrationRequest {
+        email_hash: 'user@test.com',
+        phone_hash: '1234567890',
+        full_name: 'Test User',
+        country_code: '1',
+    };
+    let user = contract.register_user(register_user);
+    assert(user, 'User registration failed');
+
+    // Enable KYC enforcement
+    stop_cheat_caller_address(contract_address);
+    start_cheat_caller_address(contract_address, OWNER());
+    contract.set_kyc_enforcement(true);
+    stop_cheat_caller_address(contract_address);
+    start_cheat_caller_address(contract_address, admin_address);
+
+    // User should NOT be able to request loan without valid KYC when enforcement is enabled
+    // This should panic with KYC error
+    contract.requestLoan(caller, 400);
+
+    stop_cheat_caller_address(contract_address);
+}
+
+#[test]
+fn test_loan_request_with_kyc_enforcement_enabled_valid_kyc() {
+    // Setup
+    let (contract_address, contract, _) = __setup__();
+    let admin_address = USER();
+    start_cheat_caller_address(contract_address, admin_address);
+    let caller = get_contract_address();
+
+    // Register user
+    let register_user = RegistrationRequest {
+        email_hash: 'user@test.com',
+        phone_hash: '1234567890',
+        full_name: 'Test User',
+        country_code: '1',
+    };
+    let user = contract.register_user(register_user);
+    assert(user, 'User registration failed');
+
+    // Enable KYC enforcement
+    stop_cheat_caller_address(contract_address);
+    start_cheat_caller_address(contract_address, OWNER());
+    contract.set_kyc_enforcement(true);
+
+    // Set user KYC to approved
+    contract
+        .update_kyc_status(
+            caller,
+            KycStatus::Approved,
+            KycLevel::Basic,
+            'verification_hash_123',
+            get_block_timestamp() + 86400 * 365 // Valid for 1 year
+        );
+    stop_cheat_caller_address(contract_address);
+    start_cheat_caller_address(contract_address, admin_address);
+
+    // User should be able to request loan with valid KYC when enforcement is enabled
+    let loan_request = contract.requestLoan(caller, 400);
+    let loan_data = contract.getLoan(loan_request);
+    assert(loan_data.status == LoanStatus::Pending, 'Loan request should be pending');
+    assert(contract.get_loan_count() == 1, 'Loan count should be 1');
+
+    stop_cheat_caller_address(contract_address);
+}
+
+#[test]
+#[should_panic(expected: ('KYC: invalid status',))]
+fn test_loan_request_with_expired_kyc() {
+    // Setup
+    let (contract_address, contract, _) = __setup__();
+    let admin_address = USER();
+    start_cheat_caller_address(contract_address, admin_address);
+    let caller = get_contract_address();
+
+    // Register user
+    let register_user = RegistrationRequest {
+        email_hash: 'user@test.com',
+        phone_hash: '1234567890',
+        full_name: 'Test User',
+        country_code: '1',
+    };
+    let user = contract.register_user(register_user);
+    assert(user, 'User registration failed');
+
+    // Enable KYC enforcement
+    stop_cheat_caller_address(contract_address);
+    start_cheat_caller_address(contract_address, OWNER());
+    contract.set_kyc_enforcement(true);
+
+    // Set user KYC to approved but expired
+    contract
+        .update_kyc_status(
+            caller,
+            KycStatus::Approved,
+            KycLevel::Basic,
+            'verification_hash_123',
+            get_block_timestamp() - 86400 // Expired 1 day ago
+        );
+    stop_cheat_caller_address(contract_address);
+    start_cheat_caller_address(contract_address, admin_address);
+
+    // User should NOT be able to request loan with expired KYC
+    // This should panic with KYC error
+    contract.requestLoan(caller, 400);
+
+    stop_cheat_caller_address(contract_address);
+}
+
+#[test]
+#[should_panic(expected: ('KYC: invalid status',))]
+fn test_loan_request_with_suspended_kyc() {
+    // Setup
+    let (contract_address, contract, _) = __setup__();
+    let admin_address = USER();
+    start_cheat_caller_address(contract_address, admin_address);
+    let caller = get_contract_address();
+
+    // Register user
+    let register_user = RegistrationRequest {
+        email_hash: 'user@test.com',
+        phone_hash: '1234567890',
+        full_name: 'Test User',
+        country_code: '1',
+    };
+    let user = contract.register_user(register_user);
+    assert(user, 'User registration failed');
+
+    // Enable KYC enforcement
+    stop_cheat_caller_address(contract_address);
+    start_cheat_caller_address(contract_address, OWNER());
+    contract.set_kyc_enforcement(true);
+
+    // Set user KYC to suspended
+    contract.suspend_user_kyc(caller);
+    stop_cheat_caller_address(contract_address);
+    start_cheat_caller_address(contract_address, admin_address);
+
+    // User should NOT be able to request loan with suspended KYC
+    // This should panic with KYC error
+    contract.requestLoan(caller, 400);
+
+    stop_cheat_caller_address(contract_address);
+}
+
+#[test]
+fn test_loan_request_kyc_enforcement_toggle() {
+    // Setup
+    let (contract_address, contract, _) = __setup__();
+    let admin_address = USER();
+    start_cheat_caller_address(contract_address, admin_address);
+    let caller = get_contract_address();
+
+    // Register user
+    let register_user = RegistrationRequest {
+        email_hash: 'user@test.com',
+        phone_hash: '1234567890',
+        full_name: 'Test User',
+        country_code: '1',
+    };
+    let user = contract.register_user(register_user);
+    assert(user, 'User registration failed');
+
+    // Test 1: KYC enforcement disabled - should work
+    stop_cheat_caller_address(contract_address);
+    start_cheat_caller_address(contract_address, OWNER());
+    contract.set_kyc_enforcement(false);
+    stop_cheat_caller_address(contract_address);
+    start_cheat_caller_address(contract_address, admin_address);
+
+    let loan_request1 = contract.requestLoan(caller, 400);
+    assert(contract.get_loan_count() == 1, 'First loan should be created');
+
+    // Test 2: Enable KYC enforcement - should fail
+    stop_cheat_caller_address(contract_address);
+    start_cheat_caller_address(contract_address, OWNER());
+    contract.set_kyc_enforcement(true);
+    stop_cheat_caller_address(contract_address);
+    start_cheat_caller_address(contract_address, admin_address);
+
+    // This should fail because user has no valid KYC
+    // Note: We can't test the panic here because we need to reset the loan state
+    // Instead, we'll test that KYC enforcement is properly enabled
+    assert(contract.is_kyc_enforcement_enabled(), 'KYC enforcement should be enabled');
+
+    stop_cheat_caller_address(contract_address);
+}
+

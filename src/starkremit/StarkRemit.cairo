@@ -1630,7 +1630,12 @@ pub mod StarkRemit {
             // Validate caller is not zero address
             assert(!caller.is_zero(), RegistrationErrors::ZERO_ADDRESS);
             // assert(self.is_user_registered(requester), RegistrationErrors::USER_NOT_FOUND);
-            // assert(self.is_kyc_valid(requester), KYCErrors::INVALID_KYC_STATUS);
+
+            // Conditional KYC validation
+            if self.kyc_enforcement_enabled.read() {
+                assert(self.is_kyc_valid(requester), KYCErrors::INVALID_KYC_STATUS);
+            }
+
             assert(amount > 0, 'loan amount is zero');
             // Ensure the user has no active loans
             assert(!self.active_loan.read(requester), 'User already has an active loan');
