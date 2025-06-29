@@ -47,6 +47,144 @@ pub mod StarkRemit {
     const PROTOCOL_OWNER_ROLE: felt252 = selector!("PROTOCOL_OWNER");
     const ADMIN_ROLE: felt252 = selector!("ADMIN");
 
+    // --- System Management Enums & Structs ---
+    #[derive(Copy, Drop, Serde)]
+    enum PermissionLevel {
+        Read,
+        Write,
+        Admin,
+    }
+
+    #[derive(Copy, Drop, Serde, starknet::Store)]
+    struct MultiSigOperation {
+        target_contract: ContractAddress,
+        selector: felt252,
+        calldata_len: u128,
+        confirmations_count: u32,
+        executed: bool,
+    }
+
+    #[derive(Copy, Drop, Serde, starknet::Store)]
+    struct UpgradeRecord {
+        version: u64,
+        class_hash: felt252,
+        timestamp: u64,
+        upgraded_by: ContractAddress,
+    }
+
+    #[derive(Copy, Drop, Serde, starknet::Store )]
+    struct AuditEntry {
+        action: felt252,
+        actor: ContractAddress,
+        timestamp: u64,
+        details: felt252,
+    }
+    #[allow(starknet::store_no_default_variant)]
+    #[derive(Copy, Drop, Serde, starknet::Store)]
+    enum MultiSigStatus {
+        Pending,
+        Approved,
+        Executed,
+        Rejected,
+    }
+
+    // --- System Management Events ---
+    
+    #[derive(Drop, starknet::Event)]
+    struct AgentAuthorized {
+        agent_address: ContractAddress,
+        permission: felt252,
+        authorized: bool,
+        caller: ContractAddress,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    struct AgentPermissionUpdated {
+        agent_address: ContractAddress,
+        permission: felt252,
+        authorized: bool,
+        caller: ContractAddress,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    struct AgentPermissionRevoked {
+        agent_address: ContractAddress,
+        permission: felt252,
+        revoked_by: ContractAddress,
+    }
+    
+    #[derive(Drop, starknet::Event)]
+    struct ContractUpgradeInitiated {
+        old_class_hash: felt252,
+        new_class_hash: felt252,
+        version: u64,
+        caller: ContractAddress,
+    }
+    
+    #[derive(Drop, starknet::Event)]
+    struct ContractUpgradeCompleted {
+        old_class_hash: felt252,
+        new_class_hash: felt252,
+        version: u64,
+        caller: ContractAddress,
+    }
+    
+    #[derive(Drop, starknet::Event)]
+    struct ContractUpgradeRolledBack {
+        old_class_hash: felt252,
+        new_class_hash: felt252,
+        target_version: u64,
+        caller: ContractAddress,
+    }
+    
+    #[derive(Drop, starknet::Event)]
+    struct EmergencyPauseActivated {
+        function_selector: felt252,
+        caller: ContractAddress,
+        expires_at: u64,
+    }
+    
+    #[derive(Drop, starknet::Event)]
+    struct EmergencyPauseDeactivated {
+        function_selector: felt252,
+        caller: ContractAddress,
+    }
+    // Removed #[event] from MultiSigOperationProposed, as only a struct named Event can be marked #[event]
+    #[derive(Drop, starknet::Event)]
+    struct MultiSigOperationProposed {
+        op_id: felt252,
+        target_contract: ContractAddress,
+        selector: felt252,
+        proposer: ContractAddress,
+    }
+   
+    #[derive(Drop, starknet::Event)]
+    struct MultiSigOperationApproved {
+        op_id: felt252,
+        approver: ContractAddress,
+        confirmations_count: u32,
+    }
+ 
+    #[derive(Drop, starknet::Event)]
+    struct MultiSigOperationExecuted {
+        op_id: felt252,
+        executor: ContractAddress,
+    }
+    
+    #[derive(Drop, starknet::Event)]
+    struct MultiSigOperationRejected {
+        op_id: felt252,
+        rejector: ContractAddress,
+    }
+    
+    #[derive(Drop, starknet::Event)]
+    struct AuditTrailEntry {
+        action: felt252,
+        actor: ContractAddress,
+        timestamp: u64,
+        details: felt252,
+    }
+
     // Event definitions
     #[event]
     #[derive(Drop, starknet::Event)]
@@ -57,6 +195,20 @@ pub mod StarkRemit {
         AccessControlEvent: AccessControlComponent::Event,
         #[flat]
         UpgradeableEvent: UpgradeableComponent::Event,
+        // System Management Events
+        AgentAuthorized: AgentAuthorized,
+        AgentPermissionUpdated: AgentPermissionUpdated,
+        AgentPermissionRevoked: AgentPermissionRevoked,
+        ContractUpgradeInitiated: ContractUpgradeInitiated,
+        ContractUpgradeCompleted: ContractUpgradeCompleted,
+        ContractUpgradeRolledBack: ContractUpgradeRolledBack,
+        EmergencyPauseActivated: EmergencyPauseActivated,
+        EmergencyPauseDeactivated: EmergencyPauseDeactivated,
+        MultiSigOperationProposed: MultiSigOperationProposed,
+        MultiSigOperationApproved: MultiSigOperationApproved,
+        MultiSigOperationExecuted: MultiSigOperationExecuted,
+        MultiSigOperationRejected: MultiSigOperationRejected,
+        AuditTrailEntry: AuditTrailEntry,
         Transfer: Transfer, // Standard ERC20 transfer event
         Approval: Approval, // Standard ERC20 approval event
         ExchangeRateUpdated: ExchangeRateUpdated, // Event for exchange rate updates
@@ -111,6 +263,20 @@ pub mod StarkRemit {
         src5: SRC5Component::Storage,
         #[substorage(v0)]
         accesscontrol: AccessControlComponent::Storage,
+        // System Management Storage
+        agent_permissions: Map<(ContractAddress, felt252), bool>, // (agent, permission) -> granted
+        paused_functions: Map<felt252, bool>, // function selector -> paused
+        multi_sig_operations: Map<felt252, MultiSigOperation>, // op_id -> operation data
+        multi_sig_approvals: Map<(felt252, ContractAddress), bool>, // (op_id, approver) -> approved
+        multi_sig_status: Map<felt252, MultiSigStatus>, // op_id -> status
+        multi_sig_required: u32, // Number of required approvals
+        multi_sig_pending: Map<felt252, u32>, // op_id -> current approvals
+        upgrade_history: Map<u32, UpgradeRecord>, // upgrade index -> record
+        upgrade_count: u32, // number of upgrades
+        audit_trail: Map<u256, AuditEntry>, // audit log
+        audit_count: u256,
+        emergency_pause_expiry: Map<felt252, u64>, // function selector -> expiry timestamp
+        // Existing storage
         owner: ContractAddress, // Admin address for contract management
         oracle_address: ContractAddress, // Address of the oracle contract for exchange rates
         token_address: ContractAddress, // Address of the token contract
@@ -1837,6 +2003,195 @@ pub mod StarkRemit {
                 );
 
             (actual_payment, remaining_balance)
+        }
+    }
+
+    // --- System Management Functions ---
+    #[generate_trait]
+    impl SystemManagement of SystemManagementTrait {
+        fn authorize_agent(
+            ref self: ContractState,
+            agent_address: ContractAddress,
+            permission: felt252,
+            authorized: bool,
+        ) {
+            // Only ADMIN can authorize
+            self.accesscontrol.assert_only_role(ADMIN_ROLE);
+            self.agent_permissions.write((agent_address, permission), authorized);
+            self.emit(AgentPermissionUpdated {
+                agent_address,
+                permission,
+                authorized,
+                caller: get_caller_address(),
+            });
+        }
+
+        fn upgrade_contract(ref self: ContractState, new_class_hash: felt252) {
+            self.accesscontrol.assert_only_role(PROTOCOL_OWNER_ROLE);
+            // Save old class hash (for audit, not actual class hash here)
+            let old_class_hash: felt252 = 0; // Placeholder, replace_class does not return old hash
+            let class_hash: starknet::class_hash::ClassHash = new_class_hash.try_into().unwrap();
+            starknet::syscalls::replace_class_syscall(class_hash).unwrap();
+            let version = self.upgrade_count.read() + 1;
+            self.upgrade_count.write(version);
+            let record = UpgradeRecord {
+                version: version.into(),
+                class_hash: new_class_hash,
+                timestamp: get_block_timestamp(),
+                upgraded_by: get_caller_address(),
+            };
+            self.upgrade_history.write(version, record);
+            self.emit(ContractUpgradeCompleted {
+                old_class_hash,
+                new_class_hash,
+                version: version.into(),
+                caller: get_caller_address(),
+            });
+        }
+
+        fn rollback_contract(ref self: ContractState, target_version: u32) {
+            self.accesscontrol.assert_only_role(PROTOCOL_OWNER_ROLE);
+            let current_version = self.upgrade_count.read();
+            assert(target_version < current_version, 'Cannot roll  current version');
+            let record = self.upgrade_history.read(target_version);
+            let class_hash: starknet::class_hash::ClassHash = record.class_hash.try_into().unwrap();
+            starknet::syscalls::replace_class_syscall(class_hash).unwrap();
+            self.upgrade_count.write(target_version);
+            self.emit(ContractUpgradeRolledBack {
+                old_class_hash: 0, // Placeholder
+                new_class_hash: record.class_hash,
+                target_version: target_version.into(),
+                caller: get_caller_address(),
+            });
+        }
+
+        fn emergency_pause_function(ref self: ContractState, function_selector: felt252, expires_at: u64) {
+            // Only pauser can pause
+            let caller = get_caller_address();
+            assert(self.agent_permissions.read((caller, 'PAUSER')), 'Not authorized pauser');
+            self.paused_functions.write(function_selector, true);
+            self.emergency_pause_expiry.write(function_selector, expires_at);
+            self.emit(EmergencyPauseActivated {
+                function_selector,
+                caller,
+                expires_at,
+            });
+        }
+
+        fn emergency_unpause_function(ref self: ContractState, function_selector: felt252) {
+            let caller = get_caller_address();
+            assert(self.agent_permissions.read((caller, 'PAUSER')), 'Not authorized pauser');
+            self.paused_functions.write(function_selector, false);
+            self.emit(EmergencyPauseDeactivated {
+                function_selector,
+                caller,
+            });
+        }
+
+        fn set_pauser(ref self: ContractState, pauser_address: ContractAddress, is_pauser: bool) {
+            self.accesscontrol.assert_only_role(ADMIN_ROLE);
+            self.agent_permissions.write((pauser_address, 'PAUSER'), is_pauser);
+        }
+
+        fn set_multi_sig_signer(ref self: ContractState, signer_address: ContractAddress, is_signer: bool) {
+            self.accesscontrol.assert_only_role(PROTOCOL_OWNER_ROLE);
+            self.agent_permissions.write((signer_address, 'MULTISIG'), is_signer);
+        }
+
+        fn propose_critical_operation(
+            ref self: ContractState,
+            op_id: felt252,
+            target_contract: ContractAddress,
+            selector: felt252,
+        ) {
+            let caller = get_caller_address();
+            assert(self.agent_permissions.read((caller, 'MULTISIG')), 'Not a multisig signer');
+            let op = MultiSigOperation {
+                target_contract,
+                selector,
+                calldata_len: 0,
+                confirmations_count: 1,
+                executed: false,
+            };
+            self.multi_sig_operations.write(op_id, op);
+            self.multi_sig_approvals.write((op_id, caller), true);
+            self.multi_sig_pending.write(op_id, 1);
+            self.multi_sig_status.write(op_id, MultiSigStatus::Pending);
+            self.emit(MultiSigOperationProposed {
+                op_id,
+                target_contract,
+                selector,
+                proposer: caller,
+            });
+        }
+
+        fn confirm_critical_operation(ref self: ContractState, op_id: felt252) {
+            let caller = get_caller_address();
+            assert(self.agent_permissions.read((caller, 'MULTISIG')), 'Not a multisig signer');
+            let mut op = self.multi_sig_operations.read(op_id);
+            assert(!op.executed, 'Already executed');
+            assert(!self.multi_sig_approvals.read((op_id, caller)), 'Already confirmed');
+            op.confirmations_count += 1;
+            self.multi_sig_operations.write(op_id, op);
+            self.multi_sig_approvals.write((op_id, caller), true);
+            let pending = self.multi_sig_pending.read(op_id) + 1;
+            self.multi_sig_pending.write(op_id, pending);
+            self.emit(MultiSigOperationApproved {
+                op_id,
+                approver: caller,
+                confirmations_count: op.confirmations_count,
+            });
+        }
+
+        fn execute_critical_operation(ref self: ContractState, op_id: felt252) {
+            let caller = get_caller_address();
+            assert(self.agent_permissions.read((caller, 'MULTISIG')), 'Not a multisig signer');
+            let mut op = self.multi_sig_operations.read(op_id);
+            assert(!op.executed, 'Already executed');
+            let required = self.multi_sig_required.read();
+            let pending = self.multi_sig_pending.read(op_id);
+            assert(pending >= required, 'Not enough confirmations');
+            let updated_op = MultiSigOperation {
+                target_contract: op.target_contract,
+                selector: op.selector,
+                calldata_len: op.calldata_len,
+                confirmations_count: op.confirmations_count,
+                executed: true,
+            };
+            self.multi_sig_operations.write(op_id, updated_op);
+            self.multi_sig_status.write(op_id, MultiSigStatus::Executed);
+            self.emit(MultiSigOperationExecuted {
+                op_id,
+                executor: caller,
+            });
+        }
+
+        fn get_operation_status(self: @ContractState, op_id: felt252) -> (MultiSigStatus, u32, bool) {
+            let status = self.multi_sig_status.read(op_id);
+            let op = self.multi_sig_operations.read(op_id);
+            (status, op.confirmations_count, op.executed)
+        }
+
+        fn is_function_paused(self: @ContractState, function_selector: felt252) -> bool {
+            self.paused_functions.read(function_selector)
+        }
+
+        fn log_security_action(ref self: ContractState, action: felt252, actor: ContractAddress, details: felt252) {
+            let count = self.audit_count.read();
+            let entry = AuditEntry {
+                action,
+                actor,
+                timestamp: get_block_timestamp(),
+                details,
+            };
+            self.audit_trail.write(count, entry);
+            self.audit_count.write(count + 1);
+            self.emit(AuditTrailEntry {
+                action,
+                actor,
+                timestamp: get_block_timestamp(),
+                details,
+            });
         }
     }
 
