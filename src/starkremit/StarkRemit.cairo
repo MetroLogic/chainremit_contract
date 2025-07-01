@@ -13,15 +13,18 @@ use starknet::{
     get_contract_address,
 };
 use starkremit_contract::base::errors::{
-    ERC20Errors, GroupErrors, KYCErrors, MintBurnErrors, RegistrationErrors, TransferErrors,
+    ERC20Errors, GroupErrors, GovernanceErrors, KYCErrors, MintBurnErrors, RegistrationErrors, TransferErrors,
 };
 use starkremit_contract::base::events::*;
 use starkremit_contract::base::types::{
+        AdminRole, 
     Agent, AgentStatus, ContributionRound, KYCLevel, KycLevel, KycStatus, LoanRequest, LoanStatus,
     MemberContribution, RegistrationRequest, RegistrationStatus, RoundStatus, SavingsGroup,
-    TransferData, TransferHistory, TransferStatus, UserKycData, UserProfile,
-};
-use starkremit_contract::interfaces::{IERC20, IStarkRemit};
+    TransferData, TransferHistory, TransferStatus, ParameterBounds, ParameterHistory, TimelockChange,
+        UserKycData, UserProfile,
+,
+    };
+use starkremit_contract::interfaces::{IERC20, IGovernance, IStarkRemit};
 
 
 const INTEREST_RATE: u256 = 500; // 5% in basis points (0.05 * 10000)
@@ -46,6 +49,13 @@ pub mod StarkRemit {
 
     const PROTOCOL_OWNER_ROLE: felt252 = selector!("PROTOCOL_OWNER");
     const ADMIN_ROLE: felt252 = selector!("ADMIN");
+    // Fixed point scalar for accurate currency conversion calculations
+    // Equivalent to 10^18, standard for 18 decimal places
+    const FIXED_POINT_SCALER: u256 = 1_000_000_000_000_000_000;
+
+    // Governance constants
+    const TIMELOCK_DURATION: u64 = 172800; // 48 hours in seconds
+    const MAX_TIMELOCK_DURATION: u64 = 604800; // 7 days in seconds
 
     // Event definitions
     #[event]
@@ -101,6 +111,176 @@ pub mod StarkRemit {
         // loan_id -> timestamp_of_last_payment
     }
 
+        KycEnforcementEnabled: KycEnforcementEnabled, // Event for KYC enforcement
+        // Governance Events
+        AdminRoleAssigned: AdminRoleAssigned,
+        AdminRoleRevoked: AdminRoleRevoked,
+        SystemParameterUpdated: SystemParameterUpdated,
+        FeeUpdated: FeeUpdated,
+        ContractRegistered: ContractRegistered,
+        ContractUpdated: ContractUpdated,
+        TimelockScheduled: TimelockScheduled,
+        TimelockExecuted: TimelockExecuted,
+        TimelockCancelled: TimelockCancelled,
+        SystemPaused: SystemPaused,
+        SystemUnpaused: SystemUnpaused,
+        ParameterBoundsSet: ParameterBoundsSet,
+    }
+
+    // Standard ERC20 Transfer event
+    // Emitted when tokens are transferred between addresses
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct Transfer {
+        #[key]
+        from: ContractAddress, // Source address
+        #[key]
+        to: ContractAddress, // Destination address
+        value: u256 // Amount transferred
+    }
+
+    // Standard ERC20 Approval event
+    // Emitted when approval is granted to spend tokens
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct Approval {
+        #[key]
+        owner: ContractAddress, // Token owner
+        #[key]
+        spender: ContractAddress, // Approved spender
+        value: u256 // Approved amount
+    }
+
+    // Event emitted when a user is assigned a currency
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct CurrencyAssigned {
+        #[key]
+        user: ContractAddress, // User receiving the currency
+        currency: felt252, // Currency identifier
+        amount: u256 // Amount assigned
+    }
+
+    // Event emitted when a token is converted between currencies
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct TokenConverted {
+        #[key]
+        user: ContractAddress, // User performing the conversion
+        from_currency: felt252, // Source currency
+        to_currency: felt252, // Target currency
+        amount_in: u256, // Input amount
+        amount_out: u256 // Output amount after conversion
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct KycStatusUpdated {
+        #[key]
+        user: ContractAddress,
+        old_status: KycStatus,
+        new_status: KycStatus,
+        old_level: KycLevel,
+        new_level: KycLevel,
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct KycEnforcementEnabled {
+        enabled: bool,
+        updated_by: ContractAddress,
+    }
+
+    // Governance Events
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct AdminRoleAssigned {
+        #[key]
+        user: ContractAddress,
+        role: AdminRole,
+        assigned_by: ContractAddress,
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct AdminRoleRevoked {
+        #[key]
+        user: ContractAddress,
+        old_role: AdminRole,
+        revoked_by: ContractAddress,
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct SystemParameterUpdated {
+        #[key]
+        key: felt252,
+        old_value: u256,
+        new_value: u256,
+        updated_by: ContractAddress,
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct FeeUpdated {
+        #[key]
+        fee_type: felt252,
+        old_value: u256,
+        new_value: u256,
+        updated_by: ContractAddress,
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct ContractRegistered {
+        #[key]
+        name: felt252,
+        contract_address: ContractAddress,
+        registered_by: ContractAddress,
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct ContractUpdated {
+        #[key]
+        name: felt252,
+        old_address: ContractAddress,
+        new_address: ContractAddress,
+        updated_by: ContractAddress,
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct TimelockScheduled {
+        #[key]
+        key: felt252,
+        value: u256,
+        proposer: ContractAddress,
+        executable_at: u64,
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct TimelockExecuted {
+        #[key]
+        key: felt252,
+        value: u256,
+        executed_by: ContractAddress,
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct TimelockCancelled {
+        #[key]
+        key: felt252,
+        cancelled_by: ContractAddress,
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct SystemPaused {
+        paused_by: ContractAddress,
+        timestamp: u64,
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct SystemUnpaused {
+        unpaused_by: ContractAddress,
+        timestamp: u64,
+    }
+
+    #[derive(Copy, Drop, starknet::Event)]
+    pub struct ParameterBoundsSet {
+        #[key]
+        key: felt252,
+        min_value: u256,
+        max_value: u256,
+        set_by: ContractAddress,
+    }
 
     // Contract storage definition
     #[storage]
@@ -141,6 +321,17 @@ pub mod StarkRemit {
         single_limits: Map<u8, u256>,
         daily_usage: Map<ContractAddress, u256>,
         last_reset: Map<ContractAddress, u64>,
+        // Governance storage
+        user_roles: Map<ContractAddress, AdminRole>, // User admin roles
+        system_params: Map<felt252, u256>, // System parameters
+        param_bounds: Map<felt252, ParameterBounds>, // Parameter bounds
+        contract_registry: Map<felt252, ContractAddress>, // Contract registry
+        pending_timelock_changes: Map<felt252, TimelockChange>, // Pending timelock changes
+        param_history_count: Map<felt252, u256>, // Parameter history count
+        param_history: Map<(felt252, u256), ParameterHistory>, // Parameter history
+        system_fees: Map<felt252, u256>, // System fees
+        system_paused: bool, // System pause state
+        timelock_required_params: Map<felt252, bool> // Parameters requiring timelock
         // Transfer Administration storage
         transfers: Map<u256, TransferData>, // Transfer ID to Transfer mapping
         next_transfer_id: u256, // Counter for generating unique transfer IDs
@@ -214,6 +405,20 @@ pub mod StarkRemit {
         token_address: ContractAddress // Address of the token contract
     ) {
         self.oracle_address.write(oracle_address);
+
+        // Initialize KYC with default settings
+        self.kyc_enforcement_enabled.write(false);
+        self._set_default_transaction_limits();
+
+        // Initialize governance
+        self.user_roles.write(admin, AdminRole::SuperAdmin);
+        self.system_paused.write(false);
+        self._initialize_default_parameters();
+        self._initialize_timelock_required_params();
+
+        // Emit transfer event for initial supply
+        let zero_address: ContractAddress = 0.try_into().unwrap();
+        self.emit(Transfer { from: zero_address, to: admin, value: initial_supply });
         self.owner.write(owner);
         self.token_address.write(token_address);
         self.accesscontrol.initializer();
@@ -1840,6 +2045,303 @@ pub mod StarkRemit {
         }
     }
 
+    // Implementation of the Governance interface
+    #[abi(embed_v0)]
+    impl IGovernanceImpl of IGovernance::IGovernance<ContractState> {
+        fn assign_admin_role(
+            ref self: ContractState, user: ContractAddress, role: AdminRole,
+        ) -> bool {
+            self._require_minimum_role(AdminRole::SuperAdmin);
+            self._require_system_not_paused();
+
+            let _ = self.user_roles.read(user);
+            self.user_roles.write(user, role);
+
+            let caller = get_caller_address();
+            self.emit(AdminRoleAssigned { user, role, assigned_by: caller });
+            true
+        }
+
+        fn revoke_admin_role(ref self: ContractState, user: ContractAddress) -> bool {
+            self._require_minimum_role(AdminRole::SuperAdmin);
+            self._require_system_not_paused();
+
+            let old_role = self.user_roles.read(user);
+            self.user_roles.write(user, AdminRole::None);
+
+            let caller = get_caller_address();
+            self.emit(AdminRoleRevoked { user, old_role, revoked_by: caller });
+            true
+        }
+
+        fn get_admin_role(self: @ContractState, user: ContractAddress) -> AdminRole {
+            self.user_roles.read(user)
+        }
+
+        fn has_minimum_role(
+            self: @ContractState, user: ContractAddress, required_role: AdminRole,
+        ) -> bool {
+            let user_role = self.user_roles.read(user);
+            self._role_hierarchy_value(user_role) >= self._role_hierarchy_value(required_role)
+        }
+
+        fn set_system_parameter(ref self: ContractState, key: felt252, value: u256) -> bool {
+            // Check if parameter requires timelock
+            if self.timelock_required_params.read(key) {
+                assert(false, GovernanceErrors::REQUIRES_TIMELOCK);
+            }
+
+            self._require_minimum_role(AdminRole::Admin);
+            self._require_system_not_paused();
+            self._validate_parameter_bounds(key, value);
+
+            let old_value = self.system_params.read(key);
+            self._record_parameter_history(key, old_value, value);
+            self.system_params.write(key, value);
+
+            let caller = get_caller_address();
+            self
+                .emit(
+                    SystemParameterUpdated { key, old_value, new_value: value, updated_by: caller },
+                );
+            true
+        }
+
+        fn set_system_parameter_with_timelock(
+            ref self: ContractState, key: felt252, value: u256,
+        ) -> bool {
+            self._require_minimum_role(AdminRole::Admin);
+            self._require_system_not_paused();
+            self._validate_parameter_bounds(key, value);
+
+            self.schedule_parameter_update(key, value)
+        }
+
+        fn get_system_parameter(self: @ContractState, key: felt252) -> u256 {
+            self.system_params.read(key)
+        }
+
+        fn set_parameter_bounds(
+            ref self: ContractState, key: felt252, bounds: ParameterBounds,
+        ) -> bool {
+            self._require_minimum_role(AdminRole::SuperAdmin);
+            self._require_system_not_paused();
+
+            assert(bounds.min_value <= bounds.max_value, GovernanceErrors::INVALID_BOUNDS);
+            self.param_bounds.write(key, bounds);
+
+            let caller = get_caller_address();
+            self
+                .emit(
+                    ParameterBoundsSet {
+                        key,
+                        min_value: bounds.min_value,
+                        max_value: bounds.max_value,
+                        set_by: caller,
+                    },
+                );
+            true
+        }
+
+        fn get_parameter_bounds(self: @ContractState, key: felt252) -> ParameterBounds {
+            self.param_bounds.read(key)
+        }
+
+        fn register_contract(
+            ref self: ContractState, name: felt252, contract_address: ContractAddress,
+        ) -> bool {
+            self._require_minimum_role(AdminRole::Admin);
+            self._require_system_not_paused();
+
+            // Check if already registered
+            let existing = self.contract_registry.read(name);
+            let zero_address: ContractAddress = 0.try_into().unwrap();
+            assert(existing == zero_address, GovernanceErrors::REGISTRY_KEY_EXISTS);
+
+            self.contract_registry.write(name, contract_address);
+
+            let caller = get_caller_address();
+            self.emit(ContractRegistered { name, contract_address, registered_by: caller });
+            true
+        }
+
+        fn update_contract_address(
+            ref self: ContractState, name: felt252, new_address: ContractAddress,
+        ) -> bool {
+            self._require_minimum_role(AdminRole::SuperAdmin);
+            self._require_system_not_paused();
+
+            let old_address = self.contract_registry.read(name);
+            let zero_address: ContractAddress = 0.try_into().unwrap();
+            assert(old_address != zero_address, GovernanceErrors::PARAM_NOT_FOUND);
+
+            self.contract_registry.write(name, new_address);
+
+            let caller = get_caller_address();
+            self.emit(ContractUpdated { name, old_address, new_address, updated_by: caller });
+            true
+        }
+
+        fn get_contract_address(self: @ContractState, name: felt252) -> ContractAddress {
+            self.contract_registry.read(name)
+        }
+
+        fn is_contract_registered(self: @ContractState, name: felt252) -> bool {
+            let address = self.contract_registry.read(name);
+            let zero_address: ContractAddress = 0.try_into().unwrap();
+            address != zero_address
+        }
+
+        fn schedule_parameter_update(ref self: ContractState, key: felt252, value: u256) -> bool {
+            self._require_minimum_role(AdminRole::Admin);
+            self._require_system_not_paused();
+            self._validate_parameter_bounds(key, value);
+
+            let current_time = get_block_timestamp();
+            let executable_at = current_time + TIMELOCK_DURATION;
+
+            let timelock_change = TimelockChange {
+                key,
+                value,
+                proposer: get_caller_address(),
+                proposed_at: current_time,
+                executable_at,
+                is_active: true,
+            };
+
+            self.pending_timelock_changes.write(key, timelock_change);
+
+            self
+                .emit(
+                    TimelockScheduled { key, value, proposer: get_caller_address(), executable_at },
+                );
+            true
+        }
+
+        fn execute_timelock_update(ref self: ContractState, key: felt252) -> bool {
+            self._require_minimum_role(AdminRole::Admin);
+            self._require_system_not_paused();
+
+            let timelock_change = self.pending_timelock_changes.read(key);
+            assert(timelock_change.is_active, GovernanceErrors::TIMELOCK_NOT_FOUND);
+
+            let current_time = get_block_timestamp();
+            assert(
+                current_time >= timelock_change.executable_at, GovernanceErrors::TIMELOCK_NOT_READY,
+            );
+
+            // Execute the change
+            let old_value = self.system_params.read(key);
+            self._record_parameter_history(key, old_value, timelock_change.value);
+            self.system_params.write(key, timelock_change.value);
+
+            // Clear the timelock
+            let empty_timelock = TimelockChange {
+                key: 0,
+                value: 0,
+                proposer: 0.try_into().unwrap(),
+                proposed_at: 0,
+                executable_at: 0,
+                is_active: false,
+            };
+            self.pending_timelock_changes.write(key, empty_timelock);
+
+            let caller = get_caller_address();
+            self.emit(TimelockExecuted { key, value: timelock_change.value, executed_by: caller });
+            self
+                .emit(
+                    SystemParameterUpdated {
+                        key, old_value, new_value: timelock_change.value, updated_by: caller,
+                    },
+                );
+            true
+        }
+
+        fn cancel_timelock_update(ref self: ContractState, key: felt252) -> bool {
+            let timelock_change = self.pending_timelock_changes.read(key);
+            assert(timelock_change.is_active, GovernanceErrors::TIMELOCK_NOT_FOUND);
+
+            let caller = get_caller_address();
+            let can_cancel = caller == timelock_change.proposer
+                || self.has_minimum_role(caller, AdminRole::SuperAdmin);
+            assert(can_cancel, GovernanceErrors::UNAUTHORIZED_CANCEL);
+
+            // Clear the timelock
+            let empty_timelock = TimelockChange {
+                key: 0,
+                value: 0,
+                proposer: 0.try_into().unwrap(),
+                proposed_at: 0,
+                executable_at: 0,
+                is_active: false,
+            };
+            self.pending_timelock_changes.write(key, empty_timelock);
+
+            self.emit(TimelockCancelled { key, cancelled_by: caller });
+            true
+        }
+
+        fn get_timelock_info(self: @ContractState, key: felt252) -> TimelockChange {
+            self.pending_timelock_changes.read(key)
+        }
+
+        fn pause_system(ref self: ContractState) -> bool {
+            self._require_minimum_role(AdminRole::SuperAdmin);
+
+            self.system_paused.write(true);
+            let caller = get_caller_address();
+            self.emit(SystemPaused { paused_by: caller, timestamp: get_block_timestamp() });
+            true
+        }
+
+        fn unpause_system(ref self: ContractState) -> bool {
+            self._require_minimum_role(AdminRole::SuperAdmin);
+
+            self.system_paused.write(false);
+            let caller = get_caller_address();
+            self.emit(SystemUnpaused { unpaused_by: caller, timestamp: get_block_timestamp() });
+            true
+        }
+
+        fn is_system_paused(self: @ContractState) -> bool {
+            self.system_paused.read()
+        }
+
+        fn update_fee(ref self: ContractState, fee_type: felt252, new_value: u256) -> bool {
+            self._require_minimum_role(AdminRole::Admin);
+            self._require_system_not_paused();
+
+            let old_value = self.system_fees.read(fee_type);
+            self.system_fees.write(fee_type, new_value);
+
+            let caller = get_caller_address();
+            self.emit(FeeUpdated { fee_type, old_value, new_value, updated_by: caller });
+            true
+        }
+
+        fn get_fee(self: @ContractState, fee_type: felt252) -> u256 {
+            self.system_fees.read(fee_type)
+        }
+
+        fn get_parameter_history_count(self: @ContractState, key: felt252) -> u256 {
+            self.param_history_count.read(key)
+        }
+
+        fn get_parameter_history(
+            self: @ContractState, key: felt252, index: u256,
+        ) -> ParameterHistory {
+            self.param_history.read((key, index))
+        }
+
+        fn get_timelock_duration(self: @ContractState) -> u64 {
+            TIMELOCK_DURATION
+        }
+
+        fn requires_timelock(self: @ContractState, key: felt252) -> bool {
+            self.timelock_required_params.read(key)
+        }
+    }
+
     // Internal helper functions
     #[generate_trait]
     impl InternalFunctions of InternalFunctionsTrait {
@@ -1914,6 +2416,120 @@ pub mod StarkRemit {
             self.daily_limits.write(3, 100000_000_000_000_000_000_000); // 100,000 tokens
             self.single_limits.write(3, 50000_000_000_000_000_000_000); // 50,000 tokens
         }
+
+        // Governance helper functions
+        fn _require_minimum_role(self: @ContractState, required_role: AdminRole) {
+            let caller = get_caller_address();
+            let caller_role = self.user_roles.read(caller);
+            assert(
+                self
+                    ._role_hierarchy_value(caller_role) >= self
+                    ._role_hierarchy_value(required_role),
+                GovernanceErrors::INSUFFICIENT_ROLE,
+            );
+        }
+
+        fn _require_system_not_paused(self: @ContractState) {
+            assert(!self.system_paused.read(), GovernanceErrors::SYSTEM_PAUSED);
+        }
+
+        fn _role_hierarchy_value(self: @ContractState, role: AdminRole) -> u8 {
+            match role {
+                AdminRole::None => 0,
+                AdminRole::Operator => 1,
+                AdminRole::KYCManager => 2,
+                AdminRole::Admin => 3,
+                AdminRole::SuperAdmin => 4,
+            }
+        }
+
+        fn _validate_parameter_bounds(self: @ContractState, key: felt252, value: u256) {
+            let bounds = self.param_bounds.read(key);
+            if bounds.max_value > 0 { // Only validate if bounds are set
+                assert(value >= bounds.min_value, GovernanceErrors::PARAM_OUT_OF_BOUNDS);
+                assert(value <= bounds.max_value, GovernanceErrors::PARAM_OUT_OF_BOUNDS);
+            }
+        }
+
+        fn _record_parameter_history(
+            ref self: ContractState, key: felt252, old_value: u256, new_value: u256,
+        ) {
+            let count = self.param_history_count.read(key);
+            let history = ParameterHistory {
+                old_value,
+                new_value,
+                changed_by: get_caller_address(),
+                changed_at: get_block_timestamp(),
+            };
+            self.param_history.write((key, count), history);
+            self.param_history_count.write(key, count + 1);
+        }
+
+        fn _initialize_default_parameters(ref self: ContractState) {
+            // Initialize default system parameters
+            let gas_fee_key: felt252 = 'GAS_FEE';
+            let service_fee_key: felt252 = 'SERVICE_FEE';
+            let max_tx_amount_key: felt252 = 'MAX_TX_AMOUNT';
+
+            self.system_params.write(gas_fee_key, 1000000000000000); // 0.001 tokens
+            self.system_params.write(service_fee_key, 500000000000000); // 0.0005 tokens
+            self.system_params.write(max_tx_amount_key, 1000000000000000000000000); // 1M tokens
+
+            // Set parameter bounds
+            self
+                .param_bounds
+                .write(
+                    gas_fee_key,
+                    ParameterBounds {
+                        min_value: 0, max_value: 10000000000000000 // 0.01 tokens max
+                    },
+                );
+            self
+                .param_bounds
+                .write(
+                    service_fee_key,
+                    ParameterBounds {
+                        min_value: 0, max_value: 5000000000000000 // 0.005 tokens max
+                    },
+                );
+            self
+                .param_bounds
+                .write(
+                    max_tx_amount_key,
+                    ParameterBounds {
+                        min_value: 1000000000000000000, // 1 token min
+                        max_value: 10000000000000000000000000 // 10M tokens max
+                    },
+                );
+        }
+
+        fn _initialize_timelock_required_params(ref self: ContractState) {
+            // Parameters that require timelock for changes
+            let max_tx_amount_key: felt252 = 'MAX_TX_AMOUNT';
+            let critical_param_key: felt252 = 'CRITICAL_PARAM';
+
+            self.timelock_required_params.write(max_tx_amount_key, true);
+            self.timelock_required_params.write(critical_param_key, true);
+        }
+    }
+
+    // Multi-currency functions
+    #[generate_trait]
+    impl MultiCurrencyFunctions of MultiCurrencyFunctionsTrait {
+        // Registers a new supported currency
+        // Only callable by admin
+        fn register_currency(ref self: ContractState, currency: felt252) {
+            let caller = get_caller_address();
+            // Validate caller is admin
+            assert(caller == self.admin.read(), ERC20Errors::NotAdmin); // "Only admin" in felt252
+
+            // Register the currency
+            self.supported_currencies.write(currency, true);
+        }
+
+        // Converts tokens from one currency to another
+        // Returns the amount of tokens received in the target currency
+        fn convert_currency(
 
         fn _record_transfer_history(
             ref self: ContractState,

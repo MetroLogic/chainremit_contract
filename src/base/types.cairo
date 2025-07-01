@@ -279,3 +279,37 @@ pub struct LoanRequest {
     pub status: LoanStatus,
     pub created_at: u64,
 }
+
+#[derive(Copy, Drop, Serde, starknet::Store, PartialEq)]
+pub enum AdminRole {
+    #[default]
+    None,
+    Operator, // Can perform basic operations
+    KYCManager, // Can manage KYC operations
+    Admin, // Can manage most parameters, register contract and perform almost all operations
+    SuperAdmin // Can manage roles including critical parameters and perform any operation
+}
+
+#[derive(Copy, Drop, Serde, starknet::Store)]
+pub struct ParameterBounds {
+    pub min_value: u256,
+    pub max_value: u256,
+}
+
+#[derive(Copy, Drop, Serde, starknet::Store)]
+pub struct TimelockChange {
+    pub key: felt252,
+    pub value: u256,
+    pub proposer: ContractAddress,
+    pub proposed_at: u64,
+    pub executable_at: u64,
+    pub is_active: bool,
+}
+
+#[derive(Copy, Drop, Serde, starknet::Store)]
+pub struct ParameterHistory {
+    pub old_value: u256,
+    pub new_value: u256,
+    pub changed_by: ContractAddress,
+    pub changed_at: u64,
+}

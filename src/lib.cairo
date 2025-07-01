@@ -6,6 +6,7 @@ pub mod base {
 
 pub mod interfaces {
     pub mod IERC20;
+    pub mod IGovernance;
     pub mod IStarkRemit;
 }
 

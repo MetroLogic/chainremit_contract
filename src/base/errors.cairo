@@ -236,3 +236,44 @@ pub mod MintBurnErrors {
     /// Error triggered if max supply is set too low
     pub const MAX_SUPPLY_TOO_LOW: felt252 = 'SetMaxSupply: too low';
 }
+
+pub mod GovernanceErrors {
+    /// Error triggered when caller lacks required admin role
+    pub const INSUFFICIENT_ROLE: felt252 = 'GOV: insufficient role';
+
+    /// Error triggered when trying to assign invalid role
+    pub const INVALID_ROLE: felt252 = 'GOV: invalid role';
+
+    /// Error triggered when parameter value is out of bounds
+    pub const PARAM_OUT_OF_BOUNDS: felt252 = 'GOV: param out of bounds';
+
+    /// Error triggered when parameter key doesn't exist
+    pub const PARAM_NOT_FOUND: felt252 = 'GOV: parameter not found';
+
+    /// Error triggered when contract address is invalid
+    pub const INVALID_CONTRACT: felt252 = 'GOV: invalid contract';
+
+    /// Error triggered when timelock period hasn't passed
+    pub const TIMELOCK_NOT_READY: felt252 = 'GOV: timelock not ready';
+
+    /// Error triggered when trying to execute non-existent timelock
+    pub const TIMELOCK_NOT_FOUND: felt252 = 'GOV: timelock not found';
+
+    /// Error triggered when timelock has expired
+    pub const TIMELOCK_EXPIRED: felt252 = 'GOV: timelock expired';
+
+    /// Error triggered when trying to cancel unauthorized timelock
+    pub const UNAUTHORIZED_CANCEL: felt252 = 'GOV: unauthorized cancel';
+
+    /// Error triggered when system is paused
+    pub const SYSTEM_PAUSED: felt252 = 'GOV: system paused';
+
+    /// Error triggered when trying to set invalid bounds
+    pub const INVALID_BOUNDS: felt252 = 'GOV: invalid bounds';
+
+    /// Error triggered when contract registry key exists
+    pub const REGISTRY_KEY_EXISTS: felt252 = 'GOV: registry key exists';
+
+    /// Error triggered when parameter update requires timelock
+    pub const REQUIRES_TIMELOCK: felt252 = 'GOV: requires timelock';
+}
