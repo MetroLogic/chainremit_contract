@@ -43,6 +43,9 @@ pub fn USER() -> ContractAddress {
     contract_address_const::<'USER'>()
 }
 
+// Use a fixed timestamp for tests
+const NOW: u64 = 1723000000;
+
 fn __setup__() -> (ContractAddress, IStarkRemitDispatcher, IERC20Dispatcher) {
     let strk_token_name: ByteArray = "STARKNET_TOKEN";
 
@@ -532,7 +535,7 @@ fn test_loan_request_with_kyc_enforcement_enabled_valid_kyc() {
     let admin_address = USER();
     start_cheat_caller_address(contract_address, admin_address);
     let caller = get_contract_address();
-
+    
     // Register user
     let register_user = RegistrationRequest {
         email_hash: 'user@test.com',
@@ -547,16 +550,15 @@ fn test_loan_request_with_kyc_enforcement_enabled_valid_kyc() {
     stop_cheat_caller_address(contract_address);
     start_cheat_caller_address(contract_address, OWNER());
     contract.set_kyc_enforcement(true);
-
+    
     // Set user KYC to approved
-    contract
-        .update_kyc_status(
-            caller,
-            KycStatus::Approved,
-            KycLevel::Basic,
-            'verification_hash_123',
-            get_block_timestamp() + 86400 * 365 // Valid for 1 year
-        );
+    contract.update_kyc_status(
+        caller,
+        KycStatus::Approved,
+        KycLevel::Basic,
+        'verification_hash_123',
+        NOW + 86400 * 365 // Valid for 1 year
+    );
     stop_cheat_caller_address(contract_address);
     start_cheat_caller_address(contract_address, admin_address);
 
@@ -577,7 +579,7 @@ fn test_loan_request_with_expired_kyc() {
     let admin_address = USER();
     start_cheat_caller_address(contract_address, admin_address);
     let caller = get_contract_address();
-
+    
     // Register user
     let register_user = RegistrationRequest {
         email_hash: 'user@test.com',
@@ -592,16 +594,15 @@ fn test_loan_request_with_expired_kyc() {
     stop_cheat_caller_address(contract_address);
     start_cheat_caller_address(contract_address, OWNER());
     contract.set_kyc_enforcement(true);
-
+    
     // Set user KYC to approved but expired
-    contract
-        .update_kyc_status(
-            caller,
-            KycStatus::Approved,
-            KycLevel::Basic,
-            'verification_hash_123',
-            get_block_timestamp() - 86400 // Expired 1 day ago
-        );
+    contract.update_kyc_status(
+        caller,
+        KycStatus::Approved,
+        KycLevel::Basic,
+        'verification_hash_123',
+        NOW - 86400 // Expired 1 day ago
+    );
     stop_cheat_caller_address(contract_address);
     start_cheat_caller_address(contract_address, admin_address);
 
