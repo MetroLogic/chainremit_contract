@@ -279,29 +279,3 @@ pub struct LoanRequest {
     pub status: LoanStatus,
     pub created_at: u64,
 }
-
-// Role constants (bitmask)
-pub const ROLE_ADMIN: u8 = 1;
-pub const ROLE_MINTER: u8 = 2;
-pub const ROLE_KYC_MANAGER: u8 = 4;
-
-// Pending action types for multi-sig
-#[derive(Copy, Drop, Serde, starknet::Store, PartialEq)]
-pub enum PendingActionType {
-    Mint = 0,
-    AddMinter = 1,
-    RemoveMinter = 2,
-    UpdateKYC = 3,
-    Pause = 4,
-    Unpause = 5,
-}
-
-#[derive(Copy, Drop, Serde, starknet::Store)]
-pub struct PendingAction {
-    pub action_type: PendingActionType,
-    pub params_hash: felt252,
-    pub proposer: ContractAddress,
-    pub confirmations: u8,
-    pub execute_after: u64,
-    pub executed: bool,
-}

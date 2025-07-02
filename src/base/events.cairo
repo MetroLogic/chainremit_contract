@@ -353,35 +353,3 @@ pub struct LatePayment {
     pub penalty_amount: u256,
     pub timestamp: u64,
 }
-
-#[derive(Copy, Drop, starknet::Event)]
-pub struct ActionProposed {
-    #[key]
-    pub action_id: felt252,
-    pub action_type: u8,
-    pub proposer: ContractAddress,
-    pub execute_after: u64,
-}
-
-#[derive(Copy, Drop, starknet::Event)]
-pub struct ActionConfirmed {
-    #[key]
-    pub action_id: felt252,
-    pub confirmer: ContractAddress,
-}
-
-#[derive(Copy, Drop, starknet::Event)]
-pub struct ActionExecuted {
-    #[key]
-    pub action_id: felt252,
-}
-
-#[derive(Copy, Drop, starknet::Event)]
-pub struct Paused {
-    pub pauser: ContractAddress,
-}
-
-#[derive(Copy, Drop, starknet::Event)]
-pub struct Unpaused {
-    pub unpauser: ContractAddress,
-}
