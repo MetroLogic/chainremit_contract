@@ -54,7 +54,6 @@ fn hash_action(action_type: PendingActionType, params_hash: felt252, timestamp: 
 }
 
 // Multi-sig helpers
-// Enhanced propose_action with event emission
 fn propose_action(
     pending_actions: LegacyMap<felt252, PendingAction>,
     roles: LegacyMap<ContractAddress, u8>,
@@ -63,6 +62,96 @@ fn propose_action(
     delay_seconds: u64
 ) -> felt252 {
     only_role(roles, ROLE_ADMIN);
+    let action_id = hash_action(action_type, params_hash, get_block_timestamp());
+    let execute_after = get_block_timestamp() + delay_seconds;
+    let confirmations = 1u8;
+    let pending = PendingAction {
+        action_type,
+        params_hash,
+        proposer: get_caller_address(),
+        confirmations,
+        execute_after,
+        executed: false,
+    };
+    pending_actions.write(action_id, pending);
+    emit ActionProposed { action_id, action_type: action_type.into(), proposer: get_caller_address(), execute_after };
+    action_id
+}
+
+fn confirm_action(pending_actions: LegacyMap<felt252, PendingAction>, roles: LegacyMap<ContractAddress, u8>, action_id: felt252) {
+    only_role(roles, ROLE_ADMIN);
+    let mut pending = pending_actions.read(action_id);
+    assert(!pending.executed, 'ActionAlreadyExecuted');
+    let caller = get_caller_address();
+    // Prevent duplicate confirmations by the same address
+    let mut already_confirmed = false;
+    for i in 0..pending.confirmations.len() {
+        if pending.confirmations.get(i) == caller {
+            already_confirmed = true;
+            break;
+        }
+    }
+    assert(!already_confirmed, 'AlreadyConfirmed');
+    pending.confirmations.append(caller);
+    pending_actions.write(action_id, pending);
+    emit ActionConfirmed { action_id, confirmer: caller };
+}
+
+fn execute_action(
+    pending_actions: LegacyMap<felt252, PendingAction>,
+    roles: LegacyMap<ContractAddress, u8>,
+    action_id: felt252,
+    min_confirmations: u8
+) {
+    only_role(roles, ROLE_ADMIN);
+    let mut pending = pending_actions.read(action_id);
+    assert(!pending.executed, 'ActionAlreadyExecuted');
+    assert(get_block_timestamp() >= pending.execute_after, 'ActionTooEarly');
+    assert(pending.confirmations.len() >= min_confirmations.into(), 'NotEnoughConfirmations');
+    handle_action(pending.action_type, pending.params_hash);
+    pending.executed = true;
+    pending_actions.write(action_id, pending);
+    emit ActionExecuted { action_id };
+}
+
+// Handler stub for critical actions (expand as needed)
+fn handle_action(action_type: PendingActionType, params_hash: felt252) {
+    match action_type {
+        PendingActionType::Pause => { emit Paused { pauser: get_caller_address() }; },
+        PendingActionType::Unpause => { emit Unpaused { unpauser: get_caller_address() }; },
+        PendingActionType::Mint => { /* call mint logic here */ },
+        PendingActionType::AddMinter => { /* call add_minter logic here */ },
+        PendingActionType::RemoveMinter => { /* call remove_minter logic here */ },
+        PendingActionType::UpdateKYC => { /* call update_kyc logic here */ },
+        // Add more as needed for deactivate/reactivate user, suspend/reinstate KYC, set KYC enforcement
+        _ => { /* implement as needed */ }
+    }
+}
+
+// Community pause voting
+fn vote_pause(pause_votes: LegacyMap<ContractAddress, bool>, roles: LegacyMap<ContractAddress, u8>, paused: bool, pause_vote_count: u8, required_votes: u8) -> bool {
+    let caller = get_caller_address();
+    assert(has_role(roles, caller, ROLE_ADMIN), 'NotAuthorized');
+    assert(!pause_votes.read(caller), 'AlreadyVoted');
+    pause_votes.write(caller, true);
+    let new_count = pause_vote_count + 1;
+    if new_count >= required_votes {
+        emit Paused { pauser: caller };
+        return true;
+    }
+    false
+}
+
+// Propose action for any role (not just admin)
+fn propose_action_for_role(
+    pending_actions: LegacyMap<felt252, PendingAction>,
+    roles: LegacyMap<ContractAddress, u8>,
+    action_type: PendingActionType,
+    params_hash: felt252,
+    delay_seconds: u64,
+    required_role: u8
+) -> felt252 {
+    only_role(roles, required_role);
     let action_id = hash_action(action_type, params_hash, get_block_timestamp());
     let execute_after = get_block_timestamp() + delay_seconds;
     let mut confirmations = ArrayTrait::new();
@@ -78,59 +167,4 @@ fn propose_action(
     pending_actions.write(action_id, pending);
     emit ActionProposed { action_id, action_type: action_type.into(), proposer: get_caller_address(), execute_after };
     action_id
-}
-
-// Enhanced confirm_action with event emission
-fn confirm_action(pending_actions: LegacyMap<felt252, PendingAction>, roles: LegacyMap<ContractAddress, u8>, action_id: felt252) {
-    only_role(roles, ROLE_ADMIN);
-    let mut pending = pending_actions.read(action_id);
-    assert(!pending.executed, 'ActionAlreadyExecuted');
-    let caller = get_caller_address();
-    assert(!pending.confirmations.contains(caller), 'AlreadyConfirmed');
-    pending.confirmations.append(caller);
-    pending_actions.write(action_id, pending);
-    emit ActionConfirmed { action_id, confirmer: caller };
-}
-
-// Enhanced execute_action with event emission and handler stub
-fn execute_action(
-    pending_actions: LegacyMap<felt252, PendingAction>,
-    roles: LegacyMap<ContractAddress, u8>,
-    action_id: felt252,
-    min_confirmations: u8
-) {
-    only_role(roles, ROLE_ADMIN);
-    let mut pending = pending_actions.read(action_id);
-    assert(!pending.executed, 'ActionAlreadyExecuted');
-    assert(get_block_timestamp() >= pending.execute_after, 'ActionTooEarly');
-    assert(pending.confirmations.len() >= min_confirmations, 'NotEnoughConfirmations');
-    // Call the actual action handler (to be implemented per action)
-    handle_action(pending.action_type, pending.params_hash);
-    pending.executed = true;
-    pending_actions.write(action_id, pending);
-    emit ActionExecuted { action_id };
-}
-
-// Handler stub for critical actions (expand as needed)
-fn handle_action(action_type: PendingActionType, params_hash: felt252) {
-    match action_type {
-        PendingActionType::Pause => { emit Paused { pauser: get_caller_address() }; },
-        PendingActionType::Unpause => { emit Unpaused { unpauser: get_caller_address() }; },
-        _ => { /* implement as needed */ }
-    }
-}
-
-// Community pause voting
-// Enhanced community pause voting with event emission
-fn vote_pause(pause_votes: LegacyMap<ContractAddress, bool>, roles: LegacyMap<ContractAddress, u8>, paused: bool, pause_vote_count: u8, required_votes: u8) -> bool {
-    let caller = get_caller_address();
-    assert(has_role(roles, caller, ROLE_ADMIN), 'NotAuthorized');
-    assert(!pause_votes.read(caller), 'AlreadyVoted');
-    pause_votes.write(caller, true);
-    let new_count = pause_vote_count + 1;
-    if new_count >= required_votes {
-        emit Paused { pauser: caller };
-        return true;
-    }
-    false
 }
