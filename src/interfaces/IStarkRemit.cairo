@@ -4,7 +4,7 @@ use starkremit_contract::base::types::*;
 #[starknet::interface]
 pub trait IStarkRemit<TContractState> {
     // Admin Role Management
-    fn grant_admin_role(ref self: TContractState, admin: ContractAddress);
+    fn grant_admin_role(ref self: TContractState, admin: ContractAddress) ;
 
     // User Registration Functions
     // Get the contract owner address
