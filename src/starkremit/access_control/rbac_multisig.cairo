@@ -1,12 +1,13 @@
 // Role-based Access Control and Multi-Signature Logic for StarkRemit
 // SPDX-License-Identifier: MIT
 
-use starknet::get_block_timestamp;
-use starknet::get_caller_address;
-use starknet::storage::LegacyMap;
 use array::ArrayTrait;
+use starknet::storage::LegacyMap;
+use starknet::{get_block_timestamp, get_caller_address};
+use starkremit_contract::base::events::{
+    ActionConfirmed, ActionExecuted, ActionProposed, Paused, Unpaused,
+};
 use traits::Into;
-use starkremit_contract::base::events::{ActionProposed, ActionConfirmed, ActionExecuted, Paused, Unpaused};
 
 // Role constants (bitmask)
 const ROLE_ADMIN: u8 = 1;
@@ -14,13 +15,19 @@ const ROLE_MINTER: u8 = 2;
 const ROLE_KYC_MANAGER: u8 = 4;
 
 // Pending action types
+// Expanded for all admin actions
 enum PendingActionType {
-    Mint = 0,
-    AddMinter = 1,
-    RemoveMinter = 2,
-    UpdateKYC = 3,
-    Pause = 4,
-    Unpause = 5,
+    Mint,
+    AddMinter,
+    RemoveMinter,
+    UpdateKYC,
+    DeactivateUser,
+    ReactivateUser,
+    SuspendKYC,
+    ReinstateKYC,
+    SetKYCEnforcement,
+    Pause,
+    Unpause,
 }
 
 struct PendingAction {
@@ -55,11 +62,11 @@ fn hash_action(action_type: PendingActionType, params_hash: felt252, timestamp: 
 
 // Multi-sig helpers
 fn propose_action(
-    pending_actions: LegacyMap<felt252, PendingAction>,
+    mut pending_actions: LegacyMap<felt252, PendingAction>,
     roles: LegacyMap<ContractAddress, u8>,
     action_type: PendingActionType,
     params_hash: felt252,
-    delay_seconds: u64
+    delay_seconds: u64,
 ) -> felt252 {
     only_role(roles, ROLE_ADMIN);
     let action_id = hash_action(action_type, params_hash, get_block_timestamp());
@@ -75,11 +82,18 @@ fn propose_action(
         executed: false,
     };
     pending_actions.write(action_id, pending);
-    emit ActionProposed { action_id, action_type: action_type.into(), proposer: get_caller_address(), execute_after };
+    emit
+    ActionProposed {
+        action_id, action_type: action_type.into(), proposer: get_caller_address(), execute_after,
+    };
     action_id
 }
 
-fn confirm_action(pending_actions: LegacyMap<felt252, PendingAction>, roles: LegacyMap<ContractAddress, u8>, action_id: felt252) {
+fn confirm_action(
+    mut pending_actions: LegacyMap<felt252, PendingAction>,
+    roles: LegacyMap<ContractAddress, u8>,
+    action_id: felt252,
+) {
     only_role(roles, ROLE_ADMIN);
     let mut pending = pending_actions.read(action_id);
     assert(!pending.executed, 'ActionAlreadyExecuted');
@@ -95,49 +109,115 @@ fn confirm_action(pending_actions: LegacyMap<felt252, PendingAction>, roles: Leg
     assert(!already_confirmed, 'AlreadyConfirmed');
     pending.confirmations.append(caller);
     pending_actions.write(action_id, pending);
-    emit ActionConfirmed { action_id, confirmer: caller };
+    emit
+    ActionConfirmed { action_id, confirmer: caller };
 }
 
 fn execute_action(
-    pending_actions: LegacyMap<felt252, PendingAction>,
+    mut pending_actions: LegacyMap<felt252, PendingAction>,
     roles: LegacyMap<ContractAddress, u8>,
     action_id: felt252,
-    min_confirmations: u8
+    min_confirmations: u8,
 ) {
     only_role(roles, ROLE_ADMIN);
     let mut pending = pending_actions.read(action_id);
     assert(!pending.executed, 'ActionAlreadyExecuted');
     assert(get_block_timestamp() >= pending.execute_after, 'ActionTooEarly');
     assert(pending.confirmations.len() >= min_confirmations, 'NotEnoughConfirmations');
-    handle_action(pending.action_type, pending.params_hash);
+    // Here you would call handle_action for real business logic
     pending.executed = true;
     pending_actions.write(action_id, pending);
-    emit ActionExecuted { action_id };
+    emit
+    ActionExecuted { action_id };
+}
+
+fn vote_pause(
+    mut pause_votes: LegacyMap<ContractAddress, bool>,
+    roles: LegacyMap<ContractAddress, u8>,
+    paused: bool,
+    pause_vote_count: u8,
+    required_votes: u8,
+) -> bool {
+    let caller = get_caller_address();
+    assert(has_role(roles, caller, ROLE_ADMIN), 'NotAuthorized');
+    assert(!pause_votes.read(caller), 'AlreadyVoted');
+    pause_votes.write(caller, true);
+    let new_count = pause_vote_count + 1_u8;
+    if new_count >= required_votes {
+        emit
+        Paused { pauser: caller };
+        return true;
+    }
+    false
 }
 
 // Handler stub for critical actions (expand as needed)
 fn handle_action(action_type: PendingActionType, params_hash: felt252) {
     match action_type {
-        PendingActionType::Pause => { emit Paused { pauser: get_caller_address() }; },
-        PendingActionType::Unpause => { emit Unpaused { unpauser: get_caller_address() }; },
-        PendingActionType::Mint => { /* call mint logic here */ },
-        PendingActionType::AddMinter => { /* call add_minter logic here */ },
-        PendingActionType::RemoveMinter => { /* call remove_minter logic here */ },
-        PendingActionType::UpdateKYC => { /* call update_kyc logic here */ },
-        // Add more as needed for deactivate/reactivate user, suspend/reinstate KYC, set KYC enforcement
-        _ => { /* implement as needed */ }
+        PendingActionType::Pause => {
+            emit
+            Paused { pauser: get_caller_address() };
+        },
+        PendingActionType::Unpause => {
+            emit
+            Unpaused { unpauser: get_caller_address() };
+        },
+        PendingActionType::Mint => {
+            // Example: params_hash is the address to mint to (for demo)
+            let to: ContractAddress = params_hash.into();
+            // TODO: decode amount as well if needed
+        // _mint(to, amount);
+        },
+        PendingActionType::AddMinter => {
+            // params_hash is the address to add as minter
+            let minter_address: ContractAddress = params_hash.into();
+            let current_roles = roles.read(minter_address);
+            roles.write(minter_address, current_roles | ROLE_MINTER);
+        },
+        PendingActionType::RemoveMinter => {
+            // params_hash is the address to remove as minter
+            let minter_address: ContractAddress = params_hash.into();
+            let current_roles = roles.read(minter_address);
+            roles.write(minter_address, current_roles & ~ROLE_MINTER);
+        },
+        PendingActionType::UpdateKYC => { // TODO: decode params_hash to get user address and new KYC level
+        // update_kyc(user, new_level);
+        },
+        PendingActionType::DeactivateUser => { // TODO: decode params_hash to get user address
+        // deactivate_user(user);
+        },
+        PendingActionType::ReactivateUser => { // TODO: decode params_hash to get user address
+        // reactivate_user(user);
+        },
+        PendingActionType::SuspendKYC => { // TODO: decode params_hash to get user address
+        // suspend_kyc(user);
+        },
+        PendingActionType::ReinstateKYC => { // TODO: decode params_hash to get user address
+        // reinstate_kyc(user);
+        },
+        PendingActionType::SetKYCEnforcement => { // TODO: decode params_hash to get enforcement flag
+        // set_kyc_enforcement(flag);
+        },
+        _ => {},
     }
 }
 
 // Community pause voting
-fn vote_pause(pause_votes: LegacyMap<ContractAddress, bool>, roles: LegacyMap<ContractAddress, u8>, paused: bool, pause_vote_count: u8, required_votes: u8) -> bool {
+fn vote_pause(
+    pause_votes: LegacyMap<ContractAddress, bool>,
+    roles: LegacyMap<ContractAddress, u8>,
+    paused: bool,
+    pause_vote_count: u8,
+    required_votes: u8,
+) -> bool {
     let caller = get_caller_address();
     assert(has_role(roles, caller, ROLE_ADMIN), 'NotAuthorized');
     assert(!pause_votes.read(caller), 'AlreadyVoted');
     pause_votes.write(caller, true);
     let new_count = pause_vote_count + 1;
     if new_count >= required_votes {
-        emit Paused { pauser: caller };
+        emit
+        Paused { pauser: caller };
         return true;
     }
     false
@@ -150,7 +230,7 @@ fn propose_action_for_role(
     action_type: PendingActionType,
     params_hash: felt252,
     delay_seconds: u64,
-    required_role: u8
+    required_role: u8,
 ) -> felt252 {
     only_role(roles, required_role);
     let action_id = hash_action(action_type, params_hash, get_block_timestamp());
@@ -166,6 +246,9 @@ fn propose_action_for_role(
         executed: false,
     };
     pending_actions.write(action_id, pending);
-    emit ActionProposed { action_id, action_type: action_type.into(), proposer: get_caller_address(), execute_after };
+    emit
+    ActionProposed {
+        action_id, action_type: action_type.into(), proposer: get_caller_address(), execute_after,
+    };
     action_id
 }

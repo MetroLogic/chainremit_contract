@@ -2,11 +2,11 @@
 // Test suite for RBAC and Multi-Signature Logic (rbac_multisig.cairo)
 // Project: StarkRemit
 
-use starknet::testing::{start_prank, stop_prank, get_caller_address};
-use starknet::storage::LegacyMap;
 use array::ArrayTrait;
-use traits::Into;
+use starknet::storage::LegacyMap;
+use starknet::testing::{get_caller_address, start_prank, stop_prank};
 use starkremit_contract::starkremit::access_control::rbac_multisig::*;
+use traits::Into;
 
 #[test]
 fn test_role_assignment_and_check() {
@@ -94,12 +94,12 @@ fn test_vote_pause() {
     let admin2: ContractAddress = 0x2;
     roles.write(admin1, ROLE_ADMIN);
     roles.write(admin2, ROLE_ADMIN);
-    let mut pause_vote_count = 0u8;
-    let required_votes = 2u8;
+    let mut pause_vote_count = 0_u8;
+    let required_votes = 2_u8;
     start_prank(admin1);
     let paused = vote_pause(pause_votes, roles, false, pause_vote_count, required_votes);
     assert(!paused, 'Should not pause yet');
-    pause_vote_count += 1;
+    pause_vote_count = pause_vote_count + 1_u8;
     stop_prank();
     start_prank(admin2);
     let paused = vote_pause(pause_votes, roles, false, pause_vote_count, required_votes);
