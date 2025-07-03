@@ -626,7 +626,7 @@ fn test_admin_cannot_set_system_parameters() {
 
     stop_cheat_caller_address(contract_address);
 
-    // Test Admin cannot set system parameters 
+    // Test Admin cannot set system parameters
     start_cheat_caller_address(contract_address, ADMIN());
 
     contract.set_system_parameter(PARAM_MIN_TRANSFER_AMOUNT, 1000);

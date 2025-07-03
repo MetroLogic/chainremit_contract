@@ -222,7 +222,7 @@ pub mod StarkRemit {
         contract_registry: Map<felt252, ContractAddress>, // Contract registry mapping
         param_history: Map<(felt252, u32), ParameterHistory>, // Parameter change history
         param_history_count: Map<felt252, u32>, // Parameter history count per key
-        timelock_duration: u64, // Timelock duration for parameter changes
+        timelock_duration: u64 // Timelock duration for parameter changes
     }
 
     // Contract constructor
