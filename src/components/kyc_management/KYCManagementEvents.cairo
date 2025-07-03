@@ -1,6 +1,5 @@
-use super::KYCManagementTypes::KycStatus;
-use super::KYCManagementTypes::KYCLevel;
 use starknet::ContractAddress;
+use super::KYCManagementTypes::{KYCLevel, KycStatus};
 
 /// @title KYCLevelUpdated
 /// @notice Emitted when a user's KYC level is updated.

@@ -1,5 +1,3 @@
-
-
 pub mod KYCErrors {
     /// Error triggered when user has insufficient KYC level
     pub const INSUFFICIENT_KYC_LEVEL: felt252 = 'KYC: insufficient level';
@@ -57,5 +55,7 @@ pub mod KYCErrors {
 
     /// Error triggered when KYC data not found for user
     pub const KYC_DATA_NOT_FOUND: felt252 = 'KYC: data not found';
+
+    /// Error triggered when the recipient has an insufficient kyc
     pub const INSUFFICIENT_RECIPIENT_KYC: felt252 = 'KYC: insufficient recipient KYC';
 }

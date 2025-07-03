@@ -1,5 +1,3 @@
-
-
 pub mod TransferErrors {
     /// Error triggered when transfer is not found
     pub const TRANSFER_NOT_FOUND: felt252 = 'Transfer not found';
@@ -57,8 +55,14 @@ pub mod TransferErrors {
 
     /// Error triggered when agent is not assigned to transfer
     pub const AGENT_NOT_ASSIGNED: felt252 = 'Agent not assigned';
+
+    /// Error triggered when trying to transfer self
     pub const SELF_TRANSFER: felt252 = 'Self transfer not allowed';
+
+    /// Error triggered when trying to enter an invalid expiry
     pub const INVALID_EXPIRY: felt252 = 'Invalid expiry';
+
+    /// Error triggered when trying to update exchange rate 
     pub const ExchangeRateUpdated: felt252 = 'Exchange rate updated';
 }
 
@@ -103,5 +107,7 @@ pub mod ERC20Errors {
 
     /// Error triggered when the caller is not the owner of the token
     pub const NotAdmin: felt252 = 'ERC20: not admin';
+
+    /// Error triggered when the provided buffer size is insufficient
     pub const INSUFFICIENT_BUFFER: felt252 = 'ERC20: insufficient buffer size';
 }

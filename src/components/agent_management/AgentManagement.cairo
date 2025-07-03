@@ -1,1 +1,2 @@
 
+#[starknet::component]

@@ -1,4 +1,3 @@
-
 pub mod RegistrationErrors {
     /// Error triggered when user is already registered
     pub const USER_ALREADY_REGISTERED: felt252 = 'User already registered';
@@ -48,10 +47,18 @@ pub mod RegistrationErrors {
     /// Error triggered when user is not registered
     pub const USER_NOT_REGISTERED: felt252 = 'User not registered';
 
+    /// Error triggered when user is diabled
     pub const REGISTRATION_DISABLED: felt252 = 'Registration is disabled';
+
+    /// Error triggered when unathorized profile updated 
     pub const UNAUTHORIZED_PROFILE_UPDATE: felt252 = 'Unauthorized profile update';
+
+    /// Error triggered when address tries to changed 
     pub const IMMUTABLE_ADDRESS: felt252 = 'Address cannot be changed';
+
     // pub const IMMUTABLE_TIMESTAMP: felt252 = 'Registration timestamp cannot be changed';
     pub const USER_NOT_SUSPENDED: felt252 = 'User is not suspended';
+
+    /// Error triggered when recipient not found
     pub const RECIPIENT_NOT_FOUND: felt252 = 'Recipient not found';
 }

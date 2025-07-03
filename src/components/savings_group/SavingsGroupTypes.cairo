@@ -1,6 +1,5 @@
 use starknet::ContractAddress;
 
-
 /// Contribution round data structure
 #[derive(Copy, Drop, Serde, starknet::Store)]
 pub struct ContributionRound {

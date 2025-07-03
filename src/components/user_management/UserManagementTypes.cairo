@@ -1,5 +1,5 @@
-use crate::components::kyc_management::KYCManagementTypes::KYCLevel;
 use starknet::ContractAddress;
+use crate::components::kyc_management::KYCManagementTypes::KYCLevel;
 
 /// @title UserProfile
 /// @notice User profile structure containing user information

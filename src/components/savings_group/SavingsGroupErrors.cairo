@@ -1,4 +1,3 @@
-
 pub mod GroupErrors {
     /// Error triggered when the max members is less than two
     pub const INVALID_GROUP_SIZE: felt252 = 'GROUP: mini 2 members expected';

@@ -1,6 +1,7 @@
 use starknet::ContractAddress;
 
-/// Agent status for tracking agent availability
+/// @title AgentStatus
+/// @notice Enum representing the status of an agent for tracking availability.
 #[derive(Copy, Drop, Serde, starknet::Store, PartialEq)]
 pub enum AgentStatus {
     #[default]
@@ -9,14 +10,13 @@ pub enum AgentStatus {
     Suspended,
 }
 
-/// Agent data structure for managing cash-out agents
+/// @title Agent
+/// @notice Struct representing a cash-out agent with relevant details and statistics.
 #[derive(Copy, Drop, Serde, starknet::Store)]
 pub struct Agent {
     pub agent_address: ContractAddress,
     pub name: felt252,
     pub status: AgentStatus,
-    // pub primary_currency: felt252,
-    // pub secondary_currency: felt252,
     pub primary_region: felt252,
     pub secondary_region: felt252,
     pub commission_rate: u256,
