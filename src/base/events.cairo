@@ -1,5 +1,5 @@
 use starknet::ContractAddress;
-use super::types::{AgentStatus, KYCLevel, KycLevel, KycStatus};
+use super::types::{AgentStatus, GovRole, KYCLevel, KycLevel, KycStatus};
 
 #[derive(Copy, Drop, starknet::Event)]
 pub struct MemberAdded {
@@ -352,4 +352,59 @@ pub struct LatePayment {
     pub days_late: u256,
     pub penalty_amount: u256,
     pub timestamp: u64,
+}
+
+#[derive(Copy, Drop, starknet::Event)]
+pub struct AdminAssigned {
+    #[key]
+    pub user: ContractAddress,
+    pub role: super::types::GovRole,
+}
+
+#[derive(Copy, Drop, starknet::Event)]
+pub struct AdminRevoked {
+    #[key]
+    pub user: ContractAddress,
+}
+
+#[derive(Copy, Drop, starknet::Event)]
+pub struct ContractRegistered {
+    #[key]
+    pub name: felt252,
+    pub addr: ContractAddress,
+}
+
+#[derive(Copy, Drop, starknet::Event)]
+pub struct SystemParamUpdated {
+    #[key]
+    pub key: felt252,
+    pub value: u256,
+}
+
+#[derive(Copy, Drop, starknet::Event)]
+pub struct FeeUpdated {
+    #[key]
+    pub fee_type: felt252,
+    pub value: u256,
+}
+
+#[derive(Copy, Drop, starknet::Event)]
+pub struct UpdateScheduled {
+    #[key]
+    pub key: felt252,
+    pub value: u256,
+    pub timestamp: u64,
+}
+
+#[derive(Copy, Drop, starknet::Event)]
+pub struct UpdateExecuted {
+    #[key]
+    pub key: felt252,
+    pub value: u256,
+}
+
+#[derive(Copy, Drop, starknet::Event)]
+pub struct UpdateCancelled {
+    #[key]
+    pub key: felt252,
 }
