@@ -1,25 +1,17 @@
-pub mod base {
-    pub mod errors;
-    pub mod events;
-    pub mod types;
+pub mod Utils {
+    pub mod Constants;
+    pub mod Helpers;
 }
 
-pub mod interfaces {
-    pub mod IERC20;
-    pub mod IStarkRemit;
-}
-
-pub mod utils {
-    pub mod constants;
-    pub mod helpers;
-}
-
-pub mod starkremit {
+pub mod Starkremit {
     pub mod StarkRemit;
 }
 
 pub mod presets {
-    pub mod ERC20;
+    pub mod ERC20 {
+        pub mod ERC20;
+        pub mod IERC20;
+    }
 }
 
 pub mod components {
