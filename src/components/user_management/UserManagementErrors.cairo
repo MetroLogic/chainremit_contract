@@ -50,10 +50,10 @@ pub mod RegistrationErrors {
     /// Error triggered when user is diabled
     pub const REGISTRATION_DISABLED: felt252 = 'Registration is disabled';
 
-    /// Error triggered when unathorized profile updated 
+    /// Error triggered when unathorized profile updated
     pub const UNAUTHORIZED_PROFILE_UPDATE: felt252 = 'Unauthorized profile update';
 
-    /// Error triggered when address tries to changed 
+    /// Error triggered when address tries to changed
     pub const IMMUTABLE_ADDRESS: felt252 = 'Address cannot be changed';
 
     // pub const IMMUTABLE_TIMESTAMP: felt252 = 'Registration timestamp cannot be changed';

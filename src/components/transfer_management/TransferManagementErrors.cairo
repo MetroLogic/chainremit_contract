@@ -62,7 +62,7 @@ pub mod TransferErrors {
     /// Error triggered when trying to enter an invalid expiry
     pub const INVALID_EXPIRY: felt252 = 'Invalid expiry';
 
-    /// Error triggered when trying to update exchange rate 
+    /// Error triggered when trying to update exchange rate
     pub const ExchangeRateUpdated: felt252 = 'Exchange rate updated';
 }
 

@@ -46,9 +46,7 @@ pub trait ITransferManagement<TContractState> {
     /// @param partial_amount The amount to partially complete.
     /// @return True if the partial completion was successful, false otherwise.
     fn partial_complete_transfer(
-        ref self: TContractState, 
-        transfer_id: u256, 
-        partial_amount: u256,
+        ref self: TContractState, transfer_id: u256, partial_amount: u256,
     ) -> bool;
 
     /// @notice Requests a cash-out for a specific transfer.
@@ -72,10 +70,7 @@ pub trait ITransferManagement<TContractState> {
     /// @param offset The starting index for pagination.
     /// @return An array of transfer data.
     fn get_transfers_by_sender(
-        self: @TContractState, 
-        sender: ContractAddress, 
-        limit: u32, 
-        offset: u32,
+        self: @TContractState, sender: ContractAddress, limit: u32, offset: u32,
     ) -> Array<TransferData>;
 
     /// @notice Retrieves a list of transfers received by a specific recipient.
@@ -84,10 +79,7 @@ pub trait ITransferManagement<TContractState> {
     /// @param offset The starting index for pagination.
     /// @return An array of transfer data.
     fn get_transfers_by_recipient(
-        self: @TContractState, 
-        recipient: ContractAddress, 
-        limit: u32, 
-        offset: u32,
+        self: @TContractState, recipient: ContractAddress, limit: u32, offset: u32,
     ) -> Array<TransferData>;
 
     /// @notice Retrieves a list of transfers filtered by status.
@@ -96,10 +88,7 @@ pub trait ITransferManagement<TContractState> {
     /// @param offset The starting index for pagination.
     /// @return An array of transfer data.
     fn get_transfers_by_status(
-        self: @TContractState, 
-        status: TransferStatus, 
-        limit: u32, 
-        offset: u32,
+        self: @TContractState, status: TransferStatus, limit: u32, offset: u32,
     ) -> Array<TransferData>;
 
     /// @notice Retrieves a list of expired transfers.
@@ -118,9 +107,7 @@ pub trait ITransferManagement<TContractState> {
     /// @param agent The address of the agent to assign.
     /// @return True if the agent was successfully assigned, false otherwise.
     fn assign_agent_to_transfer(
-        ref self: TContractState, 
-        transfer_id: u256, 
-        agent: ContractAddress,
+        ref self: TContractState, transfer_id: u256, agent: ContractAddress,
     ) -> bool;
 
     /// @notice Retrieves the history of a specific transfer.
@@ -129,10 +116,7 @@ pub trait ITransferManagement<TContractState> {
     /// @param offset The starting index for pagination.
     /// @return An array of transfer history records.
     fn get_transfer_history(
-        self: @TContractState, 
-        transfer_id: u256, 
-        limit: u32, 
-        offset: u32,
+        self: @TContractState, transfer_id: u256, limit: u32, offset: u32,
     ) -> Array<TransferHistory>;
 
     /// @notice Searches transfer history by actor address.
@@ -141,10 +125,7 @@ pub trait ITransferManagement<TContractState> {
     /// @param offset The starting index for pagination.
     /// @return An array of transfer history records.
     fn search_history_by_actor(
-        self: @TContractState, 
-        actor: ContractAddress, 
-        limit: u32, 
-        offset: u32,
+        self: @TContractState, actor: ContractAddress, limit: u32, offset: u32,
     ) -> Array<TransferHistory>;
 
     /// @notice Searches transfer history by action type.
@@ -153,10 +134,7 @@ pub trait ITransferManagement<TContractState> {
     /// @param offset The starting index for pagination.
     /// @return An array of transfer history records.
     fn search_history_by_action(
-        self: @TContractState, 
-        action: felt252, 
-        limit: u32, 
-        offset: u32,
+        self: @TContractState, action: felt252, limit: u32, offset: u32,
     ) -> Array<TransferHistory>;
 
     /// @notice Retrieves transfer statistics.
