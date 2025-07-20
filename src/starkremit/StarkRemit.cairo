@@ -1820,22 +1820,25 @@ pub mod StarkRemit {
 
             // Validate caller is not zero address
             assert(!caller.is_zero(), RegistrationErrors::ZERO_ADDRESS);
-            // assert(self.is_user_registered(requester), RegistrationErrors::USER_NOT_FOUND);
-            // assert(self.is_kyc_valid(requester), KYCErrors::INVALID_KYC_STATUS);
+
+            // Validate user registration
+            assert(self.is_user_registered(requester), RegistrationErrors::USER_NOT_FOUND);
+
+            // Conditional KYC validation based on enforcement setting
+            if self.kyc_enforcement_enabled.read() {
+                assert(self.is_kyc_valid(requester), KYCErrors::INVALID_KYC_STATUS);
+            }
+
             assert(amount > 0, 'loan amount is zero');
+
             // Ensure the user has no active loans
             assert(!self.active_loan.read(requester), 'User already has an active loan');
+
             // Ensure the user has not requested a loan already
             assert(!self.loan_request.read(requester), 'has pending loan request');
 
-            // // Validate registration data
-            // assert(
-            //     self.validate_registration_data(registration_data),
-            //     RegistrationErrors::INCOMPLETE_DATA,
-            // );
-
             let created_at = get_block_timestamp();
-            // Generate a unique loan requst ID
+            // Generate a unique loan request ID
             let loan_id: u256 = self.loan_count.read();
 
             let loan = LoanRequest {
