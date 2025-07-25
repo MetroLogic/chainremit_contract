@@ -180,13 +180,6 @@ pub mod StarkRemit {
         rejector: ContractAddress,
     }
 
-    #[derive(Drop, starknet::Event)]
-    struct AuditTrailEntry {
-        action: felt252,
-        actor: ContractAddress,
-        timestamp: u64,
-        details: felt252,
-    }
 
     // Event definitions
     #[event]
