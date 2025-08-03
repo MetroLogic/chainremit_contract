@@ -34,15 +34,57 @@ const LOAN_TERM_DAYS: u64 = 30 * 24 * 60 * 60; // 30 days in seconds
 #[starknet::contract]
 pub mod StarkRemit {
     use super::*;
+    use starkremit_contract::component::agent;
+    use starkremit_contract::component::user_management;
+    use starkremit_contract::component::contribution;
+    use starkremit_contract::component::kyc;
+    use starkremit_contract::component::loan;
+    use starkremit_contract::component::savings_group;
+    use starkremit_contract::component::token_management;
 
     component!(path: AccessControlComponent, storage: accesscontrol, event: AccessControlEvent);
     component!(path: SRC5Component, storage: src5, event: Src5Event);
     component!(path: UpgradeableComponent, storage: upgradeable, event: UpgradeableEvent);
+    component!(path: agent, storage: agent_component, event: agent::Event);
+    component!(path: user_management, storage: user_management_component, event: user_management::Event);
+    component!(path: contribution, storage: contribution_component, event: contribution::Event);
+    component!(path: kyc, storage: kyc_component, event: kyc::Event);
+    component!(path: loan, storage: loan_component, event: loan::Event);
+    component!(path: savings_group, storage: savings_group_component, event: savings_group::Event);
+    component!(path: token_management, storage: token_management_component, event: token_management::Event);
 
     #[abi(embed_v0)]
     impl AccessControlImpl =
         AccessControlComponent::AccessControlImpl<ContractState>;
     impl AccessControlInternalImpl = AccessControlComponent::InternalImpl<ContractState>;
+
+    #[abi(embed_v0)]
+    impl AgentComponentImpl = agent::AgentImpl<ContractState>;
+    impl AgentInternalImpl = agent::InternalImpl<ContractState>;
+
+    #[abi(embed_v0)]
+    impl UserManagementImpl = user_management::UserManagementImpl<ContractState>;
+    impl UserManagementInternalImpl = user_management::InternalImpl<ContractState>;
+
+    #[abi(embed_v0)]
+    impl ContributionImpl = contribution::ContributionImpl<ContractState>;
+    impl ContributionInternalImpl = contribution::InternalImpl<ContractState>;
+
+    #[abi(embed_v0)]
+    impl KycImpl = kyc::KycImpl<ContractState>;
+    impl KycInternalImpl = kyc::InternalImpl<ContractState>;
+
+    #[abi(embed_v0)]
+    impl LoanImpl = loan::LoanImpl<ContractState>;
+    impl LoanInternalImpl = loan::InternalImpl<ContractState>;
+
+    #[abi(embed_v0)]
+    impl SavingsGroupImpl = savings_group::SavingsGroupImpl<ContractState>;
+    impl SavingsGroupInternalImpl = savings_group::InternalImpl<ContractState>;
+
+    #[abi(embed_v0)]
+    impl TokenManagementImpl = token_management::TokenManagementImpl<ContractState>;
+    impl TokenManagementInternalImpl = token_management::InternalImpl<ContractState>;
 
     impl UpgradeableInternalImpl = UpgradeableComponent::InternalImpl<ContractState>;
 
@@ -58,7 +100,7 @@ pub mod StarkRemit {
     }
 
     #[derive(Copy, Drop, Serde, starknet::Store)]
-    struct MultiSigOperation {
+    pub struct MultiSigOperation {
         target_contract: ContractAddress,
         selector: felt252,
         calldata_len: u128,
@@ -67,7 +109,7 @@ pub mod StarkRemit {
     }
 
     #[derive(Copy, Drop, Serde, starknet::Store)]
-    struct UpgradeRecord {
+    pub struct UpgradeRecord {
         version: u64,
         class_hash: felt252,
         timestamp: u64,
@@ -75,7 +117,7 @@ pub mod StarkRemit {
     }
 
     #[derive(Copy, Drop, Serde, starknet::Store)]
-    struct AuditEntry {
+    pub struct AuditEntry {
         action: felt252,
         actor: ContractAddress,
         timestamp: u64,
@@ -83,7 +125,7 @@ pub mod StarkRemit {
     }
     #[allow(starknet::store_no_default_variant)]
     #[derive(Copy, Drop, Serde, starknet::Store)]
-    enum MultiSigStatus {
+    pub enum MultiSigStatus {
         Pending,
         Approved,
         Executed,
@@ -93,7 +135,7 @@ pub mod StarkRemit {
     // --- System Management Events ---
 
     #[derive(Drop, starknet::Event)]
-    struct AgentAuthorized {
+    pub struct AgentAuthorized {
         agent_address: ContractAddress,
         permission: felt252,
         authorized: bool,
@@ -101,7 +143,7 @@ pub mod StarkRemit {
     }
 
     #[derive(Drop, starknet::Event)]
-    struct AgentPermissionUpdated {
+    pub struct AgentPermissionUpdated {
         agent_address: ContractAddress,
         permission: felt252,
         authorized: bool,
@@ -109,14 +151,14 @@ pub mod StarkRemit {
     }
 
     #[derive(Drop, starknet::Event)]
-    struct AgentPermissionRevoked {
+    pub struct AgentPermissionRevoked {
         agent_address: ContractAddress,
         permission: felt252,
         revoked_by: ContractAddress,
     }
 
     #[derive(Drop, starknet::Event)]
-    struct ContractUpgradeInitiated {
+    pub struct ContractUpgradeInitiated {
         old_class_hash: felt252,
         new_class_hash: felt252,
         version: u64,
@@ -124,7 +166,7 @@ pub mod StarkRemit {
     }
 
     #[derive(Drop, starknet::Event)]
-    struct ContractUpgradeCompleted {
+    pub struct ContractUpgradeCompleted {
         old_class_hash: felt252,
         new_class_hash: felt252,
         version: u64,
@@ -132,7 +174,7 @@ pub mod StarkRemit {
     }
 
     #[derive(Drop, starknet::Event)]
-    struct ContractUpgradeRolledBack {
+    pub struct ContractUpgradeRolledBack {
         old_class_hash: felt252,
         new_class_hash: felt252,
         target_version: u64,
@@ -140,21 +182,20 @@ pub mod StarkRemit {
     }
 
     #[derive(Drop, starknet::Event)]
-    struct EmergencyPauseActivated {
+    pub struct EmergencyPauseActivated {
         function_selector: felt252,
         caller: ContractAddress,
         expires_at: u64,
     }
 
     #[derive(Drop, starknet::Event)]
-    struct EmergencyPauseDeactivated {
+    pub struct EmergencyPauseDeactivated {
         function_selector: felt252,
         caller: ContractAddress,
     }
-    // Removed #[event] from MultiSigOperationProposed, as only a struct named Event can be marked
-    // #[event]
+
     #[derive(Drop, starknet::Event)]
-    struct MultiSigOperationProposed {
+    pub struct MultiSigOperationProposed {
         op_id: felt252,
         target_contract: ContractAddress,
         selector: felt252,
@@ -162,26 +203,26 @@ pub mod StarkRemit {
     }
 
     #[derive(Drop, starknet::Event)]
-    struct MultiSigOperationApproved {
+    pub struct MultiSigOperationApproved {
         op_id: felt252,
         approver: ContractAddress,
         confirmations_count: u32,
     }
 
     #[derive(Drop, starknet::Event)]
-    struct MultiSigOperationExecuted {
+    pub struct MultiSigOperationExecuted {
         op_id: felt252,
         executor: ContractAddress,
     }
 
     #[derive(Drop, starknet::Event)]
-    struct MultiSigOperationRejected {
+    pub struct MultiSigOperationRejected {
         op_id: felt252,
         rejector: ContractAddress,
     }
 
     #[derive(Drop, starknet::Event)]
-    struct AuditTrailEntry {
+    pub struct AuditTrailEntry {
         action: felt252,
         actor: ContractAddress,
         timestamp: u64,
@@ -191,14 +232,28 @@ pub mod StarkRemit {
     // Event definitions
     #[event]
     #[derive(Drop, starknet::Event)]
-    enum Event {
+    pub enum Event {
         #[flat]
         Src5Event: SRC5Component::Event,
         #[flat]
         AccessControlEvent: AccessControlComponent::Event,
         #[flat]
         UpgradeableEvent: UpgradeableComponent::Event,
-        // System Management Events
+        #[flat]
+        AgentEvent: agent::Event,
+        #[flat]
+        UserManagementEvent: user_management::Event,
+        #[flat]
+        ContributionEvent: contribution::Event,
+        #[flat]
+        KycEvent: kyc::Event,
+        #[flat]
+        LoanEvent: loan::Event,
+        #[flat]
+        SavingsGroupEvent: savings_group::Event,
+        #[flat]
+        TokenManagementEvent: token_management::Event,
+                // System Management Events
         AgentAuthorized: AgentAuthorized,
         AgentPermissionUpdated: AgentPermissionUpdated,
         AgentPermissionRevoked: AgentPermissionRevoked,
@@ -275,6 +330,20 @@ pub mod StarkRemit {
         src5: SRC5Component::Storage,
         #[substorage(v0)]
         accesscontrol: AccessControlComponent::Storage,
+        #[substorage(v0)]
+        agent_component: agent::Storage,
+        #[substorage(v0)]
+        user_management_component: user_management::Storage,
+        #[substorage(v0)]
+        contribution_component: contribution::Storage,
+        #[substorage(v0)]
+        kyc_component: kyc::Storage,
+        #[substorage(v0)]
+        loan_component: loan::Storage,
+        #[substorage(v0)]
+        savings_group_component: savings_group::Storage,
+        #[substorage(v0)]
+        token_management_component: token_management::Storage,
         // System Management Storage
         agent_permissions: Map<(ContractAddress, felt252), bool>, // (agent, permission) -> granted
         paused_functions: Map<felt252, bool>, // function selector -> paused

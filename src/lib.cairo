@@ -21,3 +21,13 @@ pub mod starkremit {
 pub mod presets {
     pub mod ERC20;
 }
+pub mod component {
+    pub mod agent;
+    pub mod contribution;
+    pub mod kyc;
+    pub mod loan;
+    pub mod user_management;
+    pub mod savings_group;
+    pub mod token_management;
+    pub mod transfer;
+}
