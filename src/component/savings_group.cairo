@@ -6,11 +6,14 @@ pub trait ISavingsGroup<TContractState> {
 
 #[starknet::component]
 pub mod savings_group_component {
-    use super::*;
-    use starknet::{get_caller_address, get_block_timestamp, ContractAddress};
+    use starknet::storage::{
+        Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
+        StoragePointerWriteAccess,
+    };
+    use starknet::{ContractAddress, get_block_timestamp, get_caller_address};
     use starkremit_contract::base::errors::GroupErrors;
-    use starkremit_contract::base::types::{SavingsGroup};
-    use starknet::storage::{StorageMapReadAccess, StorageMapWriteAccess, Map, StoragePointerReadAccess, StoragePointerWriteAccess};
+    use starkremit_contract::base::types::SavingsGroup;
+    use super::*;
 
     #[storage]
     pub struct Storage {
@@ -58,12 +61,14 @@ pub mod savings_group_component {
             };
             self.groups.write(group_id, group);
             self.group_members.write((group_id, caller), true);
-            self.emit(Event::GroupCreated(GroupCreated {
-                group_id,
-                creator: caller,
-                max_members,
-                created_at: group.created_at,
-            }));
+            self
+                .emit(
+                    Event::GroupCreated(
+                        GroupCreated {
+                            group_id, creator: caller, max_members, created_at: group.created_at,
+                        },
+                    ),
+                );
             group_id
         }
         fn join_group(ref self: ComponentState<TContractState>, group_id: u64) {
@@ -72,12 +77,12 @@ pub mod savings_group_component {
             assert(group.is_active, GroupErrors::GROUP_NOT_ACTIVE);
             assert(!self.group_members.read((group_id, caller)), GroupErrors::ALREADY_MEMBER);
             self.group_members.write((group_id, caller), true);
-            self.emit(Event::MemberJoined(MemberJoined {
-                group_id,
-                member: caller,
-                joined_at: get_block_timestamp(),
-            }));
+            self
+                .emit(
+                    Event::MemberJoined(
+                        MemberJoined { group_id, member: caller, joined_at: get_block_timestamp() },
+                    ),
+                );
         }
     }
-
 }

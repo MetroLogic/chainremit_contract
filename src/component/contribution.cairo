@@ -1,4 +1,4 @@
-use starknet::{ContractAddress};
+use starknet::ContractAddress;
 #[starknet::interface]
 pub trait IContribution<TContractState> {
     fn contribute_round(ref self: TContractState, round_id: u256, amount: u256);
@@ -13,10 +13,13 @@ pub trait IContribution<TContractState> {
 
 #[starknet::component]
 pub mod contribution_component {
-    use super::*;
-    use starknet::{get_caller_address, get_block_timestamp, ContractAddress};
+    use starknet::storage::{
+        Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
+        StoragePointerWriteAccess,
+    };
+    use starknet::{ContractAddress, get_block_timestamp, get_caller_address};
     use starkremit_contract::base::types::{ContributionRound, MemberContribution, RoundStatus};
-    use starknet::storage::{StorageMapReadAccess, StorageMapWriteAccess, Map, StoragePointerReadAccess, StoragePointerWriteAccess };
+    use super::*;
     #[storage]
     pub struct Storage {
         rounds: Map<u256, ContributionRound>,
@@ -68,7 +71,9 @@ pub mod contribution_component {
     impl ContributionImpl<
         TContractState, +HasComponent<TContractState>,
     > of IContribution<ComponentState<TContractState>> {
-        fn contribute_round(ref self: ComponentState<TContractState>, round_id: u256, amount: u256) {
+        fn contribute_round(
+            ref self: ComponentState<TContractState>, round_id: u256, amount: u256,
+        ) {
             let caller = get_caller_address();
             assert(self.is_member(caller), 'Caller is not a member');
             let mut round = self.rounds.read(round_id);
@@ -80,7 +85,10 @@ pub mod contribution_component {
             self.member_contributions.write((round_id, caller), contribution);
             round.total_contributions += amount;
             self.rounds.write(round_id, round);
-            self.emit(Event::ContributionMade(ContributionMade { round_id, member: caller, amount }));
+            self
+                .emit(
+                    Event::ContributionMade(ContributionMade { round_id, member: caller, amount }),
+                );
         }
         fn complete_round(ref self: ComponentState<TContractState>, round_id: u256) {
             let mut round = self.rounds.read(round_id);
@@ -89,7 +97,9 @@ pub mod contribution_component {
             self.rounds.write(round_id, round);
             self.emit(Event::RoundCompleted(RoundCompleted { round_id }));
         }
-        fn add_round_to_schedule(ref self: ComponentState<TContractState>, recipient: ContractAddress, deadline: u64) {
+        fn add_round_to_schedule(
+            ref self: ComponentState<TContractState>, recipient: ContractAddress, deadline: u64,
+        ) {
             let round_id = self.round_ids.read() + 1;
             self.round_ids.write(round_id);
             self.rotation_schedule.write(round_id, recipient);
@@ -128,10 +138,14 @@ pub mod contribution_component {
         fn disburse_round_contribution(ref self: ComponentState<TContractState>, round_id: u256) {
             let round = self.rounds.read(round_id);
             assert(round.status == RoundStatus::Completed, 'Round not completed');
-            self.emit(Event::RoundDisbursed(RoundDisbursed {
-                round_id, recipient: round.recipient, amount: round.total_contributions,
-            }));
+            self
+                .emit(
+                    Event::RoundDisbursed(
+                        RoundDisbursed {
+                            round_id, recipient: round.recipient, amount: round.total_contributions,
+                        },
+                    ),
+                );
         }
     }
-
 }

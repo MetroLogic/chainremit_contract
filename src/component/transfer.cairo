@@ -1,28 +1,43 @@
-use starknet::ContractAddress;
-use starkremit_contract::base::types::{TransferData, TransferStatus, TransferHistory};
 use core::num::traits::Zero;
+use starknet::ContractAddress;
+use starkremit_contract::base::types::{TransferData, TransferHistory, TransferStatus};
 
 #[starknet::interface]
 pub trait ITransfer<TContractState> {
-    fn initiate_transfer(ref self: TContractState, recipient: ContractAddress, amount: u256, expires_at: u64, metadata: felt252) -> u256;
+    fn initiate_transfer(
+        ref self: TContractState,
+        recipient: ContractAddress,
+        amount: u256,
+        expires_at: u64,
+        metadata: felt252,
+    ) -> u256;
     fn cancel_transfer(ref self: TContractState, transfer_id: u256) -> bool;
     fn complete_transfer(ref self: TContractState, transfer_id: u256) -> bool;
-    fn partial_complete_transfer(ref self: TContractState, transfer_id: u256, partial_amount: u256) -> bool;
+    fn partial_complete_transfer(
+        ref self: TContractState, transfer_id: u256, partial_amount: u256,
+    ) -> bool;
     fn request_cash_out(ref self: TContractState, transfer_id: u256) -> bool;
     fn complete_cash_out(ref self: TContractState, transfer_id: u256) -> bool;
     fn get_transfer(self: @TContractState, transfer_id: u256) -> TransferData;
-    fn get_transfers_by_sender(self: @TContractState, sender: ContractAddress, limit: u32, offset: u32) -> Array<TransferData>;
-    fn get_transfers_by_recipient(self: @TContractState, recipient: ContractAddress, limit: u32, offset: u32) -> Array<TransferData>;
+    fn get_transfers_by_sender(
+        self: @TContractState, sender: ContractAddress, limit: u32, offset: u32,
+    ) -> Array<TransferData>;
+    fn get_transfers_by_recipient(
+        self: @TContractState, recipient: ContractAddress, limit: u32, offset: u32,
+    ) -> Array<TransferData>;
     fn get_transfer_statistics(self: @TContractState) -> (u256, u256, u256, u256);
 }
 
 #[starknet::component]
 pub mod transfer_component {
-    use super::*;
-    use starknet::{get_caller_address, get_block_timestamp, ContractAddress};
+    use starknet::storage::{
+        Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
+        StoragePointerWriteAccess,
+    };
+    use starknet::{ContractAddress, get_block_timestamp, get_caller_address};
     use starkremit_contract::base::errors::TransferErrors;
     use starkremit_contract::base::types::{TransferData, TransferStatus};
-    use starknet::storage::{StorageMapReadAccess, StorageMapWriteAccess, Map, StoragePointerReadAccess, StoragePointerWriteAccess};
+    use super::*;
 
     #[storage]
     pub struct Storage {
@@ -96,7 +111,7 @@ pub mod transfer_component {
 
     #[embeddable_as(Transfer)]
     impl TransferImpl<
-        TContractState, +HasComponent<TContractState>
+        TContractState, +HasComponent<TContractState>,
     > of ITransfer<ComponentState<TContractState>> {
         fn initiate_transfer(
             ref self: ComponentState<TContractState>,
@@ -112,9 +127,7 @@ pub mod transfer_component {
             assert(recipient != caller, 'Cannot transfer to self');
             assert(amount > 0, TransferErrors::INVALID_TRANSFER_AMOUNT);
             assert(expires_at > current_time, 'Expiry must be in future');
-            assert(
-                expires_at <= current_time + 86400 * 30, 'Expiry too far in future',
-            );
+            assert(expires_at <= current_time + 86400 * 30, 'Expiry too far in future');
             let transfer_id = self.next_transfer_id.read();
             self.next_transfer_id.write(transfer_id + 1);
             let transfer = TransferData {
@@ -141,13 +154,14 @@ pub mod transfer_component {
             self.user_received_count.write(recipient, recipient_count + 1);
             let total = self.total_transfers.read();
             self.total_transfers.write(total + 1);
-            self.emit(Event::TransferCreated(TransferCreated {
-                transfer_id,
-                sender: caller,
-                recipient,
-                amount,
-                expires_at,
-            }));
+            self
+                .emit(
+                    Event::TransferCreated(
+                        TransferCreated {
+                            transfer_id, sender: caller, recipient, amount, expires_at,
+                        },
+                    ),
+                );
             transfer_id
         }
         fn cancel_transfer(ref self: ComponentState<TContractState>, transfer_id: u256) -> bool {
@@ -164,11 +178,14 @@ pub mod transfer_component {
             self.transfers.write(transfer_id, transfer);
             let cancelled_count = self.total_cancelled_transfers.read();
             self.total_cancelled_transfers.write(cancelled_count + 1);
-            self.emit(Event::TransferCancelled(TransferCancelled {
-                transfer_id,
-                cancelled_by: caller,
-                timestamp: current_time,
-            }));
+            self
+                .emit(
+                    Event::TransferCancelled(
+                        TransferCancelled {
+                            transfer_id, cancelled_by: caller, timestamp: current_time,
+                        },
+                    ),
+                );
             true
         }
         fn complete_transfer(ref self: ComponentState<TContractState>, transfer_id: u256) -> bool {
@@ -190,17 +207,18 @@ pub mod transfer_component {
             self.transfers.write(transfer_id, transfer);
             let completed_count = self.total_completed_transfers.read();
             self.total_completed_transfers.write(completed_count + 1);
-            self.emit(Event::TransferCompleted(TransferCompleted {
-                transfer_id,
-                completed_by: caller,
-                timestamp: current_time,
-            }));
+            self
+                .emit(
+                    Event::TransferCompleted(
+                        TransferCompleted {
+                            transfer_id, completed_by: caller, timestamp: current_time,
+                        },
+                    ),
+                );
             true
         }
         fn partial_complete_transfer(
-            ref self: ComponentState<TContractState>,
-            transfer_id: u256,
-            partial_amount: u256,
+            ref self: ComponentState<TContractState>, transfer_id: u256, partial_amount: u256,
         ) -> bool {
             let caller = get_caller_address();
             let current_time = get_block_timestamp();
@@ -228,12 +246,17 @@ pub mod transfer_component {
                 transfer.status = TransferStatus::PartialComplete;
             }
             self.transfers.write(transfer_id, transfer);
-            self.emit(Event::TransferPartialCompleted(TransferPartialCompleted {
-                transfer_id,
-                partial_amount,
-                total_amount: transfer.amount,
-                timestamp: current_time,
-            }));
+            self
+                .emit(
+                    Event::TransferPartialCompleted(
+                        TransferPartialCompleted {
+                            transfer_id,
+                            partial_amount,
+                            total_amount: transfer.amount,
+                            timestamp: current_time,
+                        },
+                    ),
+                );
             true
         }
         fn request_cash_out(ref self: ComponentState<TContractState>, transfer_id: u256) -> bool {
@@ -248,11 +271,14 @@ pub mod transfer_component {
             transfer.status = TransferStatus::CashOutRequested;
             transfer.updated_at = current_time;
             self.transfers.write(transfer_id, transfer);
-            self.emit(Event::CashOutRequested(CashOutRequested {
-                transfer_id,
-                requested_by: caller,
-                timestamp: current_time,
-            }));
+            self
+                .emit(
+                    Event::CashOutRequested(
+                        CashOutRequested {
+                            transfer_id, requested_by: caller, timestamp: current_time,
+                        },
+                    ),
+                );
             true
         }
         fn complete_cash_out(ref self: ComponentState<TContractState>, transfer_id: u256) -> bool {
@@ -274,11 +300,12 @@ pub mod transfer_component {
             self.transfers.write(transfer_id, transfer);
             let completed_count = self.total_completed_transfers.read();
             self.total_completed_transfers.write(completed_count + 1);
-            self.emit(Event::CashOutCompleted(CashOutCompleted {
-                transfer_id,
-                agent: caller,
-                timestamp: current_time,
-            }));
+            self
+                .emit(
+                    Event::CashOutCompleted(
+                        CashOutCompleted { transfer_id, agent: caller, timestamp: current_time },
+                    ),
+                );
             true
         }
         fn get_transfer(self: @ComponentState<TContractState>, transfer_id: u256) -> TransferData {
@@ -303,7 +330,10 @@ pub mod transfer_component {
             transfers
         }
         fn get_transfers_by_recipient(
-            self: @ComponentState<TContractState>, recipient: ContractAddress, limit: u32, offset: u32,
+            self: @ComponentState<TContractState>,
+            recipient: ContractAddress,
+            limit: u32,
+            offset: u32,
         ) -> Array<TransferData> {
             let mut transfers = ArrayTrait::new();
             let total_count = self.user_received_count.read(recipient);
@@ -318,7 +348,9 @@ pub mod transfer_component {
             }
             transfers
         }
-        fn get_transfer_statistics(self: @ComponentState<TContractState>) -> (u256, u256, u256, u256) {
+        fn get_transfer_statistics(
+            self: @ComponentState<TContractState>,
+        ) -> (u256, u256, u256, u256) {
             (
                 self.total_transfers.read(),
                 self.total_completed_transfers.read(),

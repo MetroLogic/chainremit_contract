@@ -72,39 +72,28 @@ pub mod StarkRemit {
         AccessControlComponent::AccessControlImpl<ContractState>;
     impl AccessControlInternalImpl = AccessControlComponent::InternalImpl<ContractState>;
 
-    // Agent Component
-    #[abi(embed_v0)]
+    // Agent Component (internal use only - functions exposed via IStarkRemit)
     impl AgentComponentImpl = agent_component::AgentComponent<ContractState>;
 
-    // User Management Component
-    #[abi(embed_v0)]
-    impl UserManagementImpl =
-        user_management_component::UserManagement<ContractState>;
+    // User Management Component (internal use only - functions exposed via IStarkRemit)
+    impl UserManagementImpl = user_management_component::UserManagement<ContractState>;
 
-    // Contribution Component
-    #[abi(embed_v0)]
+    // Contribution Component (internal use only - functions exposed via IStarkRemit)
     impl ContributionImpl = contribution_component::Contribution<ContractState>;
 
-    // KYC Component
-    #[abi(embed_v0)]
+    // KYC Component (internal use only - functions exposed via IStarkRemit)
     impl KycImpl = kyc_component::KYC<ContractState>;
 
-    // Loan Component
-    #[abi(embed_v0)]
+    // Loan Component (internal use only - functions exposed via IStarkRemit)
     impl LoanImpl = loan_component::Loan<ContractState>;
 
-    // Savings Group Component
-    #[abi(embed_v0)]
-    impl SavingsGroupImpl =
-        savings_group_component::SavingsGroupComponent<ContractState>;
+    // Savings Group Component (internal use only - functions exposed via IStarkRemit)
+    impl SavingsGroupImpl = savings_group_component::SavingsGroupComponent<ContractState>;
 
-    // Token Management Component
-    #[abi(embed_v0)]
-    impl TokenManagementImpl =
-        token_management_component::TokenManagement<ContractState>;
+    // Token Management Component (internal use only - functions exposed via IStarkRemit)
+    impl TokenManagementImpl = token_management_component::TokenManagement<ContractState>;
 
-    // Transfer Component
-    #[abi(embed_v0)]
+    // Transfer Component (internal use only - functions exposed via IStarkRemit)
     impl TransferImpl = transfer_component::Transfer<ContractState>;
 
     impl UpgradeableInternalImpl = UpgradeableComponent::InternalImpl<ContractState>;
@@ -260,21 +249,14 @@ pub mod StarkRemit {
         AccessControlEvent: AccessControlComponent::Event,
         #[flat]
         UpgradeableEvent: UpgradeableComponent::Event,
-        #[flat]
+        // Component events (not flattened to avoid duplicates with main contract events)
         AgentEvent: agent_component::Event,
-        #[flat]
         UserManagementEvent: user_management_component::Event,
-        #[flat]
         ContributionEvent: contribution_component::Event,
-        #[flat]
         KycEvent: kyc_component::Event,
-        #[flat]
         LoanEvent: loan_component::Event,
-        #[flat]
         SavingsGroupEvent: savings_group_component::Event,
-        #[flat]
         TokenManagementEvent: token_management_component::Event,
-        #[flat]
         TransferEvent: transfer_component::Event,
         // System Management Events
         AgentAuthorized: AgentAuthorized,
@@ -290,8 +272,7 @@ pub mod StarkRemit {
         MultiSigOperationExecuted: MultiSigOperationExecuted,
         MultiSigOperationRejected: MultiSigOperationRejected,
         AuditTrailEntry: AuditTrailEntry,
-        Transfer: Transfer, // Standard ERC20 transfer event
-        Approval: Approval, // Standard ERC20 approval event
+        // Main contract events (not duplicated by components)
         ExchangeRateUpdated: ExchangeRateUpdated, // Event for exchange rate updates
         TokenConverted: TokenConverted, // Event for token conversions
         UserRegistered: UserRegistered, // Event for user registration

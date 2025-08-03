@@ -15,12 +15,15 @@ pub trait ILoan<TContractState> {
 
 #[starknet::component]
 pub mod loan_component {
-    use super::*;
-    use starknet::{get_caller_address, get_block_timestamp, ContractAddress};
-    use starkremit_contract::base::errors::{RegistrationErrors};
-    use starkremit_contract::base::types::{LoanRequest, LoanStatus};
-    use starknet::storage::{StorageMapReadAccess, StorageMapWriteAccess, Map, StoragePointerReadAccess, StoragePointerWriteAccess};
     use core::num::traits::Zero;
+    use starknet::storage::{
+        Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
+        StoragePointerWriteAccess,
+    };
+    use starknet::{ContractAddress, get_block_timestamp, get_caller_address};
+    use starkremit_contract::base::errors::RegistrationErrors;
+    use starkremit_contract::base::types::{LoanRequest, LoanStatus};
+    use super::*;
 
     #[storage]
     pub struct Storage {
@@ -69,7 +72,9 @@ pub mod loan_component {
     impl LoanImpl<
         TContractState, +HasComponent<TContractState>,
     > of ILoan<ComponentState<TContractState>> {
-        fn request_loan(ref self: ComponentState<TContractState>, requester: ContractAddress, amount: u256) -> u256 {
+        fn request_loan(
+            ref self: ComponentState<TContractState>, requester: ContractAddress, amount: u256,
+        ) -> u256 {
             let caller = get_caller_address();
             assert(!caller.is_zero(), RegistrationErrors::ZERO_ADDRESS);
             assert(amount > 0, 'loan amount is zero');
@@ -88,9 +93,17 @@ pub mod loan_component {
             self.loans.write(loan_id, loan);
             self.active_loan.write(requester, false);
             self.loan_request.write(requester, true);
-            self.emit(Event::LoanRequested(LoanRequested {
-                id: loan_id, requester: requester, amount: amount, created_at: created_at,
-            }));
+            self
+                .emit(
+                    Event::LoanRequested(
+                        LoanRequested {
+                            id: loan_id,
+                            requester: requester,
+                            amount: amount,
+                            created_at: created_at,
+                        },
+                    ),
+                );
             loan_id
         }
         fn approve_loan(ref self: ComponentState<TContractState>, loan_id: u256) -> u256 {
@@ -108,12 +121,17 @@ pub mod loan_component {
             self.active_loan.write(loan.requester, true);
             self.loan_request.write(loan.requester, false);
             self.loans.write(loan_id, loan);
-            self.emit(Event::LoanRequested(LoanRequested {
-                id: loan.id,
-                requester: loan.requester,
-                amount: loan.amount,
-                created_at: loan.created_at,
-            }));
+            self
+                .emit(
+                    Event::LoanRequested(
+                        LoanRequested {
+                            id: loan.id,
+                            requester: loan.requester,
+                            amount: loan.amount,
+                            created_at: loan.created_at,
+                        },
+                    ),
+                );
             loan_id
         }
         fn reject_loan(ref self: ComponentState<TContractState>, loan_id: u256) -> u256 {
@@ -128,12 +146,17 @@ pub mod loan_component {
             self.active_loan.write(loan.requester, false);
             self.loan_request.write(loan.requester, false);
             self.loans.write(loan_id, loan);
-            self.emit(Event::LoanRequested(LoanRequested {
-                id: loan.id,
-                requester: loan.requester,
-                amount: loan.amount,
-                created_at: loan.created_at,
-            }));
+            self
+                .emit(
+                    Event::LoanRequested(
+                        LoanRequested {
+                            id: loan.id,
+                            requester: loan.requester,
+                            amount: loan.amount,
+                            created_at: loan.created_at,
+                        },
+                    ),
+                );
             loan_id
         }
         fn get_loan(self: @ComponentState<TContractState>, loan_id: u256) -> LoanRequest {
@@ -144,13 +167,19 @@ pub mod loan_component {
         fn get_loan_count(self: @ComponentState<TContractState>) -> u256 {
             self.loan_count.read()
         }
-        fn get_user_active_loan(self: @ComponentState<TContractState>, user: ContractAddress) -> bool {
+        fn get_user_active_loan(
+            self: @ComponentState<TContractState>, user: ContractAddress,
+        ) -> bool {
             self.active_loan.read(user)
         }
-        fn has_active_loan_request(self: @ComponentState<TContractState>, user: ContractAddress) -> bool {
+        fn has_active_loan_request(
+            self: @ComponentState<TContractState>, user: ContractAddress,
+        ) -> bool {
             self.loan_request.read(user)
         }
-        fn repay_loan(ref self: ComponentState<TContractState>, loan_id: u256, amount: u256) -> (u256, u256) {
+        fn repay_loan(
+            ref self: ComponentState<TContractState>, loan_id: u256, amount: u256,
+        ) -> (u256, u256) {
             let caller = get_caller_address();
             let current_time = get_block_timestamp();
             let mut loan = self.get_loan(loan_id);
@@ -167,14 +196,27 @@ pub mod loan_component {
             if current_time > due_date {
                 let days_late_u256 = ((current_time - due_date).into() / 864) + 1;
                 let days_late: u64 = days_late_u256.try_into().unwrap_or(0);
-                penalty = (loan.amount * 100 * days_late_u256) / (100 * 100 * 100); // LATE_PENALTY_RATE = 100
+                penalty = (loan.amount * 100 * days_late_u256)
+                    / (100 * 100 * 100); // LATE_PENALTY_RATE = 100
                 self.loan_penalties.write(loan_id, self.loan_penalties.read(loan_id) + penalty);
-                self.emit(Event::LatePayment(LatePayment {
-                    loan_id, days_late, penalty_amount: penalty, timestamp: current_time,
-                }));
+                self
+                    .emit(
+                        Event::LatePayment(
+                            LatePayment {
+                                loan_id,
+                                days_late,
+                                penalty_amount: penalty,
+                                timestamp: current_time,
+                            },
+                        ),
+                    );
             }
             let total_balance = loan.amount + interest + penalty - amount_repaid;
-            let actual_payment = if amount > total_balance { total_balance } else { amount };
+            let actual_payment = if amount > total_balance {
+                total_balance
+            } else {
+                amount
+            };
             let new_amount_repaid = amount_repaid + actual_payment;
             let remaining_balance = total_balance - actual_payment;
             self.loan_repayments.write(loan_id, new_amount_repaid);
@@ -185,15 +227,19 @@ pub mod loan_component {
                 self.loans.write(loan_id, loan);
                 self.active_loan.write(caller, false);
             }
-            self.emit(Event::LoanRepaid(LoanRepaid {
-                loan_id,
-                amount: actual_payment,
-                remaining_balance,
-                is_fully_repaid,
-                timestamp: current_time,
-            }));
+            self
+                .emit(
+                    Event::LoanRepaid(
+                        LoanRepaid {
+                            loan_id,
+                            amount: actual_payment,
+                            remaining_balance,
+                            is_fully_repaid,
+                            timestamp: current_time,
+                        },
+                    ),
+                );
             (actual_payment, remaining_balance)
         }
     }
-
 }

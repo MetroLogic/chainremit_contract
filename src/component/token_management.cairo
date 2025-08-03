@@ -8,7 +8,9 @@ pub trait ITokenManagement<TContractState> {
     fn balance_of(self: @TContractState, owner: ContractAddress) -> u256;
     fn transfer(ref self: TContractState, to: ContractAddress, value: u256) -> bool;
     fn approve(ref self: TContractState, spender: ContractAddress, value: u256) -> bool;
-    fn transfer_from(ref self: TContractState, from: ContractAddress, to: ContractAddress, value: u256) -> bool;
+    fn transfer_from(
+        ref self: TContractState, from: ContractAddress, to: ContractAddress, value: u256,
+    ) -> bool;
     fn allowance(self: @TContractState, owner: ContractAddress, spender: ContractAddress) -> u256;
     fn mint(ref self: TContractState, to: ContractAddress, amount: u256) -> bool;
     fn burn(ref self: TContractState, from: ContractAddress, amount: u256) -> bool;
@@ -19,10 +21,13 @@ pub trait ITokenManagement<TContractState> {
 
 #[starknet::component]
 pub mod token_management_component {
-    use super::*;
-    use starknet::{get_caller_address, ContractAddress};
+    use starknet::storage::{
+        Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
+        StoragePointerWriteAccess,
+    };
+    use starknet::{ContractAddress, get_caller_address};
     use starkremit_contract::base::errors::MintBurnErrors;
-    use starknet::storage::{StorageMapReadAccess, StorageMapWriteAccess, Map, StoragePointerReadAccess, StoragePointerWriteAccess};
+    use super::*;
 
     #[storage]
     pub struct Storage {
@@ -101,7 +106,9 @@ pub mod token_management_component {
         fn balance_of(self: @ComponentState<TContractState>, owner: ContractAddress) -> u256 {
             self.balances.read(owner)
         }
-        fn transfer(ref self: ComponentState<TContractState>, to: ContractAddress, value: u256) -> bool {
+        fn transfer(
+            ref self: ComponentState<TContractState>, to: ContractAddress, value: u256,
+        ) -> bool {
             let caller = get_caller_address();
             let from_balance = self.balances.read(caller);
             assert(from_balance >= value, MintBurnErrors::INSUFFICIENT_BALANCE_BURN);
@@ -111,13 +118,20 @@ pub mod token_management_component {
             self.emit(Event::Transfer(Transfer { from: caller, to, value }));
             true
         }
-        fn approve(ref self: ComponentState<TContractState>, spender: ContractAddress, value: u256) -> bool {
+        fn approve(
+            ref self: ComponentState<TContractState>, spender: ContractAddress, value: u256,
+        ) -> bool {
             let caller = get_caller_address();
             self.allowances.write((caller, spender), value);
             self.emit(Event::Approval(Approval { owner: caller, spender, value }));
             true
         }
-        fn transfer_from(ref self: ComponentState<TContractState>, from: ContractAddress, to: ContractAddress, value: u256) -> bool {
+        fn transfer_from(
+            ref self: ComponentState<TContractState>,
+            from: ContractAddress,
+            to: ContractAddress,
+            value: u256,
+        ) -> bool {
             let caller = get_caller_address();
             let allowance = self.allowances.read((from, caller));
             assert(allowance >= value, MintBurnErrors::INSUFFICIENT_BALANCE_BURN);
@@ -130,10 +144,14 @@ pub mod token_management_component {
             self.emit(Event::Transfer(Transfer { from, to, value }));
             true
         }
-        fn allowance(self: @ComponentState<TContractState>, owner: ContractAddress, spender: ContractAddress) -> u256 {
+        fn allowance(
+            self: @ComponentState<TContractState>, owner: ContractAddress, spender: ContractAddress,
+        ) -> u256 {
             self.allowances.read((owner, spender))
         }
-        fn mint(ref self: ComponentState<TContractState>, to: ContractAddress, amount: u256) -> bool {
+        fn mint(
+            ref self: ComponentState<TContractState>, to: ContractAddress, amount: u256,
+        ) -> bool {
             let caller = get_caller_address();
             assert(self.minters.read(caller), MintBurnErrors::NOT_MINTER);
             let supply = self.total_supply.read();
@@ -145,7 +163,9 @@ pub mod token_management_component {
             self.emit(Event::Minted(Minted { to, amount }));
             true
         }
-        fn burn(ref self: ComponentState<TContractState>, from: ContractAddress, amount: u256) -> bool {
+        fn burn(
+            ref self: ComponentState<TContractState>, from: ContractAddress, amount: u256,
+        ) -> bool {
             let caller = get_caller_address();
             assert(self.minters.read(caller), MintBurnErrors::NOT_MINTER);
             let from_balance = self.balances.read(from);
@@ -163,7 +183,9 @@ pub mod token_management_component {
             self.emit(Event::MinterAdded(MinterAdded { minter }));
             true
         }
-        fn remove_minter(ref self: ComponentState<TContractState>, minter: ContractAddress) -> bool {
+        fn remove_minter(
+            ref self: ComponentState<TContractState>, minter: ContractAddress,
+        ) -> bool {
             let caller = get_caller_address();
             assert(self.minters.read(caller), MintBurnErrors::NOT_MINTER);
             self.minters.write(minter, false);
