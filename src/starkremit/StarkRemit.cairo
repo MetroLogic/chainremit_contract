@@ -72,40 +72,40 @@ pub mod StarkRemit {
         AccessControlComponent::AccessControlImpl<ContractState>;
     impl AccessControlInternalImpl = AccessControlComponent::InternalImpl<ContractState>;
 
+    // Agent Component
     #[abi(embed_v0)]
-    impl AgentComponentImpl = agent_component::AgentComponentImpl<ContractState>;
-    impl AgentInternalImpl = agent_component::InternalImpl<ContractState>;
+    impl AgentComponentImpl = agent_component::AgentComponent<ContractState>;
 
+    // User Management Component
     #[abi(embed_v0)]
     impl UserManagementImpl =
-        user_management_component::UserManagementImpl<ContractState>;
-    impl UserManagementInternalImpl = user_management_component::InternalImpl<ContractState>;
+        user_management_component::UserManagement<ContractState>;
 
+    // Contribution Component
     #[abi(embed_v0)]
-    impl ContributionImpl = contribution_component::ContributionImpl<ContractState>;
-    impl ContributionInternalImpl = contribution_component::InternalImpl<ContractState>;
+    impl ContributionImpl = contribution_component::Contribution<ContractState>;
 
+    // KYC Component
     #[abi(embed_v0)]
-    impl KycImpl = kyc_component::KYCImpl<ContractState>;
-    impl KycInternalImpl = kyc_component::InternalImpl<ContractState>;
+    impl KycImpl = kyc_component::KYC<ContractState>;
 
+    // Loan Component
     #[abi(embed_v0)]
-    impl LoanImpl = loan_component::LoanImpl<ContractState>;
-    impl LoanInternalImpl = loan_component::InternalImpl<ContractState>;
+    impl LoanImpl = loan_component::Loan<ContractState>;
 
+    // Savings Group Component
     #[abi(embed_v0)]
     impl SavingsGroupImpl =
-        savings_group_component::SavingsGroupComponentImpl<ContractState>;
-    impl SavingsGroupInternalImpl = savings_group_component::InternalImpl<ContractState>;
+        savings_group_component::SavingsGroupComponent<ContractState>;
 
+    // Token Management Component
     #[abi(embed_v0)]
     impl TokenManagementImpl =
-        token_management_component::TokenManagementImpl<ContractState>;
-    impl TokenManagementInternalImpl = token_management_component::InternalImpl<ContractState>;
+        token_management_component::TokenManagement<ContractState>;
 
+    // Transfer Component
     #[abi(embed_v0)]
-    impl TransferImpl = transfer_component::TransferImpl<ContractState>;
-    impl TransferInternalImpl = transfer_component::InternalImpl<ContractState>;
+    impl TransferImpl = transfer_component::Transfer<ContractState>;
 
     impl UpgradeableInternalImpl = UpgradeableComponent::InternalImpl<ContractState>;
 
@@ -829,7 +829,10 @@ pub mod StarkRemit {
             self.accesscontrol.assert_only_role(ADMIN_ROLE);
 
             // Verify user is registered
-            assert(self.is_user_registered(user_address), RegistrationErrors::USER_NOT_FOUND);
+            assert(
+                IStarkRemitImpl::is_user_registered(@self, user_address),
+                RegistrationErrors::USER_NOT_FOUND,
+            );
 
             let mut user_profile = self.user_profiles.read(user_address);
             let old_level = user_profile.kyc_level;
@@ -857,7 +860,10 @@ pub mod StarkRemit {
             self.accesscontrol.assert_only_role(ADMIN_ROLE);
 
             // Verify user is registered
-            assert(self.is_user_registered(user_address), RegistrationErrors::USER_NOT_FOUND);
+            assert(
+                IStarkRemitImpl::is_user_registered(@self, user_address),
+                RegistrationErrors::USER_NOT_FOUND,
+            );
 
             let mut user_profile = self.user_profiles.read(user_address);
             user_profile.is_active = false;
@@ -928,8 +934,10 @@ pub mod StarkRemit {
             ); // Max 30 days
 
             // Enhanced user validation
-            assert(self.is_user_registered(caller), 'Sender not registered');
-            assert(self.is_user_registered(recipient), 'Recipient not registered');
+            assert(IStarkRemitImpl::is_user_registered(@self, caller), 'Sender not registered');
+            assert(
+                IStarkRemitImpl::is_user_registered(@self, recipient), 'Recipient not registered',
+            );
 
             // Enhanced KYC validation if enforcement is enabled
             if self.kyc_enforcement_enabled.read() {
@@ -938,8 +946,12 @@ pub mod StarkRemit {
 
                 // Additional KYC checks for large amounts
                 if amount > 10000_000_000_000_000_000_000 { // > 10,000 tokens
-                    let (_caller_status, caller_level) = self.get_kyc_status(caller);
-                    let (_recipient_status, recipient_level) = self.get_kyc_status(recipient);
+                    let (_caller_status, caller_level) = IStarkRemitImpl::get_kyc_status(
+                        @self, caller,
+                    );
+                    let (_recipient_status, recipient_level) = IStarkRemitImpl::get_kyc_status(
+                        @self, recipient,
+                    );
                     assert(
                         caller_level == KycLevel::Enhanced || caller_level == KycLevel::Premium,
                         'KYC level insufficient',
@@ -1367,7 +1379,8 @@ pub mod StarkRemit {
 
             // Validate agent is authorized
             assert(
-                self.is_agent_authorized(caller, transfer_id), TransferErrors::AGENT_NOT_AUTHORIZED,
+                IStarkRemitImpl::is_agent_authorized(@self, caller, transfer_id),
+                TransferErrors::AGENT_NOT_AUTHORIZED,
             );
 
             // Update transfer status
@@ -1781,7 +1794,7 @@ pub mod StarkRemit {
         // Contribution Management
         fn contribute_round(ref self: ContractState, round_id: u256, amount: u256) {
             let caller = get_caller_address();
-            assert(self.is_member(caller), 'Caller is not a member');
+            assert(IStarkRemitImpl::is_member(@self, caller), 'Caller is not a member');
 
             let mut round = self.rounds.read(round_id);
             assert(round.status == RoundStatus::Active, 'Round is not active');
@@ -1857,7 +1870,7 @@ pub mod StarkRemit {
         fn add_member(ref self: ContractState, address: ContractAddress) {
             let _ = get_caller_address();
             self.accesscontrol.assert_only_role(ADMIN_ROLE);
-            assert(!self.is_member(address), 'Already a member');
+            assert(!IStarkRemitImpl::is_member(@self, address), 'Already a member');
 
             self.members.write(address, true);
             let count = self.member_count.read();
@@ -2597,7 +2610,7 @@ pub mod StarkRemit {
     impl InternalFunctions of InternalFunctionsTrait {
         fn _validate_kyc_and_limits(self: @ContractState, user: ContractAddress, amount: u256) {
             // Check KYC validity
-            assert(self.is_kyc_valid(user), KYCErrors::INVALID_KYC_STATUS);
+            assert(IStarkRemitImpl::is_kyc_valid(self, user), KYCErrors::INVALID_KYC_STATUS);
 
             // Check transaction limits
             let kyc_data = self.user_kyc_data.read(user);

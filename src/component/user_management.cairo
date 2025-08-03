@@ -63,7 +63,7 @@ pub mod user_management_component {
 
 
     #[embeddable_as(UserManagement)]
-    impl UserManagementImpl<
+    pub impl UserManagementImpl<
         TContractState, +HasComponent<TContractState>,
     > of IUserManagement<ComponentState<TContractState>> {
         fn register_user(ref self: ComponentState<TContractState>, registration_data: RegistrationRequest) -> bool {
