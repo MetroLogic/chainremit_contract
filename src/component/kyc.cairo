@@ -8,7 +8,7 @@ pub trait IKYC<TContractState> {
     fn set_kyc_enforcement(ref self: TContractState, enabled: bool) -> bool;
     fn suspend_user_kyc(ref self: TContractState, user: ContractAddress) -> bool;
     fn reinstate_user_kyc(ref self: TContractState, user: ContractAddress) -> bool;
-    fn update_kyc_level(ref self: TContractState, user_address: ContractAddress, kyc_level: KYCLevel) -> bool;
+    fn update_kyc_level(ref self: TContractState, user_address: ContractAddress, kyc_level: KycLevel) -> bool;
 }
 
 #[starknet::component]
@@ -40,8 +40,8 @@ pub mod kyc_component {
     #[derive(Drop, starknet::Event)]
     pub struct KYCLevelUpdated {
         user_address: ContractAddress,
-        old_level: KYCLevel,
-        new_level: KYCLevel,
+        old_level: KycLevel,
+        new_level: KycLevel,
         admin: ContractAddress,
     }
     #[derive(Drop, starknet::Event)]
@@ -148,7 +148,7 @@ pub mod kyc_component {
             }));
             true
         }
-        fn update_kyc_level(ref self: ComponentState<TContractState>, user_address: ContractAddress, kyc_level: KYCLevel) -> bool {
+        fn update_kyc_level(ref self: ComponentState<TContractState>, user_address: ContractAddress, kyc_level: KycLevel) -> bool {
             let caller = get_caller_address();
             let mut kyc_data = self.user_kyc_data.read(user_address);
             let old_level = kyc_data.level;
