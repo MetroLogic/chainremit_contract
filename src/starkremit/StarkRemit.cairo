@@ -33,9 +33,14 @@ const LOAN_TERM_DAYS: u64 = 30 * 24 * 60 * 60; // 30 days in seconds
 
 #[starknet::contract]
 pub mod StarkRemit {
-    use starkremit_contract::component::{
-        agent, contribution, kyc, loan, savings_group, token_management, user_management,
-    };
+    use starkremit_contract::component::agent::agent_component;
+    use starkremit_contract::component::contribution::contribution_component;
+    use starkremit_contract::component::kyc::kyc_component;
+    use starkremit_contract::component::loan::loan_component;
+    use starkremit_contract::component::savings_group::savings_group_component;
+    use starkremit_contract::component::token_management::token_management_component;
+    use starkremit_contract::component::transfer::transfer_component;
+    use starkremit_contract::component::user_management::user_management_component;
     use super::*;
 
     component!(path: AccessControlComponent, storage: accesscontrol, event: AccessControlEvent);
@@ -60,6 +65,7 @@ pub mod StarkRemit {
         storage: token_management_component,
         event: TokenManagementEvent,
     );
+    component!(path: transfer_component, storage: transfer_component, event: TransferEvent);
 
     #[abi(embed_v0)]
     impl AccessControlImpl =
@@ -80,7 +86,7 @@ pub mod StarkRemit {
     impl ContributionInternalImpl = contribution_component::InternalImpl<ContractState>;
 
     #[abi(embed_v0)]
-    impl KycImpl = kyc_component::KycImpl<ContractState>;
+    impl KycImpl = kyc_component::KYCImpl<ContractState>;
     impl KycInternalImpl = kyc_component::InternalImpl<ContractState>;
 
     #[abi(embed_v0)]
@@ -89,13 +95,17 @@ pub mod StarkRemit {
 
     #[abi(embed_v0)]
     impl SavingsGroupImpl =
-        savings_group_component::SavingsGroupImpl<ContractState>;
+        savings_group_component::SavingsGroupComponentImpl<ContractState>;
     impl SavingsGroupInternalImpl = savings_group_component::InternalImpl<ContractState>;
 
     #[abi(embed_v0)]
     impl TokenManagementImpl =
         token_management_component::TokenManagementImpl<ContractState>;
     impl TokenManagementInternalImpl = token_management_component::InternalImpl<ContractState>;
+
+    #[abi(embed_v0)]
+    impl TransferImpl = transfer_component::TransferImpl<ContractState>;
+    impl TransferInternalImpl = transfer_component::InternalImpl<ContractState>;
 
     impl UpgradeableInternalImpl = UpgradeableComponent::InternalImpl<ContractState>;
 
@@ -264,6 +274,8 @@ pub mod StarkRemit {
         SavingsGroupEvent: savings_group_component::Event,
         #[flat]
         TokenManagementEvent: token_management_component::Event,
+        #[flat]
+        TransferEvent: transfer_component::Event,
         // System Management Events
         AgentAuthorized: AgentAuthorized,
         AgentPermissionUpdated: AgentPermissionUpdated,
@@ -334,6 +346,7 @@ pub mod StarkRemit {
 
     // Contract storage definition
     #[storage]
+    #[allow(starknet::colliding_storage_paths)]
     struct Storage {
         #[substorage(v0)]
         upgradeable: UpgradeableComponent::Storage,
@@ -355,6 +368,8 @@ pub mod StarkRemit {
         savings_group_component: savings_group_component::Storage,
         #[substorage(v0)]
         token_management_component: token_management_component::Storage,
+        #[substorage(v0)]
+        transfer_component: transfer_component::Storage,
         // System Management Storage
         agent_permissions: Map<(ContractAddress, felt252), bool>, // (agent, permission) -> granted
         paused_functions: Map<felt252, bool>, // function selector -> paused
