@@ -27,7 +27,7 @@ pub struct UserProfile {
 }
 
 /// KYC verification levels
-#[derive(Copy, Drop, Serde, starknet::Store)]
+#[derive(Copy, Drop, Serde, starknet::Store, Debug, PartialEq)]
 pub enum KYCLevel {
     /// No verification
     #[default]
@@ -41,7 +41,7 @@ pub enum KYCLevel {
 }
 
 /// Registration status for tracking user onboarding progress
-#[derive(Copy, Drop, Serde, starknet::Store)]
+#[derive(Copy, Drop, Serde, starknet::Store, Debug, PartialEq)]
 pub enum RegistrationStatus {
     /// Registration not started
     #[default]
@@ -71,7 +71,7 @@ pub struct RegistrationRequest {
     pub country_code: felt252,
 }
 
-#[derive(Copy, Drop, Serde, starknet::Store, PartialEq)]
+#[derive(Copy, Drop, Serde, starknet::Store, PartialEq, Debug)]
 pub enum KycLevel {
     #[default]
     None,
@@ -80,7 +80,7 @@ pub enum KycLevel {
     Premium,
 }
 
-#[derive(Copy, Drop, Serde, starknet::Store, PartialEq)]
+#[derive(Copy, Drop, Serde, starknet::Store, PartialEq, Debug)]
 pub enum KycStatus {
     #[default]
     Pending,
@@ -107,7 +107,7 @@ pub struct TransactionLimits {
 }
 
 /// Transfer status for tracking transfer lifecycle
-#[derive(Copy, Drop, Serde, starknet::Store, PartialEq)]
+#[derive(Copy, Drop, Serde, starknet::Store, PartialEq, Debug)]
 pub enum TransferStatus {
     #[default]
     None,
@@ -167,7 +167,7 @@ pub struct TransferHistory {
 }
 
 /// Agent status for tracking agent availability
-#[derive(Copy, Drop, Serde, starknet::Store, PartialEq)]
+#[derive(Copy, Drop, Serde, starknet::Store, PartialEq, Debug)]
 pub enum AgentStatus {
     #[default]
     Active,
@@ -253,7 +253,7 @@ pub struct SavingsGroup {
 
 
 // Enum for the status of a contribution round
-#[derive(Copy, Drop, Serde, PartialEq, starknet::Store)]
+#[derive(Copy, Drop, Serde, PartialEq, starknet::Store, Debug)]
 pub enum RoundStatus {
     Active,
     Completed,
@@ -263,7 +263,7 @@ pub enum RoundStatus {
 
 // Struct for a member's contribution
 
-#[derive(PartialEq, Copy, Drop, Serde, starknet::Store)]
+#[derive(PartialEq, Copy, Drop, Serde, starknet::Store, Debug)]
 pub enum LoanStatus {
     Pending,
     Approved,
@@ -281,7 +281,7 @@ pub struct LoanRequest {
 }
 
 /// Governance role hierarchy for admin system
-#[derive(Copy, Drop, Serde, starknet::Store, PartialEq)]
+#[derive(Copy, Drop, Serde, starknet::Store, PartialEq, Debug)]
 pub enum GovRole {
     #[default]
     /// No special permissions
