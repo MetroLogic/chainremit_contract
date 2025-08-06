@@ -450,7 +450,7 @@ pub mod StarkRemit {
         loan_count: u256,
         loans: Map<u256, LoanRequest>,
         loan_request: Map<ContractAddress, bool>, // Track if a user has an active loan request
-        active_loan: Map<ContractAddress, bool>, // Track active loan 
+        active_loan: Map<ContractAddress, bool>, // Track active loan
         // Loan repayment tracking
         loan_repayments: Map<u256, u256>, // loan_id -> amount_repaid
         loan_due_dates: Map<u256, u64>, // loan_id -> due_date_timestamp
@@ -1897,11 +1897,34 @@ pub mod StarkRemit {
 
         fn join_group(ref self: ContractState, group_id: u64) {
             let caller = get_caller_address();
-            let group = self.groups.read(group_id);
+
+            assert(group_id <= self.group_count.read(), GroupErrors::INVALID_GROUP_ID);
+            let mut group = self.groups.read(group_id);
+
+            assert(group.created_at > 0, GroupErrors::GROUP_NOT_CREATED);
             assert(group.is_active, GroupErrors::GROUP_NOT_ACTIVE);
             assert(!self.group_members.read((group_id, caller)), GroupErrors::ALREADY_MEMBER);
+            assert(group.member_count < (group.max_members).into(), GroupErrors::GROUP_FULL);
+
+            group.member_count += 1;
+            assert(group.member_count >= 2, GroupErrors::INVALID_GROUP_SIZE);
+            self.groups.write(group_id, group);
 
             self.group_members.write((group_id, caller), true);
+        }
+
+        fn view_group(self: @ContractState, group_id: u64) -> SavingsGroup {
+            assert(group_id <= self.group_count.read(), GroupErrors::INVALID_GROUP_ID);
+
+            let group = self.groups.read(group_id);
+            assert(group.created_at > 0, GroupErrors::GROUP_NOT_CREATED);
+
+            group
+        }
+
+        fn confirm_group_membership(self: @ContractState, group_id: u64) -> bool {
+            assert(group_id <= self.group_count.read(), GroupErrors::INVALID_GROUP_ID);
+            self.group_members.read((group_id, get_caller_address()))
         }
 
         fn requestLoan(ref self: ContractState, requester: ContractAddress, amount: u256) -> u256 {

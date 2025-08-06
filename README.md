@@ -112,7 +112,7 @@ The contract includes comprehensive transfer administration functionality:
     # Install Starkli for contract interaction
     curl -L https://raw.githubusercontent.com/xJonathanLEI/starkli/master/install.sh | bash
     starkliup
-    
+
     # Install Node.js dependencies for scripts
     npm install
     ```
@@ -390,7 +390,7 @@ The contract emits comprehensive events for all transfer administration actions:
     ```bash
     # Create account descriptor
     starkli account fetch <account_address> --rpc <rpc_url>
-    
+
     # Create keystore (if not already done)
     starkli signer keystore from-key ~/.starkli-wallets/keystore.json
     ```
@@ -403,7 +403,7 @@ The contract emits comprehensive events for all transfer administration actions:
         --keystore ~/.starkli-wallets/keystore.json \
         --compiler-version 2.4.0 \
         --max-fee 0.01
-    
+
     # Save the returned class hash: 0x...
     ```
 
@@ -417,7 +417,7 @@ The contract emits comprehensive events for all transfer administration actions:
         --account ~/.starkli-wallets/account.json \
         --keystore ~/.starkli-wallets/keystore.json \
         --max-fee 0.05
-    
+
     # Save the returned contract address: 0x...
     ```
 
@@ -477,7 +477,7 @@ The contract requires the following constructor parameters:
 - `initial_supply`: Initial token supply
 - `base_currency`: Base currency identifier
 - `oracle_address`: Oracle contract address for exchange rates
-- 
+-
 ## Component Library Documentation (Contract Interface)
 
 This section describes the main functions, data structures, and events exposed by the `starkRemit_contract`.
@@ -598,7 +598,7 @@ This section describes the main functions, data structures, and events exposed b
 
 *   **`fn create_remittance(ref self: ContractState, recipient: ContractAddress, amount: u256, source_token: ContractAddress, target_token: ContractAddress, expires_in: u64) -> u64`**:
     *   Creates a new remittance request with specified parameters.
-    *   *Parameters:* 
+    *   *Parameters:*
         - `recipient`: Destination address for funds
         - `amount`: Amount to send in source token units
         - `source_token`: ERC20 token address for source currency
@@ -607,7 +607,7 @@ This section describes the main functions, data structures, and events exposed b
     *   *Returns:* Unique remittance ID
     *   *Emits:* `RemittanceCreated` event
     *   *Requirements:* Valid addresses, amount > 0, tokens supported
-    *   *Usage Example:* 
+    *   *Usage Example:*
         ```bash
         starkli invoke <contract_address> create_remittance \
             0x1234...recipient 1000000000000000000 \

@@ -10,7 +10,7 @@ use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTr
 // snforge imports
 use snforge_std::{
     ContractClassTrait, DeclareResultTrait, EventSpyAssertionsTrait, declare, spy_events,
-    start_cheat_block_timestamp, start_cheat_caller_address_global,
+    start_cheat_block_timestamp_global, start_cheat_caller_address_global,
     stop_cheat_caller_address_global,
 };
 
@@ -236,7 +236,7 @@ fn test_total_users_count() {
     let (_, starkremit_dispatcher, _) = __setup__();
     let user1 = contract_address_const::<'count_user1'>();
     let user2 = contract_address_const::<'count_user2'>();
-    let registration_data = create_test_registration();
+    let _registration_data = create_test_registration();
 
     // Initial count should be 0
     let initial_count = starkremit_dispatcher.get_total_users();
@@ -259,4 +259,157 @@ fn test_total_users_count() {
 
     let final_count = starkremit_dispatcher.get_total_users();
     assert_eq!(final_count, 2, "Count should be 2 after second user");
+}
+
+// *************************************************************************
+//                              GROUP TESTS
+// *************************************************************************
+
+// Helper function to create a group with specified max members
+fn create_test_group(
+    dispatcher: IStarkRemitDispatcher, creator: ContractAddress, max_members: u8,
+) -> u64 {
+    start_cheat_block_timestamp_global(1000);
+    start_cheat_caller_address_global(creator);
+    let group_id = dispatcher.create_group(max_members);
+    stop_cheat_caller_address_global();
+    group_id
+}
+
+#[test]
+fn test_join_group_success() {
+    let (_, starkremit_dispatcher, _) = __setup__();
+    let creator = contract_address_const::<'creator'>();
+    let member1 = contract_address_const::<'member1'>();
+    let member2 = contract_address_const::<'member2'>();
+
+    // Create group with max 2 members
+    let group_id = create_test_group(starkremit_dispatcher, creator, 3);
+
+    // First member joins
+    start_cheat_caller_address_global(member1);
+    starkremit_dispatcher.join_group(group_id);
+    assert_eq!(
+        starkremit_dispatcher.confirm_group_membership(group_id),
+        true,
+        "Member1 should be in group",
+    );
+    stop_cheat_caller_address_global();
+
+    // Second member joins (should succeed)
+    start_cheat_caller_address_global(member2);
+    starkremit_dispatcher.join_group(group_id);
+    assert_eq!(
+        starkremit_dispatcher.confirm_group_membership(group_id),
+        true,
+        "Member2 should be in group",
+    );
+    stop_cheat_caller_address_global();
+
+    // Verify group member count
+    let group = starkremit_dispatcher.view_group(group_id);
+    assert_eq!(group.member_count, 3, "Group should have 3 members");
+}
+
+#[test]
+#[should_panic(expected: ('GROUP: group is nonexistent',))]
+fn test_join_group_invalid_id() {
+    let (_, starkremit_dispatcher, _) = __setup__();
+    let user = contract_address_const::<'user'>();
+
+    start_cheat_caller_address_global(user);
+    // Attempt to join non-existent group (ID 0 when no groups exist)
+    starkremit_dispatcher.join_group(0);
+}
+
+#[test]
+#[should_panic(expected: ('GROUP: caller already a member',))]
+fn test_join_group_already_member() {
+    let (_, starkremit_dispatcher, _) = __setup__();
+    let creator = contract_address_const::<'creator'>();
+    let user = contract_address_const::<'user'>();
+
+    let group_id = create_test_group(starkremit_dispatcher, creator, 3);
+
+    // Join successfully first time
+    start_cheat_caller_address_global(user);
+    starkremit_dispatcher.join_group(group_id);
+
+    // Attempt to join again
+    starkremit_dispatcher.join_group(group_id);
+}
+
+#[test]
+#[should_panic(expected: ('GROUP: group is full',))]
+fn test_join_group_full() {
+    let (_, starkremit_dispatcher, _) = __setup__();
+    let creator = contract_address_const::<'creator'>();
+    let member1 = contract_address_const::<'member1'>();
+    let member2 = contract_address_const::<'member2'>();
+    let non_member = contract_address_const::<'non_member'>();
+
+    // Create group with max 2 members
+    let group_id = create_test_group(starkremit_dispatcher, creator, 2);
+
+    // Fill the group
+    start_cheat_caller_address_global(member1);
+    starkremit_dispatcher.join_group(group_id);
+    stop_cheat_caller_address_global();
+
+    start_cheat_caller_address_global(member2);
+    starkremit_dispatcher.join_group(group_id);
+    stop_cheat_caller_address_global();
+
+    // Attempt to join when full
+    start_cheat_caller_address_global(non_member);
+    starkremit_dispatcher.join_group(group_id);
+}
+
+#[test]
+fn test_view_group_success() {
+    let (_, starkremit_dispatcher, _) = __setup__();
+    let creator = contract_address_const::<'creator'>();
+
+    let group_id = create_test_group(starkremit_dispatcher, creator, 5);
+    let group = starkremit_dispatcher.view_group(group_id);
+
+    assert_eq!(group.max_members, 5, "Max members should match");
+    assert_eq!(group.member_count, 1, "Initial member count should be 1");
+    assert_eq!(group.is_active, true, "Group should be active");
+    assert!(group.created_at > 0, "Created at should be set");
+}
+
+#[test]
+#[should_panic(expected: ('GROUP: group is nonexistent',))]
+fn test_view_group_invalid_id() {
+    let (_, starkremit_dispatcher, _) = __setup__();
+    // Attempt to view non-existent group
+    starkremit_dispatcher.view_group(0);
+}
+
+#[test]
+fn test_confirm_group_membership() {
+    let (_, starkremit_dispatcher, _) = __setup__();
+    let creator = contract_address_const::<'creator'>();
+    let member = contract_address_const::<'member'>();
+    let _non_member = contract_address_const::<'non_member'>();
+
+    let group_id = create_test_group(starkremit_dispatcher, creator, 3);
+
+    // Member joins
+    start_cheat_caller_address_global(member);
+    starkremit_dispatcher.join_group(group_id);
+    assert_eq!(
+        starkremit_dispatcher.confirm_group_membership(group_id),
+        true,
+        "Member should be confirmed",
+    );
+    stop_cheat_caller_address_global();
+
+    // Verify membership
+    assert_eq!(
+        starkremit_dispatcher.confirm_group_membership(group_id),
+        false,
+        "Non-member should not be confirmed",
+    );
 }
