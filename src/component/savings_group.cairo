@@ -83,6 +83,9 @@ pub mod savings_group_component {
             assert(group.created_at > 0, GroupErrors::GROUP_NOT_CREATED);
             assert(group.is_active, GroupErrors::GROUP_NOT_ACTIVE);
             assert(!self.group_members.read((group_id, caller)), GroupErrors::ALREADY_MEMBER);
+            assert(
+                group.max_members > 0 && group.max_members <= 100, GroupErrors::INVALID_GROUP_SIZE,
+            );
             assert(group.member_count < (group.max_members).into(), GroupErrors::GROUP_FULL);
 
             group.member_count += 1;
