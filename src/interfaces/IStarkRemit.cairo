@@ -213,6 +213,9 @@ pub trait IStarkRemit<TContractState> {
 
     fn join_group(ref self: TContractState, group_id: u64);
 
+    fn view_group(self: @TContractState, group_id: u64) -> SavingsGroup;
+
+    fn confirm_group_membership(self: @TContractState, group_id: u64) -> bool;
 
     //loan request
     fn requestLoan(ref self: TContractState, requester: ContractAddress, amount: u256) -> u256;

@@ -216,6 +216,12 @@ pub mod GroupErrors {
 
     /// Error triggered when the group is full
     pub const GROUP_FULL: felt252 = 'GROUP: group is full';
+
+    /// Error triggered when trying to join a group that has not been created
+    pub const GROUP_NOT_CREATED: felt252 = 'GROUP: group is nonexistent';
+
+    /// Error triggered when an invalid group id is provided
+    pub const INVALID_GROUP_ID: felt252 = 'GROUP: invalid group id';
 }
 
 pub mod MintBurnErrors {
