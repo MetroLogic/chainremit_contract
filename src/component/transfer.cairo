@@ -1,6 +1,5 @@
-use core::num::traits::Zero;
 use starknet::ContractAddress;
-use starkremit_contract::base::types::{TransferData, TransferHistory, TransferStatus};
+use starkremit_contract::base::types::TransferData;
 
 #[starknet::interface]
 pub trait ITransfer<TContractState> {

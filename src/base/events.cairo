@@ -1,5 +1,5 @@
 use starknet::ContractAddress;
-use super::types::{AgentStatus, GovRole, KYCLevel, KycLevel, KycStatus};
+use super::types::{AgentStatus, KYCLevel, KycLevel, KycStatus};
 
 #[derive(Copy, Drop, starknet::Event)]
 pub struct MemberAdded {
