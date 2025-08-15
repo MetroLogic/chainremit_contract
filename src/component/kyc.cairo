@@ -1,5 +1,5 @@
 use starknet::ContractAddress;
-use starkremit_contract::base::types::{KYCLevel, KycLevel, KycStatus};
+use starkremit_contract::base::types::{KycLevel, KycStatus};
 #[starknet::interface]
 pub trait IKYC<TContractState> {
     fn update_kyc_status(
@@ -26,10 +26,8 @@ pub mod kyc_component {
         Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerWriteAccess,
     };
     use starknet::{ContractAddress, get_block_timestamp, get_caller_address};
-    use starkremit_contract::base::errors::{KYCErrors, RegistrationErrors};
-    use starkremit_contract::base::types::{
-        KYCLevel, KycLevel, KycStatus, RegistrationStatus, UserKycData,
-    };
+    use starkremit_contract::base::errors::KYCErrors;
+    use starkremit_contract::base::types::{KycLevel, KycStatus, UserKycData};
     use super::*;
 
     #[storage]

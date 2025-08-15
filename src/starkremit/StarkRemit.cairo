@@ -1,20 +1,14 @@
 use core::num::traits::Zero;
 use openzeppelin::access::accesscontrol::AccessControlComponent;
-use openzeppelin::access::ownable::OwnableComponent;
 use openzeppelin::introspection::src5::SRC5Component;
 use openzeppelin::upgrades::UpgradeableComponent;
-use openzeppelin::upgrades::interface::IUpgradeable;
 use starknet::storage::{
     Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePathEntry, StoragePointerReadAccess,
     StoragePointerWriteAccess,
 };
-use starknet::{
-    ContractAddress, contract_address_const, get_block_timestamp, get_caller_address,
-    get_contract_address,
-};
+use starknet::{ContractAddress, get_block_timestamp, get_caller_address};
 use starkremit_contract::base::errors::{
-    ERC20Errors, GovernanceErrors, GroupErrors, KYCErrors, MintBurnErrors, RegistrationErrors,
-    TransferErrors,
+    GovernanceErrors, GroupErrors, KYCErrors, RegistrationErrors, TransferErrors,
 };
 use starkremit_contract::base::events::*;
 use starkremit_contract::base::types::{
@@ -23,7 +17,7 @@ use starkremit_contract::base::types::{
     RegistrationStatus, RoundStatus, SavingsGroup, TimelockChange, TransferData, TransferHistory,
     TransferStatus, UserKycData, UserProfile,
 };
-use starkremit_contract::interfaces::{IERC20, IStarkRemit};
+use starkremit_contract::interfaces::IStarkRemit;
 
 
 const INTEREST_RATE: u256 = 500; // 5% in basis points (0.05 * 10000)
@@ -811,8 +805,7 @@ pub mod StarkRemit {
 
             // Verify user is registered
             assert(
-                IStarkRemitImpl::is_user_registered(@self, user_address),
-                RegistrationErrors::USER_NOT_FOUND,
+                Self::is_user_registered(@self, user_address), RegistrationErrors::USER_NOT_FOUND,
             );
 
             let mut user_profile = self.user_profiles.read(user_address);
@@ -842,8 +835,7 @@ pub mod StarkRemit {
 
             // Verify user is registered
             assert(
-                IStarkRemitImpl::is_user_registered(@self, user_address),
-                RegistrationErrors::USER_NOT_FOUND,
+                Self::is_user_registered(@self, user_address), RegistrationErrors::USER_NOT_FOUND,
             );
 
             let mut user_profile = self.user_profiles.read(user_address);
@@ -915,10 +907,8 @@ pub mod StarkRemit {
             ); // Max 30 days
 
             // Enhanced user validation
-            assert(IStarkRemitImpl::is_user_registered(@self, caller), 'Sender not registered');
-            assert(
-                IStarkRemitImpl::is_user_registered(@self, recipient), 'Recipient not registered',
-            );
+            assert(Self::is_user_registered(@self, caller), 'Sender not registered');
+            assert(Self::is_user_registered(@self, recipient), 'Recipient not registered');
 
             // Enhanced KYC validation if enforcement is enabled
             if self.kyc_enforcement_enabled.read() {
@@ -927,10 +917,8 @@ pub mod StarkRemit {
 
                 // Additional KYC checks for large amounts
                 if amount > 10000_000_000_000_000_000_000 { // > 10,000 tokens
-                    let (_caller_status, caller_level) = IStarkRemitImpl::get_kyc_status(
-                        @self, caller,
-                    );
-                    let (_recipient_status, recipient_level) = IStarkRemitImpl::get_kyc_status(
+                    let (_caller_status, caller_level) = Self::get_kyc_status(@self, caller);
+                    let (_recipient_status, recipient_level) = Self::get_kyc_status(
                         @self, recipient,
                     );
                     assert(
@@ -1360,7 +1348,7 @@ pub mod StarkRemit {
 
             // Validate agent is authorized
             assert(
-                IStarkRemitImpl::is_agent_authorized(@self, caller, transfer_id),
+                Self::is_agent_authorized(@self, caller, transfer_id),
                 TransferErrors::AGENT_NOT_AUTHORIZED,
             );
 
@@ -1775,7 +1763,7 @@ pub mod StarkRemit {
         // Contribution Management
         fn contribute_round(ref self: ContractState, round_id: u256, amount: u256) {
             let caller = get_caller_address();
-            assert(IStarkRemitImpl::is_member(@self, caller), 'Caller is not a member');
+            assert(Self::is_member(@self, caller), 'Caller is not a member');
 
             let mut round = self.rounds.read(round_id);
             assert(round.status == RoundStatus::Active, 'Round is not active');
@@ -1851,7 +1839,7 @@ pub mod StarkRemit {
         fn add_member(ref self: ContractState, address: ContractAddress) {
             let _ = get_caller_address();
             self.accesscontrol.assert_only_role(ADMIN_ROLE);
-            assert(!IStarkRemitImpl::is_member(@self, address), 'Already a member');
+            assert(!Self::is_member(@self, address), 'Already a member');
 
             self.members.write(address, true);
             let count = self.member_count.read();

@@ -255,6 +255,7 @@ pub struct SavingsGroup {
 // Enum for the status of a contribution round
 #[derive(Copy, Drop, Serde, PartialEq, starknet::Store, Debug)]
 pub enum RoundStatus {
+    #[default]
     Active,
     Completed,
     Cancelled,
@@ -265,6 +266,7 @@ pub enum RoundStatus {
 
 #[derive(PartialEq, Copy, Drop, Serde, starknet::Store, Debug)]
 pub enum LoanStatus {
+    #[default]
     Pending,
     Approved,
     Reject,
