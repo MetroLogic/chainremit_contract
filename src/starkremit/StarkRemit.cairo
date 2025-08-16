@@ -44,6 +44,7 @@ pub mod StarkRemit {
     use super::*;
 
     component!(path: AccessControlComponent, storage: accesscontrol, event: AccessControlEvent);
+    component!(path: OwnableComponent, storage: ownable, event: OwnableEvent);
     component!(path: SRC5Component, storage: src5, event: Src5Event);
     component!(path: UpgradeableComponent, storage: upgradeable, event: UpgradeableEvent);
     component!(path: agent_component, storage: agent_component, event: AgentEvent);
@@ -71,6 +72,10 @@ pub mod StarkRemit {
     impl AccessControlImpl =
         AccessControlComponent::AccessControlImpl<ContractState>;
     impl AccessControlInternalImpl = AccessControlComponent::InternalImpl<ContractState>;
+
+    #[abi(embed_v0)]
+    impl OwnableImpl = OwnableComponent::OwnableImpl<ContractState>;
+    impl OwnableInternalImpl = OwnableComponent::InternalImpl<ContractState>;
 
     // Agent Component (internal use only - functions exposed via IStarkRemit)
     impl AgentComponentImpl = agent_component::AgentComponent<ContractState>;
@@ -248,6 +253,8 @@ pub mod StarkRemit {
         #[flat]
         AccessControlEvent: AccessControlComponent::Event,
         #[flat]
+        OwnableEvent: OwnableComponent::Event,
+        #[flat]
         UpgradeableEvent: UpgradeableComponent::Event,
         // Component events (not flattened to avoid duplicates with main contract events)
         AgentEvent: agent_component::Event,
@@ -335,6 +342,8 @@ pub mod StarkRemit {
         src5: SRC5Component::Storage,
         #[substorage(v0)]
         accesscontrol: AccessControlComponent::Storage,
+        #[substorage(v0)]
+        ownable: OwnableComponent::Storage,
         #[substorage(v0)]
         agent_component: agent_component::Storage,
         #[substorage(v0)]
@@ -481,6 +490,9 @@ pub mod StarkRemit {
         self.token_address.write(token_address);
         self.accesscontrol.initializer();
         self.accesscontrol._grant_role(PROTOCOL_OWNER_ROLE, owner);
+
+        // initialize owner
+        self.ownable.initializer(owner);
 
         // Initialize governance
         self.admin_roles.write(owner, GovRole::SuperAdmin);

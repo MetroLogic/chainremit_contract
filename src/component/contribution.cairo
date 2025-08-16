@@ -25,6 +25,8 @@ pub trait IContribution<TContractState> {
 #[starknet::component]
 pub mod contribution_component {
     use core::num::traits::Zero;
+    use openzeppelin::access::ownable::OwnableComponent;
+    use openzeppelin::access::ownable::OwnableComponent::OwnableImpl;
     use starknet::storage::{
         Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
         StoragePointerWriteAccess,
@@ -96,7 +98,10 @@ pub mod contribution_component {
 
     #[embeddable_as(Contribution)]
     impl ContributionImpl<
-        TContractState, +HasComponent<TContractState>,
+        TContractState,
+        +HasComponent<TContractState>,
+        +Drop<TContractState>,
+        impl Owner: OwnableComponent::HasComponent<TContractState>,
     > of IContribution<ComponentState<TContractState>> {
         fn contribute_round(
             ref self: ComponentState<TContractState>, round_id: u256, amount: u256,
@@ -134,10 +139,7 @@ pub mod contribution_component {
         }
 
         fn complete_round(ref self: ComponentState<TContractState>, round_id: u256) {
-            // TODO: Add owner-only access control
-            // let caller = get_caller_address();
-            // let owner = self.owner.read();
-            // assert(caller == owner, 'Only owner can complete rounds');
+            self.is_owner();
 
             let mut round = self.rounds.read(round_id);
             assert(round.status == RoundStatus::Active, 'Round is not active');
@@ -149,10 +151,7 @@ pub mod contribution_component {
         fn add_round_to_schedule(
             ref self: ComponentState<TContractState>, recipient: ContractAddress, deadline: u64,
         ) {
-            // TODO: Add owner-only access control
-            // let caller = get_caller_address();
-            // let owner = self.owner.read();
-            // assert(caller == owner, 'Only owner can add rounds');
+            self.is_owner();
 
             // Validate recipient is a member
             assert(self.is_member(recipient), 'Recipient must be a member');
@@ -210,10 +209,7 @@ pub mod contribution_component {
         }
 
         fn add_member(ref self: ComponentState<TContractState>, address: ContractAddress) {
-            // TODO: Add owner-only access control
-            // let caller = get_caller_address();
-            // let owner = self.owner.read();
-            // assert(caller == owner, 'Only owner can add members');
+            self.is_owner();
 
             // Validate address is not zero
             assert(!address.is_zero(), 'Invalid address');
@@ -231,10 +227,7 @@ pub mod contribution_component {
         }
 
         fn disburse_round_contribution(ref self: ComponentState<TContractState>, round_id: u256) {
-            // TODO: Add owner-only access control
-            // let caller = get_caller_address();
-            // let owner = self.owner.read();
-            // assert(caller == owner, 'Only owner can disburse');
+            self.is_owner();
 
             let round = self.rounds.read(round_id);
             assert(round.status == RoundStatus::Completed, 'Round not completed');
@@ -254,10 +247,7 @@ pub mod contribution_component {
         }
 
         fn remove_member(ref self: ComponentState<TContractState>, address: ContractAddress) {
-            //TODO: Add owner-only access control
-            // let caller = get_caller_address();
-            // let owner = self.owner.read();
-            // assert(caller == owner, 'Only owner can remove members');
+            self.is_owner();
 
             assert(self.is_member(address), 'Not a member');
 
@@ -300,10 +290,7 @@ pub mod contribution_component {
         }
 
         fn set_required_contribution(ref self: ComponentState<TContractState>, amount: u256) {
-            // TODO
-            // let caller = get_caller_address();
-            // let owner = self.owner.read();
-            // assert(caller == owner, 'Only owner can set required contribution');
+            self.is_owner();
 
             let old_amount = self.required_contribution.read();
             self.required_contribution.write(amount);
@@ -313,6 +300,20 @@ pub mod contribution_component {
 
         fn get_required_contribution(self: @ComponentState<TContractState>) -> u256 {
             self.required_contribution.read()
+        }
+    }
+
+    #[generate_trait]
+    impl InternalImpl<
+        TContractState,
+        +HasComponent<TContractState>,
+        +Drop<TContractState>,
+        impl Owner: OwnableComponent::HasComponent<TContractState>,
+    > of InternalTrait<TContractState> {
+        fn is_owner(self: @ComponentState<TContractState>) {
+            let owner_comp = get_dep_component!(self, Owner);
+            let owner = owner_comp.owner();
+            assert(owner == get_caller_address(), 'Caller is not the owner');
         }
     }
 }
