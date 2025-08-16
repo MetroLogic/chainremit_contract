@@ -31,8 +31,9 @@ pub mod contribution_component {
         Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
         StoragePointerWriteAccess,
     };
-    use starknet::{ContractAddress, get_block_timestamp, get_caller_address};
+    use starknet::{ContractAddress, get_block_timestamp, get_caller_address, get_contract_address};
     use starkremit_contract::base::types::{ContributionRound, MemberContribution, RoundStatus};
+    use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
     use super::*;
 
     #[storage]
@@ -46,7 +47,8 @@ pub mod contribution_component {
         member_count: u32,
         member_by_index: Map<u32, ContractAddress>,
         required_contribution: u256,
-        member_index_map: Map<ContractAddress, u32> // Track member indices for efficient removal
+        member_index_map: Map<ContractAddress, u32>, // Track member indices for efficient removal
+        erc20_address: ContractAddress,
     }
 
     #[event]
@@ -128,9 +130,11 @@ pub mod contribution_component {
             round.total_contributions += amount;
             self.rounds.write(round_id, round);
 
-            //TODO Add actual token transfer here
-            // IERC20Dispatcher { contract_address: token_address }.transfer_from(caller,
-            // contract_address, amount);
+            // Token transfer
+            let erc20_address = self.erc20_address.read();
+            IERC20Dispatcher { contract_address: erc20_address }.transfer_from(
+                caller, get_contract_address(), amount,
+            );
 
             self
                 .emit(
@@ -232,9 +236,11 @@ pub mod contribution_component {
             let round = self.rounds.read(round_id);
             assert(round.status == RoundStatus::Completed, 'Round not completed');
 
-            // TODO Add actual token transfer to recipient
-            // IERC20Dispatcher { contract_address: token_address }.transfer(round.recipient,
-            // round.total_contributions);
+            // Token transfer to recipient
+            let erc20_address = self.erc20_address.read();
+            IERC20Dispatcher { contract_address: erc20_address }.transfer(
+                round.recipient, round.total_contributions,
+            );
 
             self
                 .emit(
@@ -310,6 +316,10 @@ pub mod contribution_component {
         +Drop<TContractState>,
         impl Owner: OwnableComponent::HasComponent<TContractState>,
     > of InternalTrait<TContractState> {
+        fn initializer(ref self: ComponentState<TContractState>, token_address: ContractAddress) {
+        self.erc20_address.write(token_address);
+    }
+
         fn is_owner(self: @ComponentState<TContractState>) {
             let owner_comp = get_dep_component!(self, Owner);
             let owner = owner_comp.owner();
