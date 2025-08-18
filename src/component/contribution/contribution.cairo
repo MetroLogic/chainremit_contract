@@ -27,13 +27,13 @@ pub mod contribution_component {
     use core::num::traits::Zero;
     use openzeppelin::access::ownable::OwnableComponent;
     use openzeppelin::access::ownable::OwnableComponent::OwnableImpl;
+    use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
     use starknet::storage::{
         Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
         StoragePointerWriteAccess,
     };
     use starknet::{ContractAddress, get_block_timestamp, get_caller_address, get_contract_address};
     use starkremit_contract::base::types::{ContributionRound, MemberContribution, RoundStatus};
-    use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
     use super::*;
 
     #[storage]
@@ -47,7 +47,7 @@ pub mod contribution_component {
         member_count: u32,
         member_by_index: Map<u32, ContractAddress>,
         required_contribution: u256,
-        member_index_map: Map<ContractAddress, u32>, // Track member indices for efficient removal
+        member_index_map: Map<ContractAddress, u32>,
         erc20_address: ContractAddress,
     }
 
@@ -132,9 +132,8 @@ pub mod contribution_component {
 
             // Token transfer
             let erc20_address = self.erc20_address.read();
-            IERC20Dispatcher { contract_address: erc20_address }.transfer_from(
-                caller, get_contract_address(), amount,
-            );
+            IERC20Dispatcher { contract_address: erc20_address }
+                .transfer_from(caller, get_contract_address(), amount);
 
             self
                 .emit(
@@ -206,7 +205,6 @@ pub mod contribution_component {
                     members.append(member);
                 }
 
-                members.append(member);
                 i += 1;
             }
             members.span()
@@ -238,9 +236,8 @@ pub mod contribution_component {
 
             // Token transfer to recipient
             let erc20_address = self.erc20_address.read();
-            IERC20Dispatcher { contract_address: erc20_address }.transfer(
-                round.recipient, round.total_contributions,
-            );
+            IERC20Dispatcher { contract_address: erc20_address }
+                .transfer(round.recipient, round.total_contributions);
 
             self
                 .emit(
@@ -310,15 +307,15 @@ pub mod contribution_component {
     }
 
     #[generate_trait]
-    impl InternalImpl<
+    pub impl InternalImpl<
         TContractState,
         +HasComponent<TContractState>,
         +Drop<TContractState>,
         impl Owner: OwnableComponent::HasComponent<TContractState>,
     > of InternalTrait<TContractState> {
         fn initializer(ref self: ComponentState<TContractState>, token_address: ContractAddress) {
-        self.erc20_address.write(token_address);
-    }
+            self.erc20_address.write(token_address);
+        }
 
         fn is_owner(self: @ComponentState<TContractState>) {
             let owner_comp = get_dep_component!(self, Owner);
