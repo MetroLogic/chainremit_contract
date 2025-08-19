@@ -4,7 +4,9 @@ use starkremit_contract::base::types::LoanRequest;
 #[starknet::interface]
 pub trait ILoan<TContractState> {
     fn request_loan(ref self: TContractState, requester: ContractAddress, amount: u256) -> u256;
-    fn approve_loan(ref self: TContractState, loan_id: u256) -> u256;
+    fn approve_loan(
+        ref self: TContractState, loan_id: u256, interest_rate: u256, duration_days: u64,
+    ) -> u256;
     fn reject_loan(ref self: TContractState, loan_id: u256) -> u256;
     fn get_loan(self: @TContractState, loan_id: u256) -> LoanRequest;
     fn get_loan_count(self: @TContractState) -> u256;
@@ -42,6 +44,8 @@ pub mod loan_component {
     #[derive(Drop, starknet::Event)]
     pub enum Event {
         LoanRequested: LoanRequested,
+        LoanApproved: LoanApproved,
+        LoanRejected: LoanRejected,
         LatePayment: LatePayment,
         LoanRepaid: LoanRepaid,
     }
@@ -51,6 +55,20 @@ pub mod loan_component {
         requester: ContractAddress,
         amount: u256,
         created_at: u64,
+    }
+    #[derive(Drop, starknet::Event)]
+    pub struct LoanApproved {
+        id: u256,
+        requester: ContractAddress,
+        amount: u256,
+        approved_at: u64,
+    }
+    #[derive(Drop, starknet::Event)]
+    pub struct LoanRejected {
+        id: u256,
+        requester: ContractAddress,
+        amount: u256,
+        rejected_at: u64,
     }
     #[derive(Drop, starknet::Event)]
     pub struct LatePayment {
@@ -91,7 +109,6 @@ pub mod loan_component {
             };
             self.loan_count.write(loan_id + 1);
             self.loans.write(loan_id, loan);
-            self.active_loan.write(requester, false);
             self.loan_request.write(requester, true);
             self
                 .emit(
@@ -106,54 +123,52 @@ pub mod loan_component {
                 );
             loan_id
         }
-        fn approve_loan(ref self: ComponentState<TContractState>, loan_id: u256) -> u256 {
-            let loan = self.loans.read(loan_id);
+        fn approve_loan(
+            ref self: ComponentState<TContractState>,
+            loan_id: u256,
+            interest_rate: u256,
+            duration_days: u64,
+        ) -> u256 {
+            let mut loan = self.loans.read(loan_id);
             assert(self.loan_request.read(loan.requester), 'no loan request');
             assert(loan.status == LoanStatus::Pending, 'loan request is not pending');
             assert(loan.amount > 0, 'loan amount is zero');
-            let loan = LoanRequest {
-                id: loan.id,
-                requester: loan.requester,
-                amount: loan.amount,
-                status: LoanStatus::Approved,
-                created_at: loan.created_at,
-            };
+
+            self.loan_interest_rates.write(loan_id, interest_rate);
+            self.loan_due_dates.write(loan_id, get_block_timestamp() + duration_days);
+            self.loan_last_payment.write(loan_id, 0);
             self.active_loan.write(loan.requester, true);
             self.loan_request.write(loan.requester, false);
+
+            loan.status == LoanStatus::Approved;
             self.loans.write(loan_id, loan);
             self
                 .emit(
-                    Event::LoanRequested(
-                        LoanRequested {
+                    Event::LoanApproved(
+                        LoanApproved {
                             id: loan.id,
                             requester: loan.requester,
                             amount: loan.amount,
-                            created_at: loan.created_at,
+                            approved_at: get_block_timestamp(),
                         },
                     ),
                 );
             loan_id
         }
         fn reject_loan(ref self: ComponentState<TContractState>, loan_id: u256) -> u256 {
-            let loan = self.loans.read(loan_id);
-            let loan = LoanRequest {
-                id: loan.id,
-                requester: loan.requester,
-                amount: loan.amount,
-                created_at: loan.created_at,
-                status: LoanStatus::Reject,
-            };
-            self.active_loan.write(loan.requester, false);
+            let mut loan = self.loans.read(loan_id);
+            loan.status == LoanStatus::Reject;
+
             self.loan_request.write(loan.requester, false);
             self.loans.write(loan_id, loan);
             self
                 .emit(
-                    Event::LoanRequested(
-                        LoanRequested {
+                    Event::LoanRejected(
+                        LoanRejected {
                             id: loan.id,
                             requester: loan.requester,
                             amount: loan.amount,
-                            created_at: loan.created_at,
+                            rejected_at: get_block_timestamp(),
                         },
                     ),
                 );
@@ -190,11 +205,11 @@ pub mod loan_component {
             let due_date = self.loan_due_dates.read(loan_id);
             let interest_rate = self.loan_interest_rates.read(loan_id);
             let last_payment = self.loan_last_payment.read(loan_id);
-            let days_elapsed = (current_time - last_payment).into() / 864;
+            let days_elapsed = (current_time - last_payment).into() / 86400;
             let interest = (loan.amount * interest_rate * days_elapsed) / (100 * 365 * 100);
             let mut penalty = 0;
             if current_time > due_date {
-                let days_late_u256 = ((current_time - due_date).into() / 864) + 1;
+                let days_late_u256 = ((current_time - due_date).into() / 86400) + 1;
                 let days_late: u64 = days_late_u256.try_into().unwrap_or(0);
                 penalty = (loan.amount * 100 * days_late_u256)
                     / (100 * 100 * 100); // LATE_PENALTY_RATE = 100
