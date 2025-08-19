@@ -5,8 +5,8 @@ mod contribution_tests {
 
     // snforge imports
     use snforge_std::{
-        ContractClassTrait, DeclareResultTrait, declare,
-        start_cheat_block_timestamp_global, start_cheat_caller_address, stop_cheat_caller_address,
+        ContractClassTrait, DeclareResultTrait, declare, start_cheat_block_timestamp_global,
+        start_cheat_caller_address, stop_cheat_caller_address,
     };
 
     // starknet imports
