@@ -227,6 +227,8 @@ pub mod GroupErrors {
 pub mod MintBurnErrors {
     /// Error triggered when the caller is not an authorized minter
     pub const NOT_MINTER: felt252 = 'Mint: caller is not a minter';
+    /// Error triggered when the caller is not the owner
+    pub const NOT_OWNER: felt252 = 'Token: caller is not owner';
     /// Error triggered when trying to mint to the zero address
     pub const MINT_TO_ZERO: felt252 = 'Mint: mint to zero address';
     /// Error triggered when trying to mint zero tokens
@@ -237,10 +239,26 @@ pub mod MintBurnErrors {
     pub const BURN_ZERO_AMOUNT: felt252 = 'Burn: amount must be > 0';
     /// Error triggered when trying to burn more tokens than available balance
     pub const INSUFFICIENT_BALANCE_BURN: felt252 = 'Burn: insufficient balance';
+    /// Error triggered when spender tries to transfer more than allowed
+    pub const INSUFFICIENT_ALLOWANCE: felt252 = 'ERC20: insufficient allowance';
     /// Error triggered for invalid minter address management
     pub const INVALID_MINTER_ADDRESS: felt252 = 'MinterMgmt: invalid address';
     /// Error triggered if max supply is set too low
     pub const MAX_SUPPLY_TOO_LOW: felt252 = 'SetMaxSupply: too low';
+    /// Error triggered when contract is paused
+    pub const CONTRACT_PAUSED: felt252 = 'Token: contract is paused';
+    /// Error triggered when trying to transfer to zero address
+    pub const TRANSFER_TO_ZERO: felt252 = 'Token: transfer to zero';
+    /// Error triggered when trying to transfer zero amount
+    pub const TRANSFER_ZERO_AMOUNT: felt252 = 'Token: zero amount';
+    /// Error triggered when trying to approve zero address
+    pub const APPROVE_TO_ZERO: felt252 = 'Token: approve to zero';
+    /// Error triggered when trying to set invalid max supply
+    pub const INVALID_MAX_SUPPLY: felt252 = 'Token: invalid max supply';
+    /// Error triggered when trying to transfer ownership to zero address
+    pub const OWNERSHIP_TO_ZERO: felt252 = 'Token: ownership to zero';
+    /// Error triggered when trying to transfer ownership to self
+    pub const OWNERSHIP_TO_SELF: felt252 = 'Token: ownership to self';
 }
 
 pub mod GovernanceErrors {
