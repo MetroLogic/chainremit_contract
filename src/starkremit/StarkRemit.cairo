@@ -1,5 +1,6 @@
 use core::num::traits::Zero;
 use openzeppelin::access::accesscontrol::AccessControlComponent;
+use openzeppelin::access::ownable::OwnableComponent;
 use openzeppelin::introspection::src5::SRC5Component;
 use openzeppelin::upgrades::UpgradeableComponent;
 use starknet::storage::{
