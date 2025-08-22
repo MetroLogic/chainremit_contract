@@ -1,5 +1,6 @@
 use core::num::traits::Zero;
 use openzeppelin::access::accesscontrol::AccessControlComponent;
+use openzeppelin::access::ownable::OwnableComponent;
 use openzeppelin::introspection::src5::SRC5Component;
 use openzeppelin::upgrades::UpgradeableComponent;
 use starknet::storage::{
@@ -28,7 +29,7 @@ const LOAN_TERM_DAYS: u64 = 30 * 24 * 60 * 60; // 30 days in seconds
 #[starknet::contract]
 pub mod StarkRemit {
     use starkremit_contract::component::agent::agent_component;
-    use starkremit_contract::component::contribution::contribution_component;
+    use starkremit_contract::component::contribution::contribution::contribution_component;
     use starkremit_contract::component::kyc::kyc_component;
     use starkremit_contract::component::loan::loan_component;
     use starkremit_contract::component::savings_group::savings_group_component;
@@ -38,6 +39,7 @@ pub mod StarkRemit {
     use super::*;
 
     component!(path: AccessControlComponent, storage: accesscontrol, event: AccessControlEvent);
+    component!(path: OwnableComponent, storage: ownable, event: OwnableEvent);
     component!(path: SRC5Component, storage: src5, event: Src5Event);
     component!(path: UpgradeableComponent, storage: upgradeable, event: UpgradeableEvent);
     component!(path: agent_component, storage: agent_component, event: AgentEvent);
@@ -65,6 +67,10 @@ pub mod StarkRemit {
     impl AccessControlImpl =
         AccessControlComponent::AccessControlImpl<ContractState>;
     impl AccessControlInternalImpl = AccessControlComponent::InternalImpl<ContractState>;
+
+    #[abi(embed_v0)]
+    impl OwnableImpl = OwnableComponent::OwnableImpl<ContractState>;
+    impl OwnableInternalImpl = OwnableComponent::InternalImpl<ContractState>;
 
     // Agent Component (internal use only - functions exposed via IStarkRemit)
     impl AgentComponentImpl = agent_component::AgentComponent<ContractState>;
@@ -242,6 +248,8 @@ pub mod StarkRemit {
         #[flat]
         AccessControlEvent: AccessControlComponent::Event,
         #[flat]
+        OwnableEvent: OwnableComponent::Event,
+        #[flat]
         UpgradeableEvent: UpgradeableComponent::Event,
         // Component events (not flattened to avoid duplicates with main contract events)
         AgentEvent: agent_component::Event,
@@ -329,6 +337,8 @@ pub mod StarkRemit {
         src5: SRC5Component::Storage,
         #[substorage(v0)]
         accesscontrol: AccessControlComponent::Storage,
+        #[substorage(v0)]
+        ownable: OwnableComponent::Storage,
         #[substorage(v0)]
         agent_component: agent_component::Storage,
         #[substorage(v0)]
@@ -475,6 +485,9 @@ pub mod StarkRemit {
         self.token_address.write(token_address);
         self.accesscontrol.initializer();
         self.accesscontrol._grant_role(PROTOCOL_OWNER_ROLE, owner);
+
+        // initialize owner
+        self.ownable.initializer(owner);
 
         // Initialize governance
         self.admin_roles.write(owner, GovRole::SuperAdmin);
@@ -1758,108 +1771,6 @@ pub mod StarkRemit {
             assert(self.agent_exists.read(agent), TransferErrors::AGENT_NOT_FOUND);
             let agent_data = self.agents.read(agent);
             (agent_data.completed_transactions, agent_data.total_volume, agent_data.rating)
-        }
-
-        // Contribution Management
-        fn contribute_round(ref self: ContractState, round_id: u256, amount: u256) {
-            let caller = get_caller_address();
-            assert(Self::is_member(@self, caller), 'Caller is not a member');
-
-            let mut round = self.rounds.read(round_id);
-            assert(round.status == RoundStatus::Active, 'Round is not active');
-            assert(get_block_timestamp() <= round.deadline, 'Contribution deadline passed');
-
-            let contribution = MemberContribution {
-                member: caller, amount, contributed_at: get_block_timestamp(),
-            };
-
-            self.member_contributions.write((round_id, caller), contribution);
-            round.total_contributions += amount;
-
-            self.rounds.write(round_id, round);
-
-            self.emit(ContributionMade { round_id, member: caller, amount });
-        }
-
-        fn complete_round(ref self: ContractState, round_id: u256) {
-            let _ = get_caller_address();
-            self.accesscontrol.assert_only_role(ADMIN_ROLE);
-
-            let mut round = self.rounds.read(round_id);
-            assert(round.status == RoundStatus::Active, 'Round is not active');
-
-            round.status = RoundStatus::Completed;
-            self.rounds.write(round_id, round);
-
-            self.emit(RoundCompleted { round_id });
-        }
-
-        fn add_round_to_schedule(
-            ref self: ContractState, recipient: ContractAddress, deadline: u64,
-        ) {
-            let _ = get_caller_address();
-            self.accesscontrol.assert_only_role(ADMIN_ROLE);
-
-            let round_id = self.round_ids.read() + 1;
-            self.round_ids.write(round_id);
-
-            self.rotation_schedule.write(round_id, recipient);
-
-            let round = ContributionRound {
-                round_id, recipient, deadline, total_contributions: 0, status: RoundStatus::Active,
-            };
-
-            self.rounds.write(round_id, round);
-        }
-
-        fn is_member(self: @ContractState, address: ContractAddress) -> bool {
-            self.members.read(address)
-        }
-
-        fn check_missed_contributions(ref self: ContractState, round_id: u256) {
-            let round = self.rounds.read(round_id);
-            assert(round.status == RoundStatus::Active, 'Round is not active');
-            assert(get_block_timestamp() > round.deadline, 'Round deadline not passed');
-        }
-
-        fn get_all_members(self: @ContractState) -> Array<ContractAddress> {
-            let mut members = ArrayTrait::new();
-            let count = self.member_count.read();
-            let mut i = 0;
-
-            while i < count {
-                let member = self.member_by_index.read(i);
-                members.append(member);
-                i += 1;
-            }
-
-            members
-        }
-
-        fn add_member(ref self: ContractState, address: ContractAddress) {
-            let _ = get_caller_address();
-            self.accesscontrol.assert_only_role(ADMIN_ROLE);
-            assert(!Self::is_member(@self, address), 'Already a member');
-
-            self.members.write(address, true);
-            let count = self.member_count.read();
-            self.member_by_index.write(count, address);
-            self.member_count.write(count + 1);
-        }
-
-        fn disburse_round_contribution(ref self: ContractState, round_id: u256) {
-            let _ = get_caller_address();
-            self.accesscontrol.assert_only_role(ADMIN_ROLE);
-
-            let round = self.rounds.read(round_id);
-            assert(round.status == RoundStatus::Completed, 'Round not completed');
-
-            self
-                .emit(
-                    RoundDisbursed {
-                        round_id, recipient: round.recipient, amount: round.total_contributions,
-                    },
-                );
         }
 
         // Savings Group Functions

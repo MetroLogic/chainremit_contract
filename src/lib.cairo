@@ -23,7 +23,11 @@ pub mod presets {
 }
 pub mod component {
     pub mod agent;
-    pub mod contribution;
+    pub mod contribution {
+        pub mod contribution;
+        pub mod mock;
+        pub mod test;
+    }
     pub mod kyc;
     pub mod loan;
     pub mod savings_group;

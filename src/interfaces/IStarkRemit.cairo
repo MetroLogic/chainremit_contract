@@ -191,23 +191,6 @@ pub trait IStarkRemit<TContractState> {
         self: @TContractState, agent: ContractAddress,
     ) -> (u256, u256, u256); // total_transfers, total_volume, rating
 
-    // Contribution Management
-    fn contribute_round(ref self: TContractState, round_id: u256, amount: u256);
-
-    fn complete_round(ref self: TContractState, round_id: u256);
-
-    fn add_round_to_schedule(ref self: TContractState, recipient: ContractAddress, deadline: u64);
-
-    fn is_member(self: @TContractState, address: ContractAddress) -> bool;
-
-    fn check_missed_contributions(ref self: TContractState, round_id: u256);
-
-    fn get_all_members(self: @TContractState) -> Array<ContractAddress>;
-
-    fn add_member(ref self: TContractState, address: ContractAddress);
-
-    fn disburse_round_contribution(ref self: TContractState, round_id: u256);
-
     // Savings Group Functions
     fn create_group(ref self: TContractState, max_members: u8) -> u64;
 
