@@ -12,13 +12,22 @@ pub trait IUserManagement<TContractState> {
     fn deactivate_user(ref self: TContractState, user_address: ContractAddress) -> bool;
     fn reactivate_user(ref self: TContractState, user_address: ContractAddress) -> bool;
     fn get_total_users(self: @TContractState) -> u256;
+    fn add_user_admin(ref self: TContractState, admin_address: ContractAddress);
+    fn remove_user_admin(ref self: TContractState, admin_address: ContractAddress);
+    fn get_admins(self: @TContractState) -> Array<ContractAddress>;
+    fn get_admin_status(self: @TContractState, admin_address: ContractAddress) -> bool;
+    fn pause_registration(ref self: TContractState);
+    fn resume_registration(ref self: TContractState);
+    fn get_registration_state(self: @TContractState) -> bool;
 }
 #[starknet::component]
 pub mod user_management_component {
     use core::num::traits::Zero;
+    use openzeppelin::access::ownable::OwnableComponent;
+    use openzeppelin::access::ownable::OwnableComponent::OwnableImpl;
     use starknet::storage::{
-        Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
-        StoragePointerWriteAccess,
+        Map, MutableVecTrait, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
+        StoragePointerWriteAccess, Vec, VecTrait,
     };
     use starknet::{ContractAddress, get_block_timestamp, get_caller_address};
     use starkremit_contract::base::errors::RegistrationErrors;
@@ -30,6 +39,7 @@ pub mod user_management_component {
     #[storage]
     pub struct Storage {
         user_profiles: Map<ContractAddress, UserProfile>,
+        user_admins: Vec<ContractAddress>,
         email_registry: Map<felt252, ContractAddress>,
         phone_registry: Map<felt252, ContractAddress>,
         registration_status: Map<ContractAddress, RegistrationStatus>,
@@ -44,6 +54,8 @@ pub mod user_management_component {
         UserProfileUpdated: UserProfileUpdated,
         UserDeactivated: UserDeactivated,
         UserReactivated: UserReactivated,
+        UserAdminAdded: UserAdminAdded,
+        UserAdminRemoved: UserAdminRemoved,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -68,15 +80,115 @@ pub mod user_management_component {
         admin: ContractAddress,
     }
 
+    #[derive(Drop, starknet::Event)]
+    pub struct UserAdminAdded {
+        admin: ContractAddress,
+        timestamp: u64,
+    }
+
+
+    #[derive(Drop, starknet::Event)]
+    pub struct UserAdminRemoved {
+        removed_admin: ContractAddress,
+        new_admin_array: Array<ContractAddress>,
+        timestamp: u64,
+    }
 
     #[embeddable_as(UserManagement)]
     pub impl UserManagementImpl<
-        TContractState, +HasComponent<TContractState>,
+        TContractState,
+        +HasComponent<TContractState>,
+        impl Owner: OwnableComponent::HasComponent<TContractState>,
     > of IUserManagement<ComponentState<TContractState>> {
+        fn add_user_admin(
+            ref self: ComponentState<TContractState>, admin_address: ContractAddress,
+        ) {
+            let caller = get_caller_address();
+            let owner_comp = get_dep_component!(@self, Owner);
+            let owner = owner_comp.owner();
+            let admin_status = self.get_admin_status(caller);
+            assert(caller == owner || admin_status, RegistrationErrors::NOT_USER_ADMIN);
+
+            self.user_admins.push(admin_address);
+
+            self
+                .emit(
+                    Event::UserAdminAdded(
+                        UserAdminAdded { admin: admin_address, timestamp: get_block_timestamp() },
+                    ),
+                );
+        }
+
+        fn remove_user_admin(
+            ref self: ComponentState<TContractState>, admin_address: ContractAddress,
+        ) {
+            let caller = get_caller_address();
+            let owner_comp = get_dep_component!(@self, Owner);
+            let owner = owner_comp.owner();
+            let admin_status = self.get_admin_status(caller);
+            assert(caller == owner || admin_status, RegistrationErrors::NOT_USER_ADMIN);
+            let mut array_of_admins: Array<ContractAddress> = array![];
+            let user_admins_vec = self.user_admins;
+            let admin_array: Array<ContractAddress> = self.get_admins();
+            for _ in 0..user_admins_vec.len() {
+                user_admins_vec.pop().unwrap();
+            }
+            for address in admin_array {
+                if address != admin_address {
+                    self.user_admins.push(address);
+                    array_of_admins.append(address);
+                }
+            }
+            self
+                .emit(
+                    Event::UserAdminRemoved(
+                        UserAdminRemoved {
+                            removed_admin: admin_address,
+                            new_admin_array: array_of_admins,
+                            timestamp: get_block_timestamp(),
+                        },
+                    ),
+                );
+        }
+
+        fn get_admin_status(
+            self: @ComponentState<TContractState>, admin_address: ContractAddress,
+        ) -> bool {
+            for i in 0..self.user_admins.len() {
+                let address = self.user_admins.at(i).read();
+                if address == admin_address {
+                    return true;
+                }
+            }
+            false
+        }
+
+        fn get_admins(self: @ComponentState<TContractState>) -> Array<ContractAddress> {
+            let mut admins: Array<ContractAddress> = array![];
+            for i in 0..self.user_admins.len() {
+                let address = self.user_admins.at(i).read();
+                admins.append(address);
+            }
+            admins
+        }
+
+        fn pause_registration(ref self: ComponentState<TContractState>) {
+            self.registration_enabled.write(true);
+        }
+
+        fn resume_registration(ref self: ComponentState<TContractState>) {
+            self.registration_enabled.write(false);
+        }
+
+        fn get_registration_state(self: @ComponentState<TContractState>) -> bool {
+            self.registration_enabled.read()
+        }
+
         fn register_user(
             ref self: ComponentState<TContractState>, registration_data: RegistrationRequest,
         ) -> bool {
             let caller = get_caller_address();
+            self.check_registration_enabled();
             assert(!caller.is_zero(), RegistrationErrors::ZERO_ADDRESS);
             // Check for duplicate email
             let existing_email_user = self.email_registry.read(registration_data.email_hash);
@@ -187,6 +299,7 @@ pub mod user_management_component {
             ref self: ComponentState<TContractState>, user_address: ContractAddress,
         ) -> bool {
             let caller = get_caller_address();
+            assert(self.get_admin_status(caller), RegistrationErrors::NOT_USER_ADMIN);
             let is_registered = match self.registration_status.read(user_address) {
                 RegistrationStatus::Completed => true,
                 _ => false,
@@ -203,6 +316,7 @@ pub mod user_management_component {
             ref self: ComponentState<TContractState>, user_address: ContractAddress,
         ) -> bool {
             let caller = get_caller_address();
+            assert(self.get_admin_status(caller), RegistrationErrors::NOT_USER_ADMIN);
             let status = self.registration_status.read(user_address);
             match status {
                 RegistrationStatus::Suspended => {},
@@ -217,6 +331,19 @@ pub mod user_management_component {
         }
         fn get_total_users(self: @ComponentState<TContractState>) -> u256 {
             self.total_users.read()
+        }
+    }
+
+    #[generate_trait]
+    pub impl InternalImpl<
+        TContractState,
+        +HasComponent<TContractState>,
+        +Drop<TContractState>,
+        impl Owner: OwnableComponent::HasComponent<TContractState>,
+    > of InternalTrait<TContractState> {
+        fn check_registration_enabled(self: @ComponentState<TContractState>) {
+            let registration_enabled = self.registration_enabled.read();
+            assert(registration_enabled, RegistrationErrors::REGISTRATION_DISABLED);
         }
     }
 }
