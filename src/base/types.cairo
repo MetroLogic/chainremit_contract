@@ -2,7 +2,7 @@ use starknet::ContractAddress;
 
 
 /// User profile structure containing user information
-#[derive(Copy, Drop, Serde, starknet::Store)]
+#[derive(Copy, Drop, Serde, starknet::Store, PartialEq, Debug)]
 pub struct UserProfile {
     /// User's contract address
     pub address: ContractAddress,
