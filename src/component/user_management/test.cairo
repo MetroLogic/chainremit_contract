@@ -485,7 +485,7 @@ mod user_management_tests {
         user_management_dispatcher.update_user_kyc(USER(), KYCLevel::Advanced);
         stop_cheat_caller_address(contract_address);
 
-        let kyc_level = user_management_dispatcher.get_user_kyc_level(ADMIN());
+        let kyc_level = user_management_dispatcher.get_user_kyc_level(USER());
         assert(kyc_level == KYCLevel::Advanced, 'KYC level should be updated');
 
         spy_events
