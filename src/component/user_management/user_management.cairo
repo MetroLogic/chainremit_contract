@@ -25,6 +25,8 @@ pub trait IUserManagement<TContractState> {
         ref self: TContractState, user_address: ContractAddress, new_kyc_level: KYCLevel,
     );
     fn get_user_kyc_level(self: @TContractState, user_address: ContractAddress) -> KYCLevel;
+    fn get_email_registry(self: @TContractState, email_hash: felt252) -> ContractAddress;
+    fn get_phone_registry(self: @TContractState, phone_hash: felt252) -> ContractAddress;
 }
 
 #[starknet::component]
@@ -64,50 +66,62 @@ pub mod user_management_component {
         UserAdminAdded: UserAdminAdded,
         UserAdminRemoved: UserAdminRemoved,
         UserKYCUpdated: UserKYCUpdated,
+        RegistrationPaused: RegistrationPaused,
+        RegistrationResumed: RegistrationResumed,
     }
 
     #[derive(Drop, starknet::Event)]
     pub struct UserRegistered {
-        user_address: ContractAddress,
-        email_hash: felt252,
-        registration_timestamp: u64,
+        pub user_address: ContractAddress,
+        pub email_hash: felt252,
+        pub registration_timestamp: u64,
     }
     #[derive(Drop, starknet::Event)]
     pub struct UserProfileUpdated {
-        user_address: ContractAddress,
-        updated_fields: felt252,
+        pub user_address: ContractAddress,
+        pub updated_fields: ByteArray,
     }
     #[derive(Drop, starknet::Event)]
     pub struct UserDeactivated {
-        user_address: ContractAddress,
-        admin: ContractAddress,
+        pub user_address: ContractAddress,
+        pub admin: ContractAddress,
     }
     #[derive(Drop, starknet::Event)]
     pub struct UserReactivated {
-        user_address: ContractAddress,
-        admin: ContractAddress,
+        pub user_address: ContractAddress,
+        pub admin: ContractAddress,
     }
 
     #[derive(Drop, starknet::Event)]
     pub struct UserAdminAdded {
-        admin: ContractAddress,
-        timestamp: u64,
+        pub admin: ContractAddress,
+        pub timestamp: u64,
     }
 
 
     #[derive(Drop, starknet::Event)]
     pub struct UserKYCUpdated {
-        user_address: ContractAddress,
-        new_kyc_level: KYCLevel,
-        timestamp: u64,
+        pub user_address: ContractAddress,
+        pub new_kyc_level: KYCLevel,
+        pub timestamp: u64,
     }
 
 
     #[derive(Drop, starknet::Event)]
     pub struct UserAdminRemoved {
-        removed_admin: ContractAddress,
-        new_admin_array: Array<ContractAddress>,
-        timestamp: u64,
+        pub removed_admin: ContractAddress,
+        pub new_admin_array: Array<ContractAddress>,
+        pub timestamp: u64,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    pub struct RegistrationPaused {
+        pub timestamp: u64,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    pub struct RegistrationResumed {
+        pub timestamp: u64,
     }
 
     #[embeddable_as(UserManagement)]
@@ -190,11 +204,25 @@ pub mod user_management_component {
         }
 
         fn pause_registration(ref self: ComponentState<TContractState>) {
-            self.registration_enabled.write(true);
+            self.registration_enabled.write(false);
+
+            self
+                .emit(
+                    Event::RegistrationPaused(
+                        RegistrationPaused { timestamp: get_block_timestamp() },
+                    ),
+                );
         }
 
         fn resume_registration(ref self: ComponentState<TContractState>) {
-            self.registration_enabled.write(false);
+            self.registration_enabled.write(true);
+
+            self
+                .emit(
+                    Event::RegistrationResumed(
+                        RegistrationResumed { timestamp: get_block_timestamp() },
+                    ),
+                );
         }
 
         fn get_registration_state(self: @ComponentState<TContractState>) -> bool {
@@ -255,14 +283,22 @@ pub mod user_management_component {
                 );
             true
         }
+        fn get_email_registry(
+            self: @ComponentState<TContractState>, email_hash: felt252,
+        ) -> ContractAddress {
+            self.email_registry.read(email_hash)
+        }
+
+        fn get_phone_registry(
+            self: @ComponentState<TContractState>, phone_hash: felt252,
+        ) -> ContractAddress {
+            self.phone_registry.read(phone_hash)
+        }
+
         fn get_user_profile(
             self: @ComponentState<TContractState>, user_address: ContractAddress,
         ) -> UserProfile {
             let status = self.registration_status.read(user_address);
-            match status {
-                RegistrationStatus::Completed => {},
-                _ => { assert(false, RegistrationErrors::USER_NOT_FOUND); },
-            }
             self.user_profiles.read(user_address)
         }
         fn update_user_profile(
@@ -298,31 +334,22 @@ pub mod user_management_component {
             }
             self.user_profiles.write(caller, updated_profile);
 
-            let mut changed_fields: felt252 = '';
+            let mut changed_fields: ByteArray = "";
             if current_profile.user_address != updated_profile.user_address {
-                changed_fields += ' address';
+                changed_fields += " address";
             }
             if current_profile.email_hash != updated_profile.email_hash {
-                changed_fields += ' email';
+                changed_fields += " email";
             }
             if current_profile.phone_hash != updated_profile.phone_hash {
-                changed_fields += ' phone';
+                changed_fields += " phone";
             }
 
             if current_profile.full_name != updated_profile.full_name {
-                changed_fields += ' full_name';
-            }
-            if current_profile.kyc_level != updated_profile.kyc_level {
-                changed_fields += ' kyc_level';
-            }
-            if current_profile.registration_timestamp != updated_profile.registration_timestamp {
-                changed_fields += ' registration_timestamp';
-            }
-            if current_profile.is_active != updated_profile.is_active {
-                changed_fields += ' is_active';
+                changed_fields += " full_name";
             }
             if current_profile.country_code != updated_profile.country_code {
-                changed_fields += ' country_code';
+                changed_fields += " country_code";
             }
             self
                 .emit(
@@ -384,7 +411,8 @@ pub mod user_management_component {
                 RegistrationStatus::Completed => true,
                 _ => false,
             };
-            assert(is_registered, RegistrationErrors::USER_NOT_FOUND);
+            println!("User registration status: {:?}", is_registered);
+            assert(is_registered == true, RegistrationErrors::USER_NOT_FOUND);
             let mut user_profile = self.user_profiles.read(user_address);
             user_profile.is_active = false;
             self.user_profiles.write(user_address, user_profile);
@@ -411,6 +439,24 @@ pub mod user_management_component {
         }
         fn get_total_users(self: @ComponentState<TContractState>) -> u256 {
             self.total_users.read()
+        }
+    }
+
+    #[generate_trait]
+    pub impl InternalImpl<
+        TContractState,
+        +HasComponent<TContractState>,
+        +Drop<TContractState>,
+        impl Owner: OwnableComponent::HasComponent<TContractState>,
+    > of InternalTrait<TContractState> {
+        fn initializer(ref self: ComponentState<TContractState>) {
+            self.registration_enabled.write(true);
+        }
+
+        fn is_owner(self: @ComponentState<TContractState>) {
+            let owner_comp = get_dep_component!(self, Owner);
+            let owner = owner_comp.owner();
+            assert(owner == get_caller_address(), 'Caller is not the owner');
         }
     }
 }
