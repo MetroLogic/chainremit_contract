@@ -271,4 +271,51 @@ pub trait IStarkRemit<TContractState> {
 
     // Utility Function
     fn get_timelock_duration(self: @TContractState) -> u64;
+
+    // Emergency Pause Functions
+    fn emergency_pause_contract(ref self: TContractState, reason: felt252);
+    fn emergency_unpause_contract(ref self: TContractState);
+    fn emergency_pause_with_metadata(ref self: TContractState, reason: felt252);
+    fn emergency_unpause_with_metadata_clear(ref self: TContractState);
+    fn emergency_set_pause_meta(ref self: TContractState, reason: felt252);
+    fn emergency_set_ban(ref self: TContractState, member: ContractAddress, banned: bool);
+
+    // Penalty Management Functions
+    fn apply_late_fee(ref self: TContractState, member: ContractAddress, round_id: u256);
+    fn add_strike(ref self: TContractState, member: ContractAddress, round_id: u256);
+    fn remove_strike(ref self: TContractState, member: ContractAddress);
+    fn ban_member(ref self: TContractState, member: ContractAddress);
+    fn unban_member(ref self: TContractState, member: ContractAddress);
+    fn distribute_penalty_pool(ref self: TContractState);
+
+    // Auto-Schedule Management Functions
+    fn setup_auto_schedule(ref self: TContractState, config: AutoScheduleConfig);
+    fn maintain_rolling_schedule(ref self: TContractState);
+    fn auto_activate_round(ref self: TContractState, round_id: u256);
+    fn auto_complete_expired_rounds(ref self: TContractState);
+    fn modify_schedule(ref self: TContractState, round_id: u256, new_deadline: u64);
+
+    // Payment Flexibility Functions
+    fn setup_auto_payment(
+        ref self: TContractState,
+        member: ContractAddress,
+        token: ContractAddress,
+        amount: u256,
+        frequency: PaymentFrequency,
+    );
+    fn process_early_payment(
+        ref self: TContractState,
+        member: ContractAddress,
+        round_id: u256,
+        amount: u256,
+    ) -> (u256, u256);
+    fn extend_grace_period(
+        ref self: TContractState,
+        member: ContractAddress,
+        extension_hours: u64,
+    );
+    fn add_supported_token(ref self: TContractState, token: ContractAddress);
+    fn remove_supported_token(ref self: TContractState, token: ContractAddress);
+    fn update_payment_config(ref self: TContractState, config: PaymentConfig);
+    fn process_auto_payments(ref self: TContractState);
 }

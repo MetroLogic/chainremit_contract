@@ -1,4 +1,6 @@
 use starknet::ContractAddress;
+use core::serde::Serde;
+use core::array::{ArrayTrait, Array};
 
 
 /// User profile structure containing user information
@@ -255,6 +257,7 @@ pub struct SavingsGroup {
 // Enum for the status of a contribution round
 #[derive(Copy, Drop, Serde, PartialEq, starknet::Store, Debug)]
 pub enum RoundStatus {
+    Scheduled,
     #[default]
     Active,
     Completed,
@@ -318,4 +321,90 @@ pub struct ParameterHistory {
     pub new_value: u256,
     pub changed_by: ContractAddress,
     pub changed_at: u64,
+}
+
+// Penalty configuration structure
+#[derive(Copy, Drop, Serde, starknet::Store)]
+pub struct PenaltyConfig {
+    pub late_fee_percentage: u256,        // Late fee as basis points (e.g., 250 = 2.5%)
+    pub grace_period_hours: u64,          // Grace period before late fees apply
+    pub max_strikes: u32,                 // Maximum strikes before automatic ban
+    pub security_deposit_multiplier: u256, // Security deposit amount in tokens
+    pub penalty_pool_enabled: bool,       // Whether penalty pool distribution is enabled
+}
+
+// Member penalty record structure
+#[derive(Copy, Drop, Serde, starknet::Store)]
+pub struct MemberPenaltyRecord {
+    pub total_penalties_paid: u256,       // Total penalties paid by member
+    pub strikes: u32,                     // Current strike count
+    pub is_banned: bool,                  // Whether member is currently banned
+    pub last_penalty_date: u64,           // Timestamp of last penalty
+    pub last_strike_date: u64,            // Timestamp of last strike
+    pub total_rounds_missed: u32,         // Total rounds where contribution was missed
+}
+
+#[derive(Copy, Drop, Serde, starknet::Store)]
+pub struct AutoScheduleConfig {
+    pub round_duration_days: u64,
+    pub start_date: u64,
+    pub auto_activation_enabled: bool,
+    pub auto_completion_enabled: bool,
+    pub rolling_schedule_count: u8 // Maintain 2-3 future rounds
+}
+
+#[derive(Copy, Drop, Serde, starknet::Store)]
+pub struct ScheduledRound {
+    pub round_id: u256,
+    pub recipient: ContractAddress,
+    pub scheduled_start: u64,
+    pub scheduled_deadline: u64,
+    pub status: RoundStatus,
+    pub auto_generated: bool,
+}
+
+// Penalty event structure for history tracking
+#[derive(Copy, Drop, Serde, starknet::Store)]
+pub struct PenaltyEventRecord {
+    pub member: ContractAddress,          // Member who received penalty
+    pub round_id: u256,                   // Round where penalty occurred
+    pub event_type: PenaltyEventType,     // Type of penalty event
+    pub amount: u256,                     // Penalty amount
+    pub timestamp: u64,                   // When penalty occurred
+    pub admin: ContractAddress,           // Admin who applied penalty
+}
+
+// Distribution data structure for penalty pool distribution
+// Note: This struct is not stored, only used for calculations
+#[derive(Clone, Drop, Serde)]
+pub struct DistributionData {
+    pub total_amount: u256,               // Total penalty pool amount
+    pub member_shares: Array<MemberShare>, // Array of member shares
+    pub total_compliant_contributions: u256, // Total contributions from compliant members
+}
+
+// Individual member share structure
+#[derive(Copy, Drop, Serde, starknet::Store)]
+pub struct MemberShare {
+    pub member: ContractAddress,          // Member address
+    pub share: u256,                      // Share amount to receive
+    pub contribution: u256,               // Member's total contribution
+}
+
+// Penalty event types
+#[allow(starknet::store_no_default_variant)]
+#[derive(Copy, Drop, Serde, starknet::Store)]
+pub enum PenaltyEventType {
+    LateFee,
+    Strike,
+    Ban,
+    Unban,
+    StrikeRemoved,
+}
+
+#[derive(Copy, Drop, starknet::Store)]
+pub struct RoundData {
+    pub deadline: u64,
+    pub status: RoundStatus,
+    pub total_contributions: u256,
 }

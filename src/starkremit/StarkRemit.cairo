@@ -1,24 +1,35 @@
+use core::array::ArrayTrait;
 use core::num::traits::Zero;
 use openzeppelin::access::accesscontrol::AccessControlComponent;
 use openzeppelin::access::ownable::OwnableComponent;
 use openzeppelin::introspection::src5::SRC5Component;
 use openzeppelin::upgrades::UpgradeableComponent;
+use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
 use starknet::storage::{
     Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePathEntry, StoragePointerReadAccess,
     StoragePointerWriteAccess,
 };
 use starknet::{ContractAddress, get_block_timestamp, get_caller_address};
 use starkremit_contract::base::errors::{
-    GovernanceErrors, GroupErrors, KYCErrors, RegistrationErrors, TransferErrors,
+    GovernanceErrors, GroupErrors, KYCErrors, RegistrationErrors, TransferErrors, EmergencyErrors,
 };
 use starkremit_contract::base::events::*;
 use starkremit_contract::base::types::{
     Agent, AgentStatus, ContributionRound, GovRole, KYCLevel, KycLevel, KycStatus, LoanRequest,
     LoanStatus, MemberContribution, ParameterBounds, ParameterHistory, RegistrationRequest,
     RegistrationStatus, RoundStatus, SavingsGroup, TimelockChange, TransferData, TransferHistory,
-    TransferStatus, UserKycData, UserProfile,
+    TransferStatus, UserKycData, UserProfile, PenaltyConfig, MemberPenaltyRecord, PenaltyEventRecord, DistributionData, MemberShare, PenaltyEventType,
+    AutoScheduleConfig, ScheduledRound, RoundData,
 };
 use starkremit_contract::interfaces::IStarkRemit;
+use starkremit_contract::component::emergency::IEmergency;
+use starkremit_contract::component::penalty::{IPenalty, IMainContractData as PenaltyMainContractData};
+use starkremit_contract::component::auto_schedule::{IAutoSchedule, IMainContractData as AutoScheduleMainContractData};
+use starkremit_contract::component::payment_flexibility::{PaymentConfig, PaymentFrequency, AutoPaymentSetup, PaymentStatus, PaymentRecord, IMainContractData as PaymentFlexibilityMainContractData};
+// use starkremit_contract::component::member_profile::MemberProfile;
+// use starkremit_contract::component::analytics::{
+//     ContributionAnalytics, MemberAnalytics, RoundPerformanceMetrics, FinancialReport, SystemHealthMetrics
+// };
 
 
 const INTEREST_RATE: u256 = 500; // 5% in basis points (0.05 * 10000)
@@ -36,6 +47,13 @@ pub mod StarkRemit {
     use starkremit_contract::component::token_management::token_management_component;
     use starkremit_contract::component::transfer::transfer_component;
     use starkremit_contract::component::user_management::user_management_component;
+    use starkremit_contract::component::emergency::emergency_component;
+    use starkremit_contract::component::penalty::penalty_component;
+    use starkremit_contract::component::payment_flexibility::payment_flexibility_component;
+    use starkremit_contract::component::auto_schedule::auto_schedule_component;
+    // use starkremit_contract::component::member_profile::member_profile_component;
+    // use starkremit_contract::component::analytics::analytics_component;
+
     use super::*;
 
     component!(path: AccessControlComponent, storage: accesscontrol, event: AccessControlEvent);
@@ -62,6 +80,12 @@ pub mod StarkRemit {
         event: TokenManagementEvent,
     );
     component!(path: transfer_component, storage: transfer_component, event: TransferEvent);
+    component!(path: emergency_component, storage: emergency, event: EmergencyEvent);
+    component!(path: penalty_component, storage: penalty, event: PenaltyEvent);
+    component!(path: auto_schedule_component, storage: auto_schedule, event: AutoScheduleEvent);
+    component!(path: payment_flexibility_component, storage: payment_flexibility, event: PaymentFlexibilityEvent);
+        // component!(path: member_profile_component, storage: member_profile, event: MemberProfileEvent);
+        // component!(path: analytics_component, storage: analytics, event: AnalyticsEvent);
 
     #[abi(embed_v0)]
     impl AccessControlImpl =
@@ -95,6 +119,30 @@ pub mod StarkRemit {
 
     // Transfer Component (internal use only - functions exposed via IStarkRemit)
     impl TransferImpl = transfer_component::Transfer<ContractState>;
+
+    // Emergency component internal methods
+    impl EmergencyInternalImpl = emergency_component::InternalImpl<ContractState>;
+
+    // Penalty Component 
+    impl PenaltyInternalImpl = penalty_component::InternalImpl<ContractState>;
+
+    // Auto Schedule Component (internal use only - functions exposed via IStarkRemit)
+    impl AutoScheduleInternalImpl = auto_schedule_component::InternalImpl<ContractState>;
+    
+    // Payment Flexibility Component (internal use only - functions exposed via IStarkRemit)
+    impl PaymentFlexibilityInternalImpl = payment_flexibility_component::InternalImpl<ContractState>;
+
+    // Member Profile Component (internal use only - functions exposed via IStarkRemit)
+    // impl MemberProfileImpl = member_profile_component::MemberProfileImpl<ContractState>;
+    // impl MemberProfileInternalImpl = member_profile_component::InternalImpl<ContractState>;
+
+    // Payment Flexibility Component (internal use only - functions exposed via IStarkRemit)
+    // impl PaymentFlexibilityImpl = payment_flexibility_component::PaymentFlexibilityImpl<ContractState>;
+    // impl PaymentFlexibilityInternalImpl = payment_flexibility_component::InternalImpl<ContractState>;
+
+    // Analytics Component (internal use only - functions exposed via IStarkRemit)
+    // impl AnalyticsImpl = analytics_component::AnalyticsImpl<ContractState>;
+    // impl AnalyticsInternalImpl = analytics_component::InternalImpl<ContractState>;
 
     impl UpgradeableInternalImpl = UpgradeableComponent::InternalImpl<ContractState>;
 
@@ -260,6 +308,10 @@ pub mod StarkRemit {
         SavingsGroupEvent: savings_group_component::Event,
         TokenManagementEvent: token_management_component::Event,
         TransferEvent: transfer_component::Event,
+        EmergencyEvent: emergency_component::Event,
+        PenaltyEvent: penalty_component::Event,
+        AutoScheduleEvent: auto_schedule_component::Event,
+        PaymentFlexibilityEvent: payment_flexibility_component::Event,
         // System Management Events
         AgentAuthorized: AgentAuthorized,
         AgentPermissionUpdated: AgentPermissionUpdated,
@@ -297,7 +349,6 @@ pub mod StarkRemit {
         AgentStatusUpdated: AgentStatusUpdated, // Event for agent status updates
         TransferHistoryRecorded: TransferHistoryRecorded, // Event for history recording
         // contribution
-        ContributionMade: ContributionMade,
         RoundDisbursed: RoundDisbursed,
         RoundCompleted: RoundCompleted,
         ContributionMissed: ContributionMissed,
@@ -324,8 +375,115 @@ pub mod StarkRemit {
         UpdateExecuted: UpdateExecuted,
         UpdateCancelled: UpdateCancelled,
         // loan_id -> timestamp_of_last_payment
+        EmergencyWithdrawalAll: EmergencyWithdrawalAll,
+        EmergencyWithdrawalMember: EmergencyWithdrawalMember,
+        RoundEmergencyCompleted: RoundEmergencyCompleted,
+        RoundEmergencyCancelled: RoundEmergencyCancelled,
+        RecipientChanged: RecipientChanged,
+        TokensRecovered: TokensRecovered,
+        FundsMigrated: FundsMigrated,
+        MemberBanned: MemberBanned,
+        MemberUnbanned: MemberUnbanned,
+        PenaltyPoolDistributed: PenaltyPoolDistributed,
+        // LateFeeApplied: LateFeeApplied,
+        // StrikeAdded: StrikeAdded,
+        // StrikeRemoved: StrikeRemoved,
+        // AutoPaymentSetup: AutoPaymentSetup,
+        // EarlyPaymentProcessed: EarlyPaymentProcessed,
+        // GracePeriodExtended: GracePeriodExtended,
+        // TokenValueConverted: TokenValueConverted,
+        // MemberProfileUpdated: MemberProfileUpdated,
+        // RollingScheduleMaintained: RollingScheduleMaintained,
     }
 
+
+    // #[derive(Drop, starknet::Event)]
+    // pub struct LateFeeApplied {
+    //     pub member: ContractAddress,
+    //     pub round_id: u256,
+    //     pub fee_amount: u256,
+    //     pub contribution_amount: u256,
+    //     pub timestamp: u64,
+    // }
+
+
+
+    // #[derive(Drop, starknet::Event)]
+    // pub struct StrikeAdded {
+    //     pub member: ContractAddress,
+    //     pub round_id: u256,
+    //     pub current_strikes: u32,
+    //     pub timestamp: u64,
+    // }
+
+    // #[derive(Drop, starknet::Event)]
+    // pub struct StrikeRemoved {
+    //     pub member: ContractAddress,
+    //     pub removed_by: ContractAddress,
+    //     pub new_strikes: u32,
+    //     pub timestamp: u64,
+    // }
+
+
+
+    // #[derive(Drop, starknet::Event)]
+    // pub struct AutoPaymentSetup {
+    //     pub member: ContractAddress,
+    //     pub token: ContractAddress,
+    //     pub amount: u256,
+    //     pub frequency: PaymentFrequency,
+    //     pub next_payment_date: u64,
+    //     pub timestamp: u64,
+    // }
+
+    // #[derive(Drop, starknet::Event)]
+    // pub struct EarlyPaymentProcessed {
+    //     pub member: ContractAddress,
+    //     pub round_id: u256,
+    //     pub original_amount: u256,
+    //     pub discount_amount: u256,
+    //     pub final_amount: u256,
+    //     pub timestamp: u64,
+    // }
+
+    // #[derive(Drop, starknet::Event)]
+    // pub struct GracePeriodExtended {
+    //     pub member: ContractAddress,
+    //     pub extension_hours: u64,
+    //     pub total_extension: u64,
+    //     pub extended_by: ContractAddress,
+    //     pub timestamp: u64,
+    // }
+
+    // #[derive(Drop, starknet::Event)]
+    // pub struct TokenValueConverted {
+    //     pub member: ContractAddress,
+    //     pub from_token: ContractAddress,
+    //     pub to_token: ContractAddress,
+    //     pub original_amount: u256,
+    //     pub converted_amount: u256,
+    //     pub from_price: u256,
+    //     pub to_price: u256,
+    //     pub timestamp: u64,
+    // }
+
+    // #[derive(Drop, starknet::Event)]
+    // pub struct MemberProfileUpdated {
+    //     pub member: ContractAddress,
+    //     pub field: felt252,
+    //     pub old_value: felt252,
+    //     pub new_value: felt252,
+    //     pub updated_by: ContractAddress,
+    //     pub timestamp: u64,
+    // }
+
+
+
+    // #[derive(Drop, starknet::Event)]
+    // pub struct RollingScheduleMaintained {
+    //     pub rounds_created: u32,
+    //     pub last_maintenance_timestamp: u64,
+    // }
 
     // Contract storage definition
     #[storage]
@@ -355,6 +513,40 @@ pub mod StarkRemit {
         token_management_component: token_management_component::Storage,
         #[substorage(v0)]
         transfer_component: transfer_component::Storage,
+        #[substorage(v0)]
+        emergency: emergency_component::Storage,
+        #[substorage(v0)]
+        penalty: penalty_component::Storage,
+        #[substorage(v0)]
+        auto_schedule: auto_schedule_component::Storage,
+        #[substorage(v0)]
+        payment_flexibility: payment_flexibility_component::Storage,
+        // Emergency and Penalty System Storage
+        emergency_approvals: Map<felt252, Map<ContractAddress, bool>>,
+        // penalty_config: PenaltyConfig,
+        // emergency_operations: Map<felt252, EmergencyOperation>,
+        // Penalty System Storage
+        // member_penalties: Map<ContractAddress, MemberPenaltyRecord>,
+        // penalty_pool: u256,
+        // penalty history stored as (member, index) -> event and per-member count
+        // penalty_history: Map<(ContractAddress, u32), PenaltyEvent>,
+        // penalty_history_count: Map<ContractAddress, u32>,
+        // Auto-Schedule System Storage
+        // auto_schedule_config: AutoScheduleConfig,
+        // scheduled_rounds: Map<u256, ScheduledRound>,
+        // round_schedule_index: u256,
+        // last_schedule_maintenance: u64,
+        // schedule_maintenance_interval: u64,
+        // Member Profile Storage
+        // member_profiles: Map<ContractAddress, MemberProfile>,
+        // member_profile_count: u32,
+        // Payment Flexibility Storage
+        // payment_config: PaymentConfig,
+        // auto_payment_setups: Map<ContractAddress, AutoPaymentSetup>,
+        // Analytics Storage
+        // contribution_analytics: ContributionAnalytics,
+        // member_analytics: Map<ContractAddress, MemberAnalytics>,
+        // last_analytics_update: u64,
         // System Management Storage
         agent_permissions: Map<(ContractAddress, felt252), bool>, // (agent, permission) -> granted
         paused_functions: Map<felt252, bool>, // function selector -> paused
@@ -492,11 +684,148 @@ pub mod StarkRemit {
         // Initialize governance
         self.admin_roles.write(owner, GovRole::SuperAdmin);
         self.timelock_duration.write(86400); // 24 hours default timelock
+        // Initialize emergency component
+        self.emergency.initializer(owner);
+        // Initialize penalty component
+        self.penalty.initializer(owner);
+        // Initialize auto-schedule component
+        self.auto_schedule.initializer(owner);
+        // Initialize payment flexibility component
+        self.payment_flexibility.initializer(owner);
     }
 
     // Implementation of the StarkRemit interface with KYC functions
     #[abi(embed_v0)]
     impl IStarkRemitImpl of IStarkRemit::IStarkRemit<ContractState> {
+        // --- Penalty Functions ---
+        fn apply_late_fee(ref self: ContractState, member: ContractAddress, round_id: u256) {
+            self.ownable.assert_only_owner();
+            self.penalty.apply_late_fee(member, round_id);
+        }
+
+        fn add_strike(ref self: ContractState, member: ContractAddress, round_id: u256) {
+            self.ownable.assert_only_owner();
+            
+            // Get current penalty record to check if member will be automatically banned
+            let current_record = self.penalty.get_member_penalty_record(member);
+            let penalty_config = self.penalty.get_penalty_config();
+            let will_be_banned = current_record.strikes + 1 >= penalty_config.max_strikes;
+            
+            // Add strike in penalty component
+            self.penalty.add_strike(member, round_id);
+            
+            // If member was automatically banned, remove them from main contract's member list
+            if will_be_banned {
+                self._remove_member_from_list(member);
+                
+                // Emit main contract event for automatic ban
+                self.emit(Event::MemberBanned(MemberBanned {
+                    member,
+                    reason: 'max_strikes_reached',
+                    strikes: current_record.strikes + 1,
+                    banned_by: get_caller_address(),
+                    timestamp: get_block_timestamp(),
+                }));
+            }
+        }
+
+        fn remove_strike(ref self: ContractState, member: ContractAddress) {
+            self.ownable.assert_only_owner();
+            
+            // Get current penalty record to check if member will be automatically unbanned
+            let current_record = self.penalty.get_member_penalty_record(member);
+            let penalty_config = self.penalty.get_penalty_config();
+            let will_be_unbanned = current_record.is_banned && current_record.strikes - 1 < penalty_config.max_strikes;
+            
+            // Remove strike in penalty component
+            self.penalty.remove_strike(member);
+            
+            // If member was automatically unbanned, re-add them to main contract's member list
+            if will_be_unbanned {
+                self._add_member_to_list(member);
+                
+                // Emit main contract event for automatic unban
+                self.emit(Event::MemberUnbanned(MemberUnbanned {
+                    member,
+                    unbanned_by: get_caller_address(),
+                    timestamp: get_block_timestamp(),
+                }));
+            }
+        }
+
+        fn ban_member(ref self: ContractState, member: ContractAddress) {
+            self.ownable.assert_only_owner();
+            
+            // First, update penalty state in component
+            self.penalty.ban_member(member);
+            
+            // Then, remove member from main contract's member list
+            self._remove_member_from_list(member);
+            
+            // Emit main contract event
+            self.emit(Event::MemberBanned(MemberBanned {
+                member,
+                reason: 'admin_ban',
+                strikes: self.penalty.get_member_penalty_record(member).strikes,
+                banned_by: get_caller_address(),
+                timestamp: get_block_timestamp(),
+            }));
+        }
+
+        fn unban_member(ref self: ContractState, member: ContractAddress) {
+            self.ownable.assert_only_owner();
+            
+            // First, update penalty state in component
+            self.penalty.unban_member(member);
+            
+            // Then, re-add member to main contract's member list
+            self._add_member_to_list(member);
+            
+            // Emit main contract event
+            self.emit(Event::MemberUnbanned(MemberUnbanned {
+                member,
+                unbanned_by: get_caller_address(),
+                timestamp: get_block_timestamp(),
+            }));
+        }
+
+        fn distribute_penalty_pool(ref self: ContractState) {
+            self.ownable.assert_only_owner();
+            
+            // Get distribution data from penalty component
+            let distribution_data = self.penalty.calculate_distribution_data();
+            
+            if distribution_data.total_amount == 0 {
+                return; // No penalty pool to distribute
+            }
+            
+            // Execute transfers using main contract's transfer function
+            let mut distributed_count = 0;
+            let mut i = 0;
+            
+            while i < distribution_data.member_shares.len() {
+                let member_share = *distribution_data.member_shares.at(i);
+                if member_share.share > 0 {
+                    // Transfer tokens to member
+                    self.transfer_tokens_to_member(member_share.member, member_share.share);
+                    distributed_count += 1;
+                }
+                i += 1;
+            }
+            
+            // Reset penalty pool in component after successful distribution
+            self.penalty.reset_penalty_pool();
+            
+            // Emit main contract event
+            self.emit(Event::PenaltyPoolDistributed(PenaltyPoolDistributed {
+                total_amount: distribution_data.total_amount,
+                recipient_count: distributed_count,
+                distribution_type: 'proportional',
+                timestamp: get_block_timestamp(),
+            }));
+        }
+
+        
         fn grant_admin_role(ref self: ContractState, admin: ContractAddress) {
             self.accesscontrol.assert_only_role(ADMIN_ROLE);
             self.accesscontrol._grant_role(ADMIN_ROLE, admin);
@@ -2187,6 +2516,7 @@ pub mod StarkRemit {
             self.emit(ContractRegistered { name, addr: new_address });
             true
         }
+        
         /// Schedule a parameter update (SuperAdmin only, timelock)
         fn schedule_parameter_update(ref self: ContractState, key: felt252, value: u256) -> bool {
             let caller = get_caller_address();
@@ -2329,7 +2659,173 @@ pub mod StarkRemit {
         fn get_timelock_duration(self: @ContractState) -> u64 {
             self.timelock_duration.read()
         }
+
+        /// Emergency pause the entire contract with metadata
+        fn emergency_pause_contract(ref self: ContractState, reason: felt252) {
+            // Only pauser can pause
+            let caller = get_caller_address();
+            assert(self.agent_permissions.read((caller, 'PAUSER')), 'Not authorized pauser');
+            
+            self.emergency._pause_with_metadata(reason);
+            
+            self.emit(EmergencyPauseActivated { 
+                function_selector: 0, // Global pause, not function-specific
+                caller, 
+                expires_at: 0 // No expiry for global pause
+            });
+        }
+
+        /// Emergency unpause the entire contract
+        fn emergency_unpause_contract(ref self: ContractState) {
+            let caller = get_caller_address();
+            assert(self.agent_permissions.read((caller, 'PAUSER')), 'Not authorized pauser');
+            
+            self.emergency._unpause_with_metadata_clear();
+            
+            self.emit(EmergencyPauseDeactivated { 
+                function_selector: 0, // Global pause, not function-specific
+                caller
+            });
+        }
+
+        /// Emergency pause with metadata
+        fn emergency_pause_with_metadata(ref self: ContractState, reason: felt252) {
+            let caller = get_caller_address();
+            assert(self.agent_permissions.read((caller, 'PAUSER')), 'Not authorized pauser');
+            
+            self.emergency._pause_with_metadata(reason);
+            
+            self.emit(EmergencyPauseActivated { 
+                function_selector: 0, // Global pause, not function-specific
+                caller, 
+                expires_at: 0 // No expiry for global pause
+            });
+        }
+
+        /// Emergency unpause with metadata clear
+        fn emergency_unpause_with_metadata_clear(ref self: ContractState) {
+            let caller = get_caller_address();
+            assert(self.agent_permissions.read((caller, 'PAUSER')), 'Not authorized pauser');
+            
+            self.emergency._unpause_with_metadata_clear();
+            
+            self.emit(EmergencyPauseDeactivated { 
+                function_selector: 0, // Global pause, not function-specific
+                caller
+            });
+        }
+
+        /// Emergency set pause metadata
+        fn emergency_set_pause_meta(ref self: ContractState, reason: felt252) {
+            let caller = get_caller_address();
+            assert(self.agent_permissions.read((caller, 'PAUSER')), 'Not authorized pauser');
+            
+            self.emergency._set_pause_meta(reason);
+        }
+
+        /// Emergency set ban status
+        fn emergency_set_ban(ref self: ContractState, member: ContractAddress, banned: bool) {
+            let caller = get_caller_address();
+            assert(self.agent_permissions.read((caller, 'PAUSER')), 'Not authorized pauser');
+            
+            self.emergency._set_ban(member, banned);
+            
+            if banned {
+                self.emit(Event::MemberBanned(MemberBanned {
+                    member,
+                    reason: 'emergency_ban',
+                    strikes: 0,
+                    banned_by: caller,
+                    timestamp: get_block_timestamp(),
+                }));
+            } else {
+                self.emit(Event::MemberUnbanned(MemberUnbanned {
+                    member,
+                    unbanned_by: caller,
+                    timestamp: get_block_timestamp(),
+                }));
+            }
+        }
+
+        // --- Auto-Schedule Functions ---
+        fn setup_auto_schedule(ref self: ContractState, config: AutoScheduleConfig) {
+            self.ownable.assert_only_owner();
+            self.auto_schedule._setup_auto_schedule(config);
+        }
+
+        fn maintain_rolling_schedule(ref self: ContractState) {
+            self.ownable.assert_only_owner();
+            self.auto_schedule._maintain_rolling_schedule();
+        }
+
+        fn auto_activate_round(ref self: ContractState, round_id: u256) {
+            self.ownable.assert_only_owner();
+            self.auto_schedule._auto_activate_round(round_id);
+        }
+
+        fn auto_complete_expired_rounds(ref self: ContractState) {
+            self.ownable.assert_only_owner();
+            self.auto_schedule._auto_complete_expired_rounds();
+        }
+
+        fn modify_schedule(ref self: ContractState, round_id: u256, new_deadline: u64) {
+            self.ownable.assert_only_owner();
+            self.auto_schedule._modify_schedule(round_id, new_deadline);
+        }
+
+        // --- Payment Flexibility Functions ---
+        fn setup_auto_payment(
+            ref self: ContractState,
+            member: ContractAddress,
+            token: ContractAddress,
+            amount: u256,
+            frequency: PaymentFrequency,
+        ) {
+            self.ownable.assert_only_owner();
+            self.payment_flexibility._setup_auto_payment(member, token, amount, frequency);
+        }
+
+        fn process_early_payment(
+            ref self: ContractState,
+            member: ContractAddress,
+            round_id: u256,
+            amount: u256,
+        ) -> (u256, u256) {
+            self.ownable.assert_only_owner();
+            self.payment_flexibility._process_early_payment(member, round_id, amount)
+        }
+
+        fn extend_grace_period(
+            ref self: ContractState,
+            member: ContractAddress,
+            extension_hours: u64,
+        ) {
+            self.ownable.assert_only_owner();
+            self.payment_flexibility._extend_grace_period(member, extension_hours);
+        }
+
+        fn add_supported_token(ref self: ContractState, token: ContractAddress) {
+            self.ownable.assert_only_owner();
+            self.payment_flexibility._add_supported_token(token);
+        }
+
+        fn remove_supported_token(ref self: ContractState, token: ContractAddress) {
+            self.ownable.assert_only_owner();
+            self.payment_flexibility._remove_supported_token(token);
+        }
+
+        fn update_payment_config(ref self: ContractState, config: PaymentConfig) {
+            self.ownable.assert_only_owner();
+            self.payment_flexibility._update_payment_config(config);
+        }
+
+        fn process_auto_payments(ref self: ContractState) {
+            self.ownable.assert_only_owner();
+            self.payment_flexibility._process_auto_payments();
+        }
     }
+
+
 
     // --- System Management Functions ---
     #[generate_trait]
@@ -2511,133 +3007,1474 @@ pub mod StarkRemit {
         }
     }
 
-    // Internal helper functions
+    // --- Emergency Functions ---
     #[generate_trait]
-    impl InternalFunctions of InternalFunctionsTrait {
-        fn _validate_kyc_and_limits(self: @ContractState, user: ContractAddress, amount: u256) {
-            // Check KYC validity
-            assert(IStarkRemitImpl::is_kyc_valid(self, user), KYCErrors::INVALID_KYC_STATUS);
+    impl Emergency of EmergencyTrait {
 
-            // Check transaction limits
-            let kyc_data = self.user_kyc_data.read(user);
-            let level_u8 = self._kyc_level_to_u8(kyc_data.level);
+        fn emergency_withdraw_all(ref self: ContractState) {
+            self.ownable.assert_only_owner();
+            self.emergency.assert_paused(); // Only callable when paused
 
-            // Check single transaction limit
-            let single_limit = self.single_limits.read(level_u8);
-            assert(amount <= single_limit, KYCErrors::SINGLE_TX_LIMIT_EXCEEDED);
+            // Business Logic: Calculate proportional withdrawal based on member contributions
+            let total_contract_balance = self.get_contract_token_balance();
+            assert(total_contract_balance > 0, EmergencyErrors::NO_FUNDS_TO_WITHDRAW);
 
-            // Check daily limit
-            let daily_limit = self.daily_limits.read(level_u8);
-            let current_usage = self._get_daily_usage(user);
-            assert(current_usage + amount <= daily_limit, KYCErrors::DAILY_LIMIT_EXCEEDED);
-        }
+            // Get all active members and their contribution ratios
+            let mut total_contributions = 0;
+            let mut member_shares = ArrayTrait::new();
 
-        fn _get_daily_usage(self: @ContractState, user: ContractAddress) -> u256 {
-            let current_time = get_block_timestamp();
-            let last_reset = self.last_reset.read(user);
-
-            // Reset if it's a new day (86400 seconds = 24 hours)
-            if current_time > last_reset + 86400 {
-                return 0;
+            // Calculate total contributions across all rounds
+            let mut round_id = 1;
+            while round_id <= self.round_ids.read() {
+                let round = self.rounds.read(round_id);
+                if round.status == RoundStatus::Active {
+                    total_contributions += round.total_contributions;
+                }
+                round_id += 1;
             }
 
-            self.daily_usage.read(user)
-        }
-
-        fn _record_daily_usage(ref self: ContractState, user: ContractAddress, amount: u256) {
-            let current_time = get_block_timestamp();
-            let last_reset = self.last_reset.read(user);
-
-            if current_time > last_reset + 86400 {
-                // Reset for new day
-                self.daily_usage.write(user, amount);
-                self.last_reset.write(user, current_time);
-            } else {
-                // Add to current day usage
-                let current_usage = self.daily_usage.read(user);
-                self.daily_usage.write(user, current_usage + amount);
+            // Calculate each member's proportional share
+            let mut member_index = 0;
+            while member_index < self.member_count.read() {
+                let member_address = self.member_by_index.read(member_index);
+                if self.members.read(member_address) {
+                    let member_total_contribution = self
+                        .calculate_member_total_contribution(member_address);
+                    if member_total_contribution > 0 {
+                        let proportional_share = (member_total_contribution
+                            * total_contract_balance)
+                            / total_contributions;
+                        member_shares.append((member_address, proportional_share));
+                    }
+                }
+                member_index += 1;
             }
-        }
 
-        fn _kyc_level_to_u8(self: @ContractState, level: KycLevel) -> u8 {
-            match level {
-                KycLevel::None => 0,
-                KycLevel::Basic => 1,
-                KycLevel::Enhanced => 2,
-                KycLevel::Premium => 3,
+            // Execute proportional withdrawals
+            let mut shares_index = 0;
+            while shares_index < member_shares.len() {
+                let (member, share) = member_shares[shares_index];
+                if *share > 0 {
+                    self.transfer_tokens_to_member(*member, *share);
+                }
+                shares_index += 1;
             }
-        }
 
-        fn _set_default_transaction_limits(ref self: ContractState) {
-            // None level - very restricted
-            self.daily_limits.write(0, 100_000_000_000_000_000); // 0.1 tokens
-            self.single_limits.write(0, 50_000_000_000_000_000); // 0.05 tokens
-
-            // Basic level - moderate limits
-            self.daily_limits.write(1, 1000_000_000_000_000_000_000); // 1,000 tokens
-            self.single_limits.write(1, 500_000_000_000_000_000_000); // 500 tokens
-
-            // Enhanced level - higher limits
-            self.daily_limits.write(2, 10000_000_000_000_000_000_000); // 10,000 tokens
-            self.single_limits.write(2, 5000_000_000_000_000_000_000); // 5,000 tokens
-
-            // Premium level - maximum limits
-            self.daily_limits.write(3, 100000_000_000_000_000_000_000); // 100,000 tokens
-            self.single_limits.write(3, 50000_000_000_000_000_000_000); // 50,000 tokens
-        }
-
-        fn _record_transfer_history(
-            ref self: ContractState,
-            transfer_id: u256,
-            action: felt252,
-            actor: ContractAddress,
-            previous_status: TransferStatus,
-            new_status: TransferStatus,
-            details: felt252,
-        ) {
-            let current_time = get_block_timestamp();
-
-            // Create history entry
-            let history = TransferHistory {
-                transfer_id,
-                action,
-                actor,
-                timestamp: current_time,
-                previous_status,
-                new_status,
-                details,
-            };
-
-            // Store in transfer history
-            let history_count = self.transfer_history_count.read(transfer_id);
-            self.transfer_history.write((transfer_id, history_count), history);
-            self.transfer_history_count.write(transfer_id, history_count + 1);
-
-            // Store in actor history
-            let actor_count = self.actor_history_count.read(actor);
-            self.actor_history.write((actor, actor_count), (transfer_id, history_count));
-            self.actor_history_count.write(actor, actor_count + 1);
-
-            // Store in action history
-            let action_count = self.action_history_count.read(action);
-            self.action_history.write((action, action_count), (transfer_id, history_count));
-            self.action_history_count.write(action, action_count + 1);
-
-            // Emit event
+            // Emit event for audit trail
             self
                 .emit(
-                    TransferHistoryRecorded { transfer_id, action, actor, timestamp: current_time },
+                    Event::EmergencyWithdrawalAll(
+                        EmergencyWithdrawalAll {
+                            total_amount: total_contract_balance,
+                            member_count: member_shares.len().try_into().unwrap(),
+                            executed_by: get_caller_address(),
+                            timestamp: get_block_timestamp(),
+                        },
+                    ),
                 );
         }
 
-        // Generates and stores a new unique group ID for a savings group
-        // Returns the newly generated group ID
-        fn _new_group_id(ref self: ContractState) -> u64 {
-            let group_id = self.group_count.read();
+        fn emergency_withdraw_member(ref self: ContractState, member: ContractAddress) {
+            self.ownable.assert_only_owner();
+            self.emergency.assert_paused();
 
-            self.group_count.write(group_id + 1);
+            // Business Logic: Withdraw member's specific contributions
+            assert(self.members.read(member), EmergencyErrors::MEMBER_NOT_EXISTS);
 
-            group_id
+            let member_contribution = self.calculate_member_total_contribution(member);
+            assert(member_contribution > 0, EmergencyErrors::MEMBER_NO_CONTRIBUTIONS);
+
+            // Transfer member's contributions back
+            self.transfer_tokens_to_member(member, member_contribution);
+
+            // Update member status - remove from active members
+            self.members.write(member, false);
+            self.member_count.write(self.member_count.read() - 1);
+
+            self
+                .emit(
+                    Event::EmergencyWithdrawalMember(
+                        EmergencyWithdrawalMember {
+                            member,
+                            amount: member_contribution,
+                            executed_by: get_caller_address(),
+                            timestamp: get_block_timestamp(),
+                        },
+                    ),
+                );
+        }
+
+        fn emergency_complete_round(ref self: ContractState, round_id: u256) {
+            self.ownable.assert_only_owner();
+            self.emergency.assert_paused();
+
+            // Business Logic: Force complete a stuck round
+            let mut round = self.rounds.read(round_id);
+            assert(round.status == RoundStatus::Active, EmergencyErrors::ROUND_NOT_ACTIVE);
+
+            // Check if round has contributions
+            if round.total_contributions > 0 {
+                // Transfer funds to recipient
+                self.transfer_tokens_to_member(round.recipient, round.total_contributions);
+
+                // Update round status
+                round.status = RoundStatus::Completed;
+                self.rounds.write(round_id, round);
+
+                // Update analytics
+                self.update_round_analytics(round_id, RoundStatus::Completed);
+
+                self
+                    .emit(
+                        Event::RoundEmergencyCompleted(
+                            RoundEmergencyCompleted {
+                                round_id,
+                                recipient: round.recipient,
+                                amount: round.total_contributions,
+                                completed_by: get_caller_address(),
+                                timestamp: get_block_timestamp(),
+                            },
+                        ),
+                    );
+            } else {
+                // No contributions - just cancel the round
+                round.status = RoundStatus::Cancelled;
+                self.rounds.write(round_id, round);
+
+                self
+                    .emit(
+                        Event::RoundEmergencyCancelled(
+                            RoundEmergencyCancelled {
+                                round_id,
+                                cancelled_by: get_caller_address(),
+                                reason: 'no_contributions',
+                                timestamp: get_block_timestamp(),
+                            },
+                        ),
+                    );
+            }
+        }
+
+        fn emergency_change_recipient(
+            ref self: ContractState, round_id: u256, new_recipient: ContractAddress,
+        ) {
+            self.ownable.assert_only_owner();
+            self.emergency.assert_paused();
+
+            // Business Logic: Change recipient due to member issues
+            assert(!new_recipient.is_zero(), EmergencyErrors::INVALID_RECIPIENT);
+            assert(self.members.read(new_recipient), EmergencyErrors::RECIPIENT_NOT_MEMBER);
+
+            let mut round = self.rounds.read(round_id);
+            assert(round.status == RoundStatus::Active, EmergencyErrors::ROUND_NOT_ACTIVE);
+            assert(round.recipient != new_recipient, EmergencyErrors::RECIPIENT_ALREADY_SET);
+
+            let old_recipient = round.recipient;
+            round.recipient = new_recipient;
+            self.rounds.write(round_id, round);
+
+            self
+                .emit(
+                    Event::RecipientChanged(
+                        RecipientChanged {
+                            round_id,
+                            old_recipient,
+                            new_recipient,
+                            changed_by: get_caller_address(),
+                            timestamp: get_block_timestamp(),
+                        },
+                    ),
+                );
+        }
+
+        fn emergency_cancel_round(ref self: ContractState, round_id: u256) {
+            self.ownable.assert_only_owner();
+            self.emergency.assert_paused();
+
+            // Business Logic: Cancel round and refund all contributions
+            let round = self.rounds.read(round_id);
+            assert(round.status == RoundStatus::Active, EmergencyErrors::ROUND_NOT_ACTIVE);
+
+            if round.total_contributions > 0 {
+                // Refund contributions proportionally to contributors
+                self.refund_round_contributions(round_id);
+            }
+
+            // Update round status
+            let mut updated_round = round;
+            updated_round.status = RoundStatus::Cancelled;
+            self.rounds.write(round_id, updated_round);
+
+            self
+                .emit(
+                    Event::RoundEmergencyCancelled(
+                        RoundEmergencyCancelled {
+                            round_id,
+                            cancelled_by: get_caller_address(),
+                            reason: 'emergency_cancellation',
+                            timestamp: get_block_timestamp(),
+                        },
+                    ),
+                );
+        }
+
+        fn emergency_recover_tokens(ref self: ContractState, token: ContractAddress, amount: u256) {
+            self.ownable.assert_only_owner();
+            self.emergency.assert_paused();
+
+            // Business Logic: Recover accidentally sent tokens
+            assert(!token.is_zero(), EmergencyErrors::INVALID_TOKEN_ADDRESS);
+            assert(amount > 0, EmergencyErrors::INVALID_AMOUNT);
+
+            // Calculate unallocated balance: total_contract_balance - total_allocated_tokens
+            let total_contract_balance = self.get_contract_token_balance_specific(token);
+            let total_allocated_tokens = self._calculate_total_allocated_tokens(token);
+            let unallocated_balance = total_contract_balance - total_allocated_tokens;
+            
+            // Ensure we only recover unallocated tokens
+            assert(unallocated_balance >= amount, EmergencyErrors::INSUFFICIENT_BALANCE);
+
+            // Transfer tokens to owner
+            let owner = self.ownable.owner();
+            self.transfer_specific_tokens_to_address(token, owner, amount);
+
+            self
+                .emit(
+                    Event::TokensRecovered(
+                        TokensRecovered {
+                            token,
+                            amount,
+                            recovered_by: get_caller_address(),
+                            recipient: owner,
+                            timestamp: get_block_timestamp(),
+                        },
+                    ),
+                );
+        }
+
+        fn emergency_migrate_funds(ref self: ContractState, new_contract: ContractAddress) {
+            self.ownable.assert_only_owner();
+            self.emergency.assert_paused();
+
+            // Business Logic: Migrate all funds to new contract
+            assert(!new_contract.is_zero(), EmergencyErrors::INVALID_CONTRACT_ADDRESS);
+            assert(new_contract != starknet::get_contract_address(), EmergencyErrors::CANNOT_MIGRATE_TO_SELF);
+            
+            // Verify the target contract is registered in the contract registry
+            // or implements a specific interface
+            let registered_migration_target = self.contract_registry.read('migration_target');
+            assert(
+                new_contract == registered_migration_target || registered_migration_target.is_zero(),
+                EmergencyErrors::INVALID_MIGRATION_TARGET
+            );
+
+            let total_balance = self.get_contract_token_balance();
+            assert(total_balance > 0, EmergencyErrors::NO_FUNDS_TO_MIGRATE);
+
+            // Transfer all funds to new contract
+            self.transfer_tokens_to_address(new_contract, total_balance);
+
+            self
+                .emit(
+                    Event::FundsMigrated(
+                        FundsMigrated {
+                            new_contract,
+                            amount: total_balance,
+                            migrated_by: get_caller_address(),
+                            timestamp: get_block_timestamp(),
+                        },
+                    ),
+                );
+        }
+
+    }
+
+    // Implementation of IMainContractData trait for penalty component
+    impl MainContractDataImpl of PenaltyMainContractData<ContractState> {
+        fn get_member_contribution_data(self: @ContractState, round_id: u256, member: ContractAddress) -> MemberContribution {
+            let contribution = self.member_contributions.read((round_id, member));
+            MemberContribution {
+                member,
+                amount: contribution.amount,
+                contributed_at: contribution.contributed_at,
+            }
+        }
+        
+        fn get_round_data(self: @ContractState, round_id: u256) -> RoundData {
+            let round = self.rounds.read(round_id);
+            RoundData {
+                deadline: round.deadline,
+                status: round.status,
+                total_contributions: round.total_contributions,
+            }
+        }
+        
+        fn get_member_status(self: @ContractState, member: ContractAddress) -> bool {
+            self.members.read(member)
+        }
+        
+        fn get_member_count(self: @ContractState) -> u32 {
+            self.member_count.read()
+        }
+        
+        fn get_round_ids(self: @ContractState) -> u256 {
+            self.round_ids.read()
+        }
+        
+        fn get_member_by_index(self: @ContractState, index: u32) -> ContractAddress {
+            self.member_by_index.read(index)
         }
     }
+
+    // Implementation of IMainContractData trait for auto-schedule component
+    impl AutoScheduleMainContractDataImpl of AutoScheduleMainContractData<ContractState> {
+        fn get_member_count(self: @ContractState) -> u32 {
+            self.member_count.read()
+        }
+        
+        fn get_member_by_index(self: @ContractState, index: u32) -> ContractAddress {
+            self.member_by_index.read(index)
+        }
+        
+        fn get_current_round_id(self: @ContractState) -> u256 {
+            self.round_ids.read()
+        }
+        
+        fn create_round(ref self: ContractState, recipient: ContractAddress, deadline: u64) -> u256 {
+            // Create a new round using existing round creation logic
+            let round_id = self.round_ids.read() + 1;
+            let round = ContributionRound {
+                round_id,
+                recipient,
+                deadline,
+                status: RoundStatus::Scheduled,
+                total_contributions: 0,
+            };
+            self.rounds.write(round_id, round);
+            self.round_ids.write(round_id);
+            round_id
+        }
+    }
+
+
+      // Implementation of Member Profile Component Interface
+    // #[abi(embed_v0)]
+    // impl MemberProfileImpl of IMemberProfile<ContractState> {
+    //     fn create_member_profile(ref self: ContractState, member: ContractAddress) {
+    //         self.ownable.assert_only_owner();
+
+    //         let profile = MemberProfile {
+    //             join_date: get_block_timestamp(),
+    //             total_contributions: 0,
+    //             missed_contributions: 0,
+    //             credit_score: 100,
+    //             last_recipient_round: 0,
+    //             reliability_rating: 100,
+    //             preferred_payment_method: 'default',
+    //             communication_preferences: 'email',
+    //         };
+
+    //         self.member_profiles.write(member, profile);
+    //         self.member_profile_count.write(self.member_profile_count.read() + 1);
+    //     }
+
+    //     fn update_reliability_rating(
+    //         ref self: ContractState, member: ContractAddress, new_rating: u8,
+    //     ) {
+    //         self.ownable.assert_only_owner();
+
+    //         assert(new_rating <= 100, 'Invalid rating: must be 0-100');
+
+    //         let mut profile = self.member_profiles.read(member);
+    //         profile.reliability_rating = new_rating;
+    //         self.member_profiles.write(member, profile);
+    //     }
+
+    //     fn get_member_profile(self: @ContractState, member: ContractAddress) -> MemberProfile {
+    //         self.member_profiles.read(member)
+    //     }
+    // }
+
+    // // Implementation of Payment Flexibility Component Interface
+    // #[abi(embed_v0)]
+    // impl PaymentFlexibilityImpl of IPaymentFlexibility<ContractState> {
+    //     fn setup_auto_payment(
+    //         ref self: ContractState,
+    //         token: ContractAddress,
+    //         amount: u256,
+    //         frequency: PaymentFrequency,
+    //     ) {
+    //         self.ownable.assert_only_owner();
+
+    //         // Business Logic: Setup automatic recurring payments for a member
+    //         let caller = get_caller_address();
+    //         let payment_config = self.payment_config.read();
+
+    //         // Validate token is supported
+    //         assert(self.is_token_supported(token), 'Token not supported');
+    //         assert(amount > 0, 'Invalid payment amount');
+
+    //         // Check if member already has auto-payment setup
+    //         let existing_setup = self.auto_payment_setups.read(caller);
+    //         assert(!existing_setup.is_active, 'Auto-payment already active');
+
+    //         // Calculate next payment date based on frequency
+    //         let next_payment_date = self.calculate_next_payment_date(frequency);
+
+    //         // Create auto-payment setup
+    //         let auto_payment = AutoPaymentSetup {
+    //             member: caller, token, amount, frequency, next_payment_date, is_active: true,
+    //         };
+
+    //         self.auto_payment_setups.write(caller, auto_payment);
+
+    //         self
+    //             .emit(
+    //                 Event::AutoPaymentSetup(
+    //                     AutoPaymentSetup {
+    //                         member: caller,
+    //                         token,
+    //                         amount,
+    //                         frequency,
+    //                         next_payment_date,
+    //                         timestamp: get_block_timestamp(),
+    //                     },
+    //                 ),
+    //             );
+    //     }
+
+    //     fn process_early_payment(ref self: ContractState, round_id: u256, amount: u256) {
+    //         self.ownable.assert_only_owner();
+
+    //         // Business Logic: Process early payment with discount
+    //         let caller = get_caller_address();
+    //         let payment_config = self.payment_config.read();
+    //         let round = self.rounds.read(round_id);
+
+    //         // Validate round is active
+    //         assert(round.status == RoundStatus::Active, 'Round not active');
+    //         assert(get_block_timestamp() < round.deadline, 'Round deadline passed');
+
+    //         // Calculate early payment discount
+    //         let discount_amount = (amount * payment_config.early_payment_discount_basis_points)
+    //             / 10000;
+    //         let final_amount = amount - discount_amount;
+
+    //         // Process the early payment
+    //         self.process_contribution(round_id, caller, final_amount);
+
+    //         // Update member profile for early payment bonus
+    //         let mut profile = self.member_profiles.read(caller);
+    //         profile
+    //             .reliability_rating = self
+    //             .calculate_reliability_bonus(profile.reliability_rating, true);
+    //         self.member_profiles.write(caller, profile);
+
+    //         self
+    //             .emit(
+    //                 Event::EarlyPaymentProcessed(
+    //                     EarlyPaymentProcessed {
+    //                         member: caller,
+    //                         round_id,
+    //                         original_amount: amount,
+    //                         discount_amount,
+    //                         final_amount,
+    //                         timestamp: get_block_timestamp(),
+    //                     },
+    //                 ),
+    //             );
+    //     }
+
+    //     fn extend_grace_period(
+    //         ref self: ContractState, member: ContractAddress, extension_hours: u64,
+    //     ) {
+    //         self.ownable.assert_only_owner();
+
+    //         // Business Logic: Extend grace period for specific member
+    //         assert(self.members.read(member), 'Member does not exist');
+    //         assert(extension_hours > 0, 'Invalid extension hours');
+    //         assert(extension_hours <= 168, 'Extension cannot exceed 1 week'); // Max 7 days
+
+    //         // Get current grace period extension
+    //         let current_extension = self.grace_period_extensions.read(member);
+    //         let new_extension = current_extension + extension_hours;
+
+    //         // Update grace period extension
+    //         self.grace_period_extensions.write(member, new_extension);
+
+    //         self
+    //             .emit(
+    //                 Event::GracePeriodExtended(
+    //                     GracePeriodExtended {
+    //                         member,
+    //                         extension_hours,
+    //                         total_extension: new_extension,
+    //                         extended_by: get_caller_address(),
+    //                         timestamp: get_block_timestamp(),
+    //                     },
+    //                 ),
+    //             );
+    //     }
+
+    //     fn convert_token_value(
+    //         ref self: ContractState,
+    //         from_token: ContractAddress,
+    //         to_token: ContractAddress,
+    //         amount: u256,
+    //     ) -> u256 {
+    //         // Business Logic: Convert token value using oracle
+    //         let payment_config = self.payment_config.read();
+    //         let oracle_address = payment_config.usd_oracle_address;
+
+    //         assert(!oracle_address.is_zero(), 'Oracle address not set');
+    //         assert(from_token != to_token, 'Same token conversion not allowed');
+
+    //         // Get token prices from oracle (simplified - would integrate with real oracle)
+    //         let from_price = self.get_token_price_from_oracle(from_token);
+    //         let to_price = self.get_token_price_from_oracle(to_token);
+
+    //         assert(from_price > 0 && to_price > 0, 'Invalid token prices');
+
+    //         // Convert amount: (amount * from_price) / to_price
+    //         let converted_amount = (amount * from_price) / to_price;
+
+    //         self
+    //             .emit(
+    //                 Event::TokenValueConverted(
+    //                     TokenValueConverted {
+    //                         from_token,
+    //                         to_token,
+    //                         original_amount: amount,
+    //                         converted_amount,
+    //                         from_price,
+    //                         to_price,
+    //                         timestamp: get_block_timestamp(),
+    //                     },
+    //                 ),
+    //             );
+
+    //         converted_amount
+    //     }
+
+    //     fn get_payment_status(
+    //         ref self: ContractState, member: ContractAddress, round_id: u256,
+    //     ) -> PaymentStatus {
+    //         // Business Logic: Determine payment status based on contribution timing
+    //         let round = self.rounds.read(round_id);
+    //         let member_contribution = self.member_contributions.read((round_id, member));
+    //         let current_time = get_block_timestamp();
+    //         let penalty_config = self.penalty_config.read();
+
+    //         if member_contribution.amount == 0 {
+    //             // No payment made
+    //             if current_time > round.deadline + (penalty_config.grace_period_hours * 3600) {
+    //                 return PaymentStatus::Missed;
+    //             } else if current_time > round.deadline {
+    //                 return PaymentStatus::Late;
+    //             } else {
+    //                 return PaymentStatus::Pending;
+    //             }
+    //         } else {
+    //             // Payment made
+    //             if current_time <= round.deadline {
+    //                 return PaymentStatus::Paid;
+    //             } else if current_time <= round.deadline
+    //                 + (penalty_config.grace_period_hours * 3600) {
+    //                 return PaymentStatus::Late;
+    //             } else {
+    //                 return PaymentStatus::Overpaid; // Payment made after grace period
+    //             }
+    //         }
+    //     }
+    // }
+
+    // Implementation of Analytics Component Interface
+    // #[abi(embed_v0)]
+    // impl AnalyticsImpl of IAnalytics<ContractState> {
+    //     fn generate_contribution_report(self: @ContractState) -> ContributionAnalytics {
+    //         let mut analytics = self.contribution_analytics.read(); // Reads from cached analytics
+
+    //         // Calculate real-time statistics from actual data if cache is stale or not used
+    //         // For a real-time report, you might recompute everything here, or update the cache
+    //         // by calling an internal function. For this example, we assume
+    //         // `cached_contribution_analytics`
+    //         // is updated by other functions.
+
+    //         // Example of re-calculating if not using a cache:
+    //         let mut total_rounds_count = 0;
+    //         let mut successful_rounds_count = 0;
+    //         let mut failed_rounds_count = 0;
+
+    //         let mut round_id = 1;
+    //         let max_round_id = self.round_ids.read(); // Assuming this tracks total rounds created
+    //         while round_id <= max_round_id { // Iterates through all scheduled rounds
+    //             let round = self.rounds.read(round_id); // Reads round data
+    //             total_rounds_count += 1;
+
+    //             match round.status { // Checks the status of the round
+    //                 RoundStatus::Completed => successful_rounds_count += 1,
+    //                 RoundStatus::Cancelled => failed_rounds_count += 1,
+    //                 _ => {} // Ignore Scheduled or Active rounds for "completed" or "failed" counts
+    //             }
+    //             round_id += 1;
+    //         }
+
+    //         // Update analytics with real data
+    //         analytics.total_rounds = total_rounds_count;
+    //         analytics.successful_rounds = successful_rounds_count;
+    //         analytics.failed_rounds = failed_rounds_count;
+    //         analytics.total_penalties_collected = self.penalty_pool.read(); // Reads total penalties
+    //         // member_reliability_distribution would need more complex aggregation logic
+
+    //         analytics
+    //     }
+
+    //     fn get_member_performance(
+    //         self: @ContractState, member: ContractAddress,
+    //     ) -> MemberAnalytics {
+    //         let mut analytics = MemberAnalytics { // Initializes a new MemberAnalytics struct
+    //             total_contributions: 0,
+    //             on_time_payments: 0,
+    //             late_payments: 0,
+    //             missed_payments: 0,
+    //             reliability_score: 0,
+    //             last_updated: 0,
+    //         };
+
+    //         // Calculate from actual contribution data
+    //         let mut round_id = 1;
+    //         let max_round_id = self.round_ids.read(); // Assuming this tracks total rounds created
+    //         while round_id <= max_round_id { // Iterates through all scheduled rounds
+    //             let round = self.rounds.read(round_id); // Reads round data
+    //             // Assuming a mapping for member contributions per round: Map<(u256,
+    //             // ContractAddress), ContributionDetail>
+    //             let contribution = self.member_contributions.read((round_id, member));
+
+    //             if contribution.amount > 0 {
+    //                 analytics.total_contributions += contribution.amount;
+
+    //                 if contribution
+    //                     .contributed_at <= round
+    //                     .deadline { // Check against round deadline
+    //                     analytics.on_time_payments += 1;
+    //                 } else {
+    //                     analytics.late_payments += 1;
+    //                 }
+    //             } else if round.status == RoundStatus::Completed
+    //                 || round.status == RoundStatus::Cancelled {
+    //                 // Only count as missed if the round has concluded and no contribution was made
+    //                 analytics.missed_payments += 1;
+    //             }
+
+    //             round_id += 1;
+    //         }
+
+    //         // Calculate reliability score
+    //         let total_evaluated_rounds = analytics.on_time_payments
+    //             + analytics.late_payments
+    //             + analytics.missed_payments;
+    //         if total_evaluated_rounds > 0 {
+    //             analytics.reliability_score = (analytics.on_time_payments * 100)
+    //                 / total_evaluated_rounds;
+    //         }
+
+    //         analytics.last_updated = get_block_timestamp();
+    //         analytics
+    //     }
+
+    //     fn calculate_system_health(self: @ContractState) -> u8 {
+    //         let analytics = self.contribution_analytics.read();
+
+    //         if analytics.total_rounds == 0 {
+    //             return 100; // Perfect health if no rounds yet
+    //         }
+
+    //         // Calculate health based on success rate
+    //         let success_rate = (analytics.successful_rounds * 100) / analytics.total_rounds;
+    //         success_rate.try_into().unwrap()
+    //     }
+    // }
+
+    // Helper functions for enhanced business logic
+    // impl HelperFunctions of HelperFunctionsTrait {
+    //     fn get_contract_token_balance(self: @ContractState) -> u256 {
+    //         // Get contract's balance of the primary token
+    //         let token_address = self.token_address.read();
+    //         let erc20_dispatcher = IERC20Dispatcher { contract_address: token_address };
+    //         erc20_dispatcher.balance_of(starknet::get_contract_address())
+    //     }
+
+    //     fn get_contract_token_balance_specific(
+    //         self: @ContractState, token: ContractAddress,
+    //     ) -> u256 {
+    //         // Get contract's balance of a specific token
+    //         let erc20_dispatcher = IERC20Dispatcher { contract_address: token };
+    //         erc20_dispatcher.balance_of(starknet::get_contract_address())
+    //     }
+
+    //     fn transfer_tokens_to_member(
+    //         ref self: ContractState, member: ContractAddress, amount: u256,
+    //     ) {
+    //         // Transfer tokens to a member
+    //         let token_address = self.token_address.read();
+    //         let erc20_dispatcher = IERC20Dispatcher { contract_address: token_address };
+    //         assert(erc20_dispatcher.transfer(member, amount), 'Transfer failed');
+    //     }
+
+    //     fn transfer_tokens_to_address(
+    //         ref self: ContractState, recipient: ContractAddress, amount: u256,
+    //     ) {
+    //         // Transfer tokens to any address
+    //         let token_address = self.token_address.read();
+    //         let erc20_dispatcher = IERC20Dispatcher { contract_address: token_address };
+    //         assert(erc20_dispatcher.transfer(recipient, amount), 'Transfer failed');
+    //     }
+
+    //     fn transfer_specific_tokens_to_address(
+    //         ref self: ContractState,
+    //         token: ContractAddress,
+    //         recipient: ContractAddress,
+    //         amount: u256,
+    //     ) {
+    //         // Transfer specific tokens to an address
+    //         let erc20_dispatcher = IERC20Dispatcher { contract_address: token };
+    //         assert(erc20_dispatcher.transfer(recipient, amount), 'Transfer failed');
+    //     }
+
+    //     fn calculate_member_total_contribution(
+    //         self: @ContractState, member: ContractAddress,
+    //     ) -> u256 {
+    //         // Calculate total contributions across all rounds for a member
+    //         let mut total = 0;
+    //         let mut round_id = 1;
+    //         while round_id <= self.round_ids.read() {
+    //             let contribution = self.member_contributions.read((round_id, member));
+    //             total += contribution.amount;
+    //             round_id += 1;
+    //         }
+    //         total
+    //     }
+
+    //     fn refund_round_contributions(ref self: ContractState, round_id: u256) {
+    //         // Refund all contributions for a specific round
+    //         let mut member_index = 0;
+    //         while member_index < self.member_count.read() {
+    //             let member = self.member_by_index.read(member_index);
+    //             if self.members.read(member) {
+    //                 let contribution = self.member_contributions.read((round_id, member));
+    //                 if contribution.amount > 0 {
+    //                     self.transfer_tokens_to_member(member, contribution.amount);
+    //                 }
+    //             }
+    //             member_index += 1;
+    //         }
+    //     }
+
+    //     fn update_round_analytics(ref self: ContractState, round_id: u256, status: RoundStatus) {
+    //         // Update analytics when round status changes
+    //         let mut analytics = self.contribution_analytics.read();
+
+    //         match status {
+    //             RoundStatus::Completed => {
+    //                 analytics.successful_rounds += 1;
+    //                 analytics.total_rounds += 1;
+    //             },
+    //             RoundStatus::Cancelled => {
+    //                 analytics.failed_rounds += 1;
+    //                 analytics.total_rounds += 1;
+    //             },
+    //             _ => {},
+    //         }
+
+    //         self.contribution_analytics.write(analytics);
+    //     }
+
+    //     fn is_token_supported(self: @ContractState, token: ContractAddress) -> bool {
+    //         // Check if token is supported for payments
+    //         let payment_config = self.payment_config.read();
+    //         let supported_tokens = payment_config.supported_tokens;
+
+    //         let mut i = 0;
+    //         while i < supported_tokens.len() {
+    //             if supported_tokens[i] == token {
+    //                 return true;
+    //             }
+    //             i += 1;
+    //         }
+    //         false
+    //     }
+
+    //     fn calculate_next_payment_date(self: @ContractState, frequency: PaymentFrequency) -> u64 {
+    //         // Calculate next payment date based on frequency
+    //         let current_time = get_block_timestamp();
+
+    //         match frequency {
+    //             PaymentFrequency::Once => current_time,
+    //             PaymentFrequency::Daily => current_time + 86400, // 24 hours
+    //             PaymentFrequency::Weekly => current_time + 604800, // 7 days
+    //             PaymentFrequency::Monthly => current_time + 2592000 // 30 days
+    //         }
+    //     }
+
+    //     fn process_contribution(
+    //         ref self: ContractState, round_id: u256, member: ContractAddress, amount: u256,
+    //     ) {
+    //         // Process a contribution for a round
+    //         let mut round = self.rounds.read(round_id);
+    //         round.total_contributions += amount;
+    //         self.rounds.write(round_id, round);
+
+    //         // Update member contribution record
+    //         let contribution = MemberContribution {
+    //             member, amount, contributed_at: get_block_timestamp(),
+    //         };
+    //         self.member_contributions.write((round_id, member), contribution);
+    //     }
+
+    //     fn calculate_reliability_bonus(
+    //         self: @ContractState, current_rating: u8, is_early: bool,
+    //     ) -> u8 {
+    //         // Calculate reliability rating bonus for early payments
+    //         if is_early && current_rating < 100 {
+    //             return current_rating + 5; // +5 points for early payment
+    //         }
+    //         current_rating
+    //     }
+
+    //     fn get_token_price_from_oracle(self: @ContractState, token: ContractAddress) -> u256 {
+    //         // Get token price from oracle (simplified implementation)
+    //         // In real implementation, this would call an oracle contract
+    //         // For now, return a default price
+    //         1000000000000000000 // 1.0 in wei format
+    //     }
+
+    //     fn is_round_scheduled(self: @ContractState, round_id: u256) -> bool {
+    //         let scheduled_round = self
+    //             .scheduled_rounds
+    //             .read(round_id); // Reads the scheduled round data
+    //         // Checks if the round_id field of the struct is non-zero, indicating it has been set
+    //         scheduled_round.round_id > 0
+    //     }
+
+    //     // Ensure all components update related state consistently
+    //     fn complete_round(ref self: ContractState, round_id: u256) {
+    //         self.ownable.assert_only_owner(); // Or triggered by an authorized keeper
+    //         self.emergency.assert_not_paused(); // Round completion should happen when not paused
+
+    //         let mut round = self.rounds.read(round_id); // Reads the round data
+    //         assert(
+    //             round.status == RoundStatus::Active, 'Round not active',
+    //         ); // Ensures round is in active state
+    //         assert(
+    //             get_block_timestamp() >= round.deadline, 'Round not expired',
+    //         ); // Ensures deadline has passed
+
+    //         // Update round status to Completed
+    //         round.status = RoundStatus::Completed;
+    //         self.rounds.write(round_id, round); // Writes the updated round status
+
+    //         // Update scheduled round if it exists
+    //         if self.is_round_scheduled(round_id) {
+    //             let mut scheduled_round = self.scheduled_rounds.read(round_id);
+    //             scheduled_round.status = RoundStatus::Completed;
+    //             self.scheduled_rounds.write(round_id, scheduled_round);
+    //         }
+
+    //         // Update analytics related to this round
+    //         self
+    //             .update_round_analytics(
+    //                 round_id, RoundStatus::Completed,
+    //             ); // Calls internal analytics helper
+
+    //         // Transfer funds to the designated recipient
+    //         let total_contributions_for_round = self
+    //             .enhanced_contribution_internal
+    //             ._get_total_contributions_for_round(round_id); // Get total contributions
+    //         self
+    //             .transfer_tokens_to_member(
+    //                 round.recipient, total_contributions_for_round,
+    //             ); // Calls internal token transfer helper
+
+    //         // Apply penalties for missed contributions in this round
+    //         self
+    //             .penalty_internal
+    //             ._apply_missed_contribution_penalties(round_id); // Calls internal penalty helper
+
+    //         self
+    //             .emit(
+    //                 Event::RoundCompleted(
+    //                     RoundCompleted {
+    //                         round_id,
+    //                         recipient: round.recipient,
+    //                         total_amount: total_contributions_for_round,
+    //                         member_count: self.member_count.read(),
+    //                         completion_time: get_block_timestamp(),
+    //                     },
+    //                 ),
+    //             ); // Emits an event
+    //     }
+
+    //     // Add penalty pool distribution logic
+    //     fn distribute_penalty_pool(ref self: ContractState) {
+    //         self.ownable.assert_only_owner(); // Only owner should trigger distribution
+    //         self.emergency.assert_not_paused(); // Distribution should happen when not paused
+
+    //         let penalty_pool_amount = self.penalty_pool.read(); // Reads the total penalty pool
+    //         if penalty_pool_amount == 0 {
+    //             return;
+    //         }
+
+    //         let mut total_compliant_contributions = 0;
+    //         let mut compliant_members_list = array![]; // Use Array to collect compliant members
+
+    //         // Calculate total contributions from compliant members and collect their addresses
+    //         let mut member_index = 0;
+    //         let total_members = self
+    //             .member_count
+    //             .read(); // Assuming member_count tracks total registered members
+    //         while member_index < total_members {
+    //             let member_address = self
+    //                 .member_by_index
+    //                 .read(member_index); // Get member address by index
+    //             let member_profile = self
+    //                 .member_profiles
+    //                 .read(member_address); // Read member profile
+
+    //             // A member is compliant if not banned and has a good credit score (example)
+    //             if !member_profile.is_banned
+    //                 && member_profile.credit_score >= 80 { // Assuming is_banned in MemberProfile
+    //                 let member_contribution = self
+    //                     .calculate_member_total_contribution(
+    //                         member_address,
+    //                     ); // Calls internal helper
+    //                 total_compliant_contributions += member_contribution;
+    //                 compliant_members_list.append(member_address);
+    //             }
+    //             member_index += 1;
+    //         }
+
+    //         if total_compliant_contributions > 0 {
+    //             // Distribute penalty pool proportionally
+    //             let mut distributed_count = 0;
+    //             let mut i = 0;
+    //             while i < compliant_members_list.len() {
+    //                 let member_address = *compliant_members_list.at(i);
+    //                 let member_contribution = self
+    //                     .calculate_member_total_contribution(
+    //                         member_address,
+    //                     ); // Calls internal helper
+    //                 let share = (member_contribution * penalty_pool_amount)
+    //                     / total_compliant_contributions;
+
+    //                 if share > 0 {
+    //                     self
+    //                         .transfer_tokens_to_member(
+    //                             member_address, share,
+    //                         ); // Calls internal token transfer helper
+    //                     distributed_count += 1;
+    //                 }
+    //                 i += 1;
+    //             }
+
+    //             // Reset penalty pool
+    //             self.penalty_pool.write(0); // Resets the penalty pool
+
+    //             self
+    //                 .emit(
+    //                     Event::PenaltyPoolDistributed(
+    //                         PenaltyPoolDistributed {
+    //                             total_amount: penalty_pool_amount,
+    //                             recipient_count: distributed_count,
+    //                             distribution_type: 'proportional',
+    //                             timestamp: get_block_timestamp(),
+    //                         },
+    //                     ),
+    //                 ); // Emits an event
+    //         }
+    //     }
+    // }
+
+    // // Implementation of Internal Traits for Enhanced Components
+    // impl PenaltyInternalImpl of PenaltyInternalTrait<ContractState> {
+    //     fn _apply_late_fee(
+    //         ref self: ContractState, member: ContractAddress, round_id: u256, amount: u256,
+    //     ) {
+    //         // Call the existing penalty function
+    //         self.penalty.apply_late_fee(member, round_id);
+    //     }
+
+    //     fn _add_strike(ref self: ContractState, member: ContractAddress, round_id: u256) {
+    //         // Call the existing penalty function
+    //         self.penalty.add_strike(member, round_id);
+    //     }
+
+    //     fn _remove_strike(ref self: ContractState, member: ContractAddress) {
+    //         // Call the existing penalty function
+    //         self.penalty.remove_strike(member);
+    //     }
+
+    //     fn _ban_member(ref self: ContractState, member: ContractAddress) {
+    //         // Call the existing penalty function
+    //         self.penalty.ban_member(member);
+    //     }
+
+    //     fn _unban_member(ref self: ContractState, member: ContractAddress) {
+    //         // Call the existing penalty function
+    //         self.penalty.unban_member(member);
+    //     }
+
+    //     fn _apply_missed_contribution_penalties(ref self: ContractState, round_id: u256) {
+    //         // Apply penalties for missed contributions in a round
+    //         let round = self.rounds.read(round_id);
+    //         let mut member_index = 0;
+    //         let total_members = self.member_count.read();
+
+    //         while member_index < total_members {
+    //             let member_address = self.member_by_index.read(member_index);
+    //             if self.members.read(member_address) {
+    //                 let contribution = self.member_contributions.read((round_id, member_address));
+    //                 if contribution.amount == 0 {
+    //                     // Member missed contribution - apply penalty
+    //                     self.penalty.add_strike(member_address, round_id);
+    //                 }
+    //             }
+    //             member_index += 1;
+    //         }
+    //     }
+    // }
+
+    // impl EnhancedContributionInternalImpl of EnhancedContributionInternalTrait<ContractState> {
+    //     fn _process_contribution(
+    //         ref self: ContractState, round_id: u256, member: ContractAddress, amount: u256,
+    //     ) {
+    //         // Process a contribution for a round
+    //         let mut round = self.rounds.read(round_id);
+    //         round.total_contributions += amount;
+    //         self.rounds.write(round_id, round);
+
+    //         // Update member contribution record
+    //         let contribution = MemberContribution {
+    //             member, amount, contributed_at: get_block_timestamp(),
+    //         };
+    //         self.member_contributions.write((round_id, member), contribution);
+    //     }
+
+    //     fn _get_total_contributions_for_round(self: @ContractState, round_id: u256) -> u256 {
+    //         let round = self.rounds.read(round_id);
+    //         round.total_contributions
+    //     }
+
+    //     fn _is_contribution_late(
+    //         self: @ContractState, round_id: u256, member: ContractAddress,
+    //     ) -> bool {
+    //         let round = self.rounds.read(round_id);
+    //         let contribution = self.member_contributions.read((round_id, member));
+    //         if contribution.amount == 0 {
+    //             return false; // No contribution made
+    //         }
+
+    //         let current_time = get_block_timestamp();
+    //         current_time > round.deadline
+    //     }
+    // }
+
+    // impl MemberProfileInternalImpl of MemberProfileInternalTrait<ContractState> {
+    //     fn _update_profile_after_contribution(
+    //         ref self: ContractState, member: ContractAddress, amount: u256,
+    //     ) {
+    //         let mut profile = self.member_profiles.read(member);
+
+    //         // Update contribution statistics
+    //         profile.total_contributions += amount;
+
+    //         // Update credit score based on payment timing
+    //         let current_time = get_block_timestamp();
+    //         let round = self.get_current_active_round();
+    //         if round > 0 {
+    //             let round_data = self.rounds.read(round);
+    //             if current_time <= round_data.deadline {
+    //                 // On-time payment - boost credit score
+    //                 if profile.credit_score < 100 {
+    //                     profile.credit_score += 2;
+    //                 }
+    //             }
+    //         }
+
+    //         self.member_profiles.write(member, profile);
+    //     }
+
+    //     fn _calculate_member_total_contribution(
+    //         self: @ContractState, member: ContractAddress,
+    //     ) -> u256 {
+    //         self.calculate_member_total_contribution(member)
+    //     }
+
+    //     fn _update_reliability_rating(
+    //         ref self: ContractState, member: ContractAddress, new_rating: u8,
+    //     ) {
+    //         let mut profile = self.member_profiles.read(member);
+    //         profile.reliability_rating = new_rating;
+    //         self.member_profiles.write(member, profile);
+    //     }
+    // }
+
+    // impl AnalyticsInternalImpl of AnalyticsInternalTrait<ContractState> {
+    //     fn _update_round_analytics(ref self: ContractState, round_id: u256, status: RoundStatus) {
+    //         self.update_round_analytics(round_id, status);
+    //     }
+
+    //     fn _update_member_performance_for_round(ref self: ContractState, round_id: u256) {
+    //         // Update member performance analytics for a specific round
+    //         let round = self.rounds.read(round_id);
+    //         let mut member_index = 0;
+    //         let total_members = self.member_count.read();
+
+    //         while member_index < total_members {
+    //             let member_address = self.member_by_index.read(member_index);
+    //             if self.members.read(member_address) {
+    //                 let contribution = self.member_contributions.read((round_id, member_address));
+    //                 let mut member_analytics = self.member_analytics.read(member_address);
+
+    //                 if contribution.amount > 0 {
+    //                     member_analytics.total_contributions += contribution.amount;
+    //                     if contribution.contributed_at <= round.deadline {
+    //                         member_analytics.on_time_payments += 1;
+    //                     } else {
+    //                         member_analytics.late_payments += 1;
+    //                     }
+    //                 } else if round.status == RoundStatus::Completed
+    //                     || round.status == RoundStatus::Cancelled {
+    //                     member_analytics.missed_payments += 1;
+    //                 }
+
+    //                 member_analytics.last_updated = get_block_timestamp();
+    //                 self.member_analytics.write(member_address, member_analytics);
+    //             }
+    //             member_index += 1;
+    //         }
+    //     }
+
+    //     fn _calculate_system_health(self: @ContractState) -> u8 {
+    //         self.calculate_system_health()
+    //     }
+    // }
+
+    // impl TokenTransferInternalImpl of TokenTransferInternalTrait<ContractState> {
+    //     fn _transfer_tokens_to_member(
+    //         ref self: ContractState, member: ContractAddress, amount: u256,
+    //     ) {
+    //         self.transfer_tokens_to_member(member, amount);
+    //     }
+
+    //     fn _transfer_tokens_to_address(
+    //         ref self: ContractState, recipient: ContractAddress, amount: u256,
+    //     ) {
+    //         self.transfer_tokens_to_address(recipient, amount);
+    //     }
+
+    //     fn _transfer_specific_tokens_to_address(
+    //         ref self: ContractState,
+    //         token: ContractAddress,
+    //         recipient: ContractAddress,
+    //         amount: u256,
+    //     ) {
+    //         self.transfer_specific_tokens_to_address(token, recipient, amount);
+    //     }
+    // }
+
+        // Internal helper functions
+        #[generate_trait]
+        impl InternalFunctions of InternalFunctionsTrait {
+            fn _validate_kyc_and_limits(self: @ContractState, user: ContractAddress, amount: u256) {
+                // Check KYC validity
+                assert(IStarkRemitImpl::is_kyc_valid(self, user), KYCErrors::INVALID_KYC_STATUS);
+    
+                // Check transaction limits
+                let kyc_data = self.user_kyc_data.read(user);
+                let level_u8 = self._kyc_level_to_u8(kyc_data.level);
+    
+                // Check single transaction limit
+                let single_limit = self.single_limits.read(level_u8);
+                assert(amount <= single_limit, KYCErrors::SINGLE_TX_LIMIT_EXCEEDED);
+    
+                // Check daily limit
+                let daily_limit = self.daily_limits.read(level_u8);
+                let current_usage = self._get_daily_usage(user);
+                assert(current_usage + amount <= daily_limit, KYCErrors::DAILY_LIMIT_EXCEEDED);
+            }
+    
+            fn _get_daily_usage(self: @ContractState, user: ContractAddress) -> u256 {
+                let current_time = get_block_timestamp();
+                let last_reset = self.last_reset.read(user);
+    
+                // Reset if it's a new day (86400 seconds = 24 hours)
+                if current_time > last_reset + 86400 {
+                    return 0;
+                }
+    
+                self.daily_usage.read(user)
+            }
+    
+            fn _record_daily_usage(ref self: ContractState, user: ContractAddress, amount: u256) {
+                let current_time = get_block_timestamp();
+                let last_reset = self.last_reset.read(user);
+    
+                if current_time > last_reset + 86400 {
+                    // Reset for new day
+                    self.daily_usage.write(user, amount);
+                    self.last_reset.write(user, current_time);
+                } else {
+                    // Add to current day usage
+                    let current_usage = self.daily_usage.read(user);
+                    self.daily_usage.write(user, current_usage + amount);
+                }
+            }
+    
+            fn _kyc_level_to_u8(self: @ContractState, level: KycLevel) -> u8 {
+                match level {
+                    KycLevel::None => 0,
+                    KycLevel::Basic => 1,
+                    KycLevel::Enhanced => 2,
+                    KycLevel::Premium => 3,
+                }
+            }
+    
+            fn _set_default_transaction_limits(ref self: ContractState) {
+                // None level - very restricted
+                self.daily_limits.write(0, 100_000_000_000_000_000); // 0.1 tokens
+                self.single_limits.write(0, 50_000_000_000_000_000); // 0.05 tokens
+    
+                // Basic level - moderate limits
+                self.daily_limits.write(1, 1000_000_000_000_000_000_000); // 1,000 tokens
+                self.single_limits.write(1, 500_000_000_000_000_000_000); // 500 tokens
+    
+                // Enhanced level - higher limits
+                self.daily_limits.write(2, 10000_000_000_000_000_000_000); // 10,000 tokens
+                self.single_limits.write(2, 5000_000_000_000_000_000_000); // 5,000 tokens
+    
+                // Premium level - maximum limits
+                self.daily_limits.write(3, 100000_000_000_000_000_000_000); // 100,000 tokens
+                self.single_limits.write(3, 50000_000_000_000_000_000_000); // 50,000 tokens
+            }
+    
+            fn _calculate_total_allocated_tokens(self: @ContractState, token: ContractAddress) -> u256 {
+                // Calculate total allocated tokens = member balances + tokens locked in ongoing rounds
+                let mut total_allocated = 0_u256;
+                
+                // Get the primary token address for comparison
+                let primary_token = self.token_address.read();
+                assert(token == primary_token, 'Only primary token supported');
+                
+                // If this is the primary token, calculate allocated tokens
+                if token == primary_token {
+                    // Add member balances for the primary token
+                    let member_count = self.member_count.read();
+                    let mut i = 0_u32;
+                    while i < member_count {
+                        let member = self.member_by_index.read(i);
+                        if self.members.read(member) {
+                            let member_balance = self.balances.read(member);
+                            total_allocated += member_balance;
+                        }
+                        i += 1;
+                    }
+                    
+                    // Add tokens locked in ongoing rounds (active rounds with contributions)
+                    let current_round_id = self.round_ids.read();
+                    if current_round_id > 0 {
+                        let mut round_id = 1_u256;
+                        while round_id <= current_round_id {
+                            let round = self.rounds.read(round_id);
+                            // Only count active rounds that have contributions
+                            if round.status == RoundStatus::Active && round.total_contributions > 0 {
+                                total_allocated += round.total_contributions;
+                            }
+                            round_id += 1;
+                        }
+                    }
+                }
+                total_allocated
+            }
+    
+            fn _record_transfer_history(
+                ref self: ContractState,
+                transfer_id: u256,
+                action: felt252,
+                actor: ContractAddress,
+                previous_status: TransferStatus,
+                new_status: TransferStatus,
+                details: felt252,
+            ) {
+                let current_time = get_block_timestamp();
+    
+                // Create history entry
+                let history = TransferHistory {
+                    transfer_id,
+                    action,
+                    actor,
+                    timestamp: current_time,
+                    previous_status,
+                    new_status,
+                    details,
+                };
+    
+                // Store in transfer history
+                let history_count = self.transfer_history_count.read(transfer_id);
+                self.transfer_history.write((transfer_id, history_count), history);
+                self.transfer_history_count.write(transfer_id, history_count + 1);
+    
+                // Store in actor history
+                let actor_count = self.actor_history_count.read(actor);
+                self.actor_history.write((actor, actor_count), (transfer_id, history_count));
+                self.actor_history_count.write(actor, actor_count + 1);
+    
+                // Store in action history
+                let action_count = self.action_history_count.read(action);
+                self.action_history.write((action, action_count), (transfer_id, history_count));
+                self.action_history_count.write(action, action_count + 1);
+    
+                // Emit event
+                self
+                    .emit(
+                        TransferHistoryRecorded { transfer_id, action, actor, timestamp: current_time },
+                    );
+            }
+    
+            // Generates and stores a new unique group ID for a savings group
+            // Returns the newly generated group ID
+            fn _new_group_id(ref self: ContractState) -> u64 {
+                let group_id = self.group_count.read();
+    
+                self.group_count.write(group_id + 1);
+    
+                group_id
+            }
+    
+            // Helper functions for emergency operations
+            fn get_contract_token_balance(self: @ContractState) -> u256 {
+                // Get contract's balance of the primary token
+                let token_address = self.token_address.read();
+                let erc20_dispatcher = IERC20Dispatcher { contract_address: token_address };
+                erc20_dispatcher.balance_of(starknet::get_contract_address())
+            }
+    
+            fn get_contract_token_balance_specific(
+                self: @ContractState, token: ContractAddress,
+            ) -> u256 {
+                // Get contract's balance of a specific token
+                let erc20_dispatcher = IERC20Dispatcher { contract_address: token };
+                erc20_dispatcher.balance_of(starknet::get_contract_address())
+            }
+    
+            fn transfer_tokens_to_member(
+                ref self: ContractState, member: ContractAddress, amount: u256,
+            ) {
+                // Transfer tokens to a member
+                let token_address = self.token_address.read();
+                let erc20_dispatcher = IERC20Dispatcher { contract_address: token_address };
+                assert(erc20_dispatcher.transfer(member, amount), 'Transfer failed');
+            }
+    
+            fn transfer_tokens_to_address(
+                ref self: ContractState, recipient: ContractAddress, amount: u256,
+            ) {
+                // Transfer tokens to any address
+                let token_address = self.token_address.read();
+                let erc20_dispatcher = IERC20Dispatcher { contract_address: token_address };
+                assert(erc20_dispatcher.transfer(recipient, amount), 'Transfer failed');
+            }
+    
+            fn transfer_specific_tokens_to_address(
+                ref self: ContractState,
+                token: ContractAddress,
+                recipient: ContractAddress,
+                amount: u256,
+            ) {
+                // Transfer specific tokens to an address
+                let erc20_dispatcher = IERC20Dispatcher { contract_address: token };
+                assert(erc20_dispatcher.transfer(recipient, amount), 'Transfer failed');
+            }
+    
+            fn calculate_member_total_contribution(
+                self: @ContractState, member: ContractAddress,
+            ) -> u256 {
+                // Calculate total contributions across all rounds for a member
+                let mut total = 0;
+                let mut round_id = 1;
+                while round_id <= self.round_ids.read() {
+                    let contribution = self.member_contributions.read((round_id, member));
+                    total += contribution.amount;
+                    round_id += 1;
+                }
+                total
+            }
+    
+            fn refund_round_contributions(ref self: ContractState, round_id: u256) {
+                // Refund all contributions for a specific round
+                let mut member_index = 0;
+                while member_index < self.member_count.read() {
+                    let member = self.member_by_index.read(member_index);
+                    if self.members.read(member) {
+                        let contribution = self.member_contributions.read((round_id, member));
+                        if contribution.amount > 0 {
+                            self.transfer_tokens_to_member(member, contribution.amount);
+                        }
+                    }
+                    member_index += 1;
+                }
+            }
+    
+            fn update_round_analytics(ref self: ContractState, round_id: u256, status: RoundStatus) {
+                // Update analytics when round status changes
+                // This is a simplified implementation since analytics component is commented out
+                // In a full implementation, this would update the analytics storage
+            }
+
+            // Private helper function to remove member from member list
+            fn _remove_member_from_list(ref self: ContractState, member: ContractAddress) {
+                // Check if member is currently active
+                if !self.members.read(member) {
+                    return; // Already removed
+                }
+                
+                // Mark member as inactive
+                self.members.write(member, false);
+                
+                // Decrease member count
+                let current_count = self.member_count.read();
+                self.member_count.write(current_count - 1);
+                
+                // Find and remove member from member_by_index
+                let mut i = 0;
+                let total_members = current_count;
+                
+                while i < total_members {
+                    let member_at_index = self.member_by_index.read(i);
+                    if member_at_index == member {
+                        // Found the member, remove by setting to zero address
+                        self.member_by_index.write(i, 0.try_into().unwrap());
+                        break;
+                    }
+                    i += 1;
+                }
+            }
+
+            // Private helper function to add member back to member list
+            fn _add_member_to_list(ref self: ContractState, member: ContractAddress) {
+                // Check if member is already active
+                if self.members.read(member) {
+                    return; // Already active
+                }
+                
+                // Mark member as active
+                self.members.write(member, true);
+                
+                // Increase member count
+                let current_count = self.member_count.read();
+                self.member_count.write(current_count + 1);
+                
+                // Add member to member_by_index at the end
+                self.member_by_index.write(current_count, member);
+            }
+        }    
 }

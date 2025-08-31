@@ -408,3 +408,86 @@ pub struct UpdateCancelled {
     #[key]
     pub key: felt252,
 }
+
+#[derive(Drop, starknet::Event)]
+    pub struct EmergencyWithdrawalAll {
+        pub total_amount: u256,
+        pub member_count: u32,
+        pub executed_by: ContractAddress,
+        pub timestamp: u64,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    pub struct EmergencyWithdrawalMember {
+        pub member: ContractAddress,
+        pub amount: u256,
+        pub executed_by: ContractAddress,
+        pub timestamp: u64,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    pub struct RoundEmergencyCompleted {
+        pub round_id: u256,
+        pub recipient: ContractAddress,
+        pub amount: u256,
+        pub completed_by: ContractAddress,
+        pub timestamp: u64,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    pub struct RoundEmergencyCancelled {
+        pub round_id: u256,
+        pub cancelled_by: ContractAddress,
+        pub reason: felt252,
+        pub timestamp: u64,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    pub struct RecipientChanged {
+        pub round_id: u256,
+        pub old_recipient: ContractAddress,
+        pub new_recipient: ContractAddress,
+        pub changed_by: ContractAddress,
+        pub timestamp: u64,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    pub struct TokensRecovered {
+        pub token: ContractAddress,
+        pub amount: u256,
+        pub recovered_by: ContractAddress,
+        pub recipient: ContractAddress,
+        pub timestamp: u64,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    pub struct FundsMigrated {
+        pub new_contract: ContractAddress,
+        pub amount: u256,
+        pub migrated_by: ContractAddress,
+        pub timestamp: u64,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    pub struct PenaltyPoolDistributed {
+        pub total_amount: u256,
+        pub recipient_count: u32,
+        pub distribution_type: felt252,
+        pub timestamp: u64,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    pub struct MemberUnbanned {
+        pub member: ContractAddress,
+        pub unbanned_by: ContractAddress,
+        pub timestamp: u64,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    pub struct MemberBanned {
+        pub member: ContractAddress,
+        pub reason: felt252,
+        pub strikes: u32,
+        pub banned_by: ContractAddress,
+        pub timestamp: u64,
+    }

@@ -316,3 +316,132 @@ pub mod GovernanceErrors {
     /// Error triggered when zero address is provided
     pub const ZERO_ADDRESS: felt252 = 'GOV: invalid contract';
 }
+
+pub mod EmergencyComponentErrors {
+    /// Error triggered when caller is not an Admin or higher
+    pub const NOT_ADMIN: felt252 = 'Emergency: not admin';
+    /// Error triggered when contract is paused
+    pub const CONTRACT_PAUSED: felt252 = 'Emergency: contract is paused';
+    /// Error triggered when contract is not paused
+    pub const CONTRACT_NOT_PAUSED: felt252 = 'Emergency: contract not paused';
+    /// Error triggered when member is already banned
+    pub const MEMBER_ALREADY_BANNED: felt252 = 'Emergency: member is banned';
+    /// Error triggered when member is not banned
+    pub const MEMBER_NOT_BANNED: felt252 = 'Emergency: member is not banned';
+    /// Error triggered when contract is already paused
+    pub const ALREADY_PAUSED: felt252 = 'Emergency: contract is paused';
+}
+
+pub mod EmergencyErrors {
+    /// Error triggered when no funds available for withdrawal
+    pub const NO_FUNDS_TO_WITHDRAW: felt252 = 'Emergency: no funds';
+    /// Error triggered when member does not exist
+    pub const MEMBER_NOT_EXISTS: felt252 = 'Emergency: member not found';
+    /// Error triggered when member has no contributions
+    pub const MEMBER_NO_CONTRIBUTIONS: felt252 = 'Emergency: no contributions';
+    /// Error triggered when round is not active
+    pub const ROUND_NOT_ACTIVE: felt252 = 'Emergency: round inactive';
+    /// Error triggered when recipient address is invalid
+    pub const INVALID_RECIPIENT: felt252 = 'Emergency: invalid recipient';
+    /// Error triggered when new recipient is not a member
+    pub const RECIPIENT_NOT_MEMBER: felt252 = 'Emergency: not member';
+    /// Error triggered when recipient is already set
+    pub const RECIPIENT_ALREADY_SET: felt252 = 'Emergency: recipient set';
+    /// Error triggered when token address is invalid
+    pub const INVALID_TOKEN_ADDRESS: felt252 = 'Emergency: invalid token';
+    /// Error triggered when amount is invalid
+    pub const INVALID_AMOUNT: felt252 = 'Emergency: invalid amount';
+    /// Error triggered when balance is insufficient
+    pub const INSUFFICIENT_BALANCE: felt252 = 'Emergency: insufficient';
+    /// Error triggered when contract address is invalid
+    pub const INVALID_CONTRACT_ADDRESS: felt252 = 'Emergency: invalid contract';
+    /// Error triggered when trying to migrate to self
+    pub const CANNOT_MIGRATE_TO_SELF: felt252 = 'Emergency: migrate to self';
+    /// Error triggered when migration target is invalid
+    pub const INVALID_MIGRATION_TARGET: felt252 = 'Emergency: invalid target';
+    /// Error triggered when no funds to migrate
+    pub const NO_FUNDS_TO_MIGRATE: felt252 = 'Emergency: no funds';
+}
+
+pub mod PenaltyComponentErrors {
+    /// Error triggered when caller is not an Admin or higher
+    pub const NOT_ADMIN: felt252 = 'Penalty: not admin';
+    /// Error triggered when contract is paused
+    pub const CONTRACT_PAUSED: felt252 = 'Penalty: contract is paused';
+    /// Error triggered when contract is not paused
+    pub const CONTRACT_NOT_PAUSED: felt252 = 'Penalty: contract not paused';
+    /// Error triggered when penalty pool is disabled
+    pub const PENALTY_POOL_DISABLED: felt252 = 'Penalty: penalty pool disabled';
+    /// Error triggered when no contribution for round
+    pub const NO_CONTRIBUTION_FOR_ROUND: felt252 = 'Penalty: no contribution';
+    /// Error triggered when not late
+    pub const NOT_LATE: felt252 = 'Penalty: not late';
+}
+
+pub mod AutoScheduleErrors {
+    /// Error triggered when caller is not an Admin or higher
+    pub const NOT_ADMIN: felt252 = 'AutoSchedule: not admin';
+    /// Error triggered when contract is paused
+    pub const CONTRACT_PAUSED: felt252 = 'AutoSchedule: paused';
+    /// Error triggered when contract is not paused
+    pub const CONTRACT_NOT_PAUSED: felt252 = 'AutoSchedule: not paused';
+    /// Error triggered when new deadline is not in the future
+    pub const NEW_DEADLINE_NOT_IN_FUTURE: felt252 = 'AutoSchedule: not future';
+    /// Error triggered when new deadline is not after start
+    pub const NEW_DEADLINE_NOT_AFTER_START: felt252 = 'AutoSchedule: not after start';
+
+}
+
+pub mod ContributionErrors {
+    /// Error triggered when caller is not a member
+    pub const NOT_MEMBER: felt252 = 'Contribution: not member';
+    /// Error triggered when member already contributed
+    pub const ALREADY_CONTRIBUTED: felt252 = 'Contribution: contributed';
+    /// Error triggered when round is not active
+    pub const ROUND_NOT_ACTIVE: felt252 = 'Contribution: not active';
+    /// Error triggered when contribution deadline passed
+    pub const CONTRIBUTION_DEADLINE_PASSED: felt252 = 'Contribution: deadline passed';
+    /// Error triggered when contribution amount is insufficient
+    pub const INSUFFICIENT_AMOUNT: felt252 = 'Contribution: insufficient';
+    /// Error triggered when contribution limit exceeded
+    pub const CONTRIBUTION_LIMIT_EXCEEDED: felt252 = 'Contribution: limit exceeded';
+    /// Error triggered when recipient is not a member
+    pub const RECIPIENT_NOT_MEMBER: felt252 = 'Contribution: not member';
+    /// Error triggered when deadline is not in future
+    pub const DEADLINE_NOT_IN_FUTURE: felt252 = 'Contribution: not future';
+    /// Error triggered when round deadline not passed
+    pub const ROUND_DEADLINE_NOT_PASSED: felt252 = 'Contribution: not deadline ';
+    /// Error triggered when round not completed
+    pub const ROUND_NOT_COMPLETED: felt252 = 'Contribution: not completed';
+    /// Error triggered when address is invalid
+    pub const INVALID_ADDRESS: felt252 = 'Contribution: invalid';
+    /// Error triggered when already a member
+    pub const ALREADY_MEMBER: felt252 = 'Contribution: already member';
+    /// Error triggered when caller is not owner
+    pub const NOT_OWNER: felt252 = 'Contribution: not owner';
+}
+
+pub mod PaymentFlexibilityErrors {
+    /// Error triggered when caller is not an Admin or higher
+    pub const NOT_ADMIN: felt252 = 'Payment: not admin';
+    /// Error triggered when auto-payment is disabled
+    pub const AUTO_PAYMENT_DISABLED: felt252 = 'Payment: auto disabled';
+    /// Error triggered when token is not supported
+    pub const INVALID_TOKEN: felt252 = 'Payment: invalid token';
+    /// Error triggered when amount is invalid
+    pub const INVALID_AMOUNT: felt252 = 'Payment: invalid amount';
+    /// Error triggered when payment not found
+    pub const PAYMENT_NOT_FOUND: felt252 = 'Payment: not found';
+    /// Error triggered when grace period expired
+    pub const GRACE_PERIOD_EXPIRED: felt252 = 'Payment: grace expired';
+    /// Error triggered when insufficient allowance
+    pub const INSUFFICIENT_ALLOWANCE: felt252 = 'Payment: no allowance';
+    /// Error triggered when oracle error occurs
+    pub const ORACLE_ERROR: felt252 = 'Payment: oracle error';
+    /// Error triggered when round not found
+    pub const ROUND_NOT_FOUND: felt252 = 'Payment: round not found';
+    /// Error triggered when auto-payment already active
+    pub const AUTO_PAYMENT_ACTIVE: felt252 = 'Payment: already active';
+    /// Error triggered when frequency is invalid
+    pub const INVALID_FREQUENCY: felt252 = 'Payment: invalid frequency';
+}
