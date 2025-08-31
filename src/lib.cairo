@@ -35,7 +35,11 @@ pub mod component {
     pub mod savings_group;
     pub mod token_management;
     pub mod transfer;
-    pub mod user_management;
+    pub mod user_management {
+        pub mod mock;
+        pub mod test;
+        pub mod user_management;
+    }
     pub mod auto_schedule;
     pub mod member_profile;
     pub mod payment_flexibility;

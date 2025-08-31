@@ -46,7 +46,7 @@ pub mod StarkRemit {
     use starkremit_contract::component::savings_group::savings_group_component;
     use starkremit_contract::component::token_management::token_management_component;
     use starkremit_contract::component::transfer::transfer_component;
-    use starkremit_contract::component::user_management::user_management_component;
+    use starkremit_contract::component::user_management::user_management::user_management_component;
     use starkremit_contract::component::emergency::emergency_component;
     use starkremit_contract::component::penalty::penalty_component;
     use starkremit_contract::component::payment_flexibility::payment_flexibility_component;
@@ -86,6 +86,7 @@ pub mod StarkRemit {
     component!(path: payment_flexibility_component, storage: payment_flexibility, event: PaymentFlexibilityEvent);
         // component!(path: member_profile_component, storage: member_profile, event: MemberProfileEvent);
         // component!(path: analytics_component, storage: analytics, event: AnalyticsEvent);
+
 
     #[abi(embed_v0)]
     impl AccessControlImpl =
@@ -349,6 +350,7 @@ pub mod StarkRemit {
         AgentStatusUpdated: AgentStatusUpdated, // Event for agent status updates
         TransferHistoryRecorded: TransferHistoryRecorded, // Event for history recording
         // contribution
+        ContributionMade: ContributionMade,
         RoundDisbursed: RoundDisbursed,
         RoundCompleted: RoundCompleted,
         ContributionMissed: ContributionMissed,
@@ -513,6 +515,8 @@ pub mod StarkRemit {
         token_management_component: token_management_component::Storage,
         #[substorage(v0)]
         transfer_component: transfer_component::Storage,
+        #[substorage(v0)]
+        payment_flexibility_component: payment_flexibility_component::Storage,
         #[substorage(v0)]
         emergency: emergency_component::Storage,
         #[substorage(v0)]
@@ -4182,8 +4186,7 @@ pub mod StarkRemit {
     //     }
     // }
 
-        // Internal helper functions
-        #[generate_trait]
+    #[generate_trait]
         impl InternalFunctions of InternalFunctionsTrait {
             fn _validate_kyc_and_limits(self: @ContractState, user: ContractAddress, amount: u256) {
                 // Check KYC validity
