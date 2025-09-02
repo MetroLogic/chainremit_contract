@@ -1,6 +1,6 @@
 use starknet::ContractAddress;
-use starkremit_contract::base::types::{ContributionRound, MemberContribution, RoundStatus};
 use starkremit_contract::base::errors::ContributionErrors;
+use starkremit_contract::base::types::{ContributionRound, MemberContribution, RoundStatus};
 
 #[starknet::interface]
 pub trait IContribution<TContractState> {
@@ -21,12 +21,18 @@ pub trait IContribution<TContractState> {
     fn get_current_round_id(self: @TContractState) -> u256;
     fn set_required_contribution(ref self: TContractState, amount: u256);
     fn get_required_contribution(self: @TContractState) -> u256;
-    
 
-    fn get_member_contribution_history(self: @TContractState, member: ContractAddress, limit: u32, offset: u32) -> Array<MemberContribution>;
-    fn get_round_statistics(self: @TContractState, round_id: u256) -> (u256, u32, u32); // total_amount, contributor_count, member_count
-    fn validate_contribution_eligibility(self: @TContractState, member: ContractAddress, round_id: u256) -> bool;
-    fn get_next_recipient(self: @TContractState) -> ContractAddress;
+
+    fn get_member_contribution_history(
+        self: @TContractState, member: ContractAddress, limit: u32, offset: u32,
+    ) -> Array<MemberContribution>;
+    fn get_round_statistics(
+        self: @TContractState, round_id: u256,
+    ) -> (u256, u32, u32); // total_amount, contributor_count, member_count
+    fn validate_contribution_eligibility(
+        self: @TContractState, member: ContractAddress, round_id: u256,
+    ) -> bool;
+    fn get_next_recipient(ref self: TContractState) -> ContractAddress;
     fn advance_round_rotation(ref self: TContractState);
 }
 
@@ -41,8 +47,8 @@ pub mod contribution_component {
         StoragePointerWriteAccess,
     };
     use starknet::{ContractAddress, get_block_timestamp, get_caller_address, get_contract_address};
-    use starkremit_contract::base::types::{ContributionRound, MemberContribution, RoundStatus};
     use starkremit_contract::base::errors::ContributionErrors;
+    use starkremit_contract::base::types::{ContributionRound, MemberContribution, RoundStatus};
     use super::*;
 
     #[storage]
@@ -58,15 +64,18 @@ pub mod contribution_component {
         required_contribution: u256,
         member_index_map: Map<ContractAddress, u32>,
         erc20_address: ContractAddress,
-        
         // Enhanced storage
-        member_contribution_history: Map<(ContractAddress, u32), u256>, // member -> (index -> round_id)
+        member_contribution_history: Map<
+            (ContractAddress, u32), u256,
+        >, // member -> (index -> round_id)
         member_contribution_count: Map<ContractAddress, u32>, // member -> total contributions
         current_rotation_index: u32, // Current position in member rotation
         round_contributor_count: Map<u256, u32>, // round_id -> number of contributors
-        member_last_contribution: Map<ContractAddress, u64>, // member -> last contribution timestamp
+        member_last_contribution: Map<
+            ContractAddress, u64,
+        >, // member -> last contribution timestamp
         contribution_limits: Map<ContractAddress, u256>, // member -> max contribution per round
-        grace_period_hours: u64, // Grace period for late contributions
+        grace_period_hours: u64 // Grace period for late contributions
     }
 
     #[event]
@@ -83,7 +92,7 @@ pub mod contribution_component {
         GracePeriodUpdated: GracePeriodUpdated,
         RoundRotationAdvanced: RoundRotationAdvanced,
     }
-    
+
     #[derive(Drop, starknet::Event)]
     pub struct ContributionMade {
         round_id: u256,
@@ -92,7 +101,7 @@ pub mod contribution_component {
         timestamp: u64,
         is_on_time: bool,
     }
-    
+
     #[derive(Drop, starknet::Event)]
     pub struct RoundDisbursed {
         round_id: u256,
@@ -101,7 +110,7 @@ pub mod contribution_component {
         contributor_count: u32,
         timestamp: u64,
     }
-    
+
     #[derive(Drop, starknet::Event)]
     pub struct RoundCompleted {
         round_id: u256,
@@ -109,14 +118,14 @@ pub mod contribution_component {
         contributor_count: u32,
         timestamp: u64,
     }
-    
+
     #[derive(Drop, starknet::Event)]
     pub struct ContributionMissed {
         round_id: u256,
         member: ContractAddress,
         timestamp: u64,
     }
-    
+
     #[derive(Drop, starknet::Event)]
     pub struct MemberAdded {
         member: ContractAddress,
@@ -130,7 +139,7 @@ pub mod contribution_component {
         removed_by: ContractAddress,
         timestamp: u64,
     }
-    
+
     #[derive(Drop, starknet::Event)]
     pub struct RequiredContributionUpdated {
         old_amount: u256,
@@ -138,7 +147,7 @@ pub mod contribution_component {
         updated_by: ContractAddress,
         timestamp: u64,
     }
-    
+
     #[derive(Drop, starknet::Event)]
     pub struct ContributionLimitUpdated {
         member: ContractAddress,
@@ -147,7 +156,7 @@ pub mod contribution_component {
         updated_by: ContractAddress,
         timestamp: u64,
     }
-    
+
     #[derive(Drop, starknet::Event)]
     pub struct GracePeriodUpdated {
         old_hours: u64,
@@ -155,7 +164,7 @@ pub mod contribution_component {
         updated_by: ContractAddress,
         timestamp: u64,
     }
-    
+
     #[derive(Drop, starknet::Event)]
     pub struct RoundRotationAdvanced {
         old_index: u32,
@@ -176,7 +185,7 @@ pub mod contribution_component {
         ) {
             let caller = get_caller_address();
             let current_time = get_block_timestamp();
-            
+
             // Validate caller is a member
             assert(self.is_member(caller), ContributionErrors::NOT_MEMBER);
 
@@ -186,7 +195,7 @@ pub mod contribution_component {
 
             let mut round = self.rounds.read(round_id);
             assert(round.status == RoundStatus::Active, ContributionErrors::ROUND_NOT_ACTIVE);
-            
+
             // Check if contribution is within grace period
             let grace_period = self.grace_period_hours.read() * 3600; // Convert to seconds
             let is_on_time = current_time <= round.deadline + grace_period;
@@ -195,7 +204,7 @@ pub mod contribution_component {
             // Validate contribution amount
             let required_amount = self.required_contribution.read();
             assert(amount >= required_amount, ContributionErrors::INSUFFICIENT_AMOUNT);
-            
+
             // Check contribution limits
             let member_limit = self.contribution_limits.read(caller);
             if member_limit > 0 {
@@ -204,25 +213,23 @@ pub mod contribution_component {
 
             // Create contribution record
             let contribution = MemberContribution {
-                member: caller, 
-                amount, 
-                contributed_at: current_time,
+                member: caller, amount, contributed_at: current_time,
             };
             self.member_contributions.write((round_id, caller), contribution);
-            
+
             // Update round statistics
             round.total_contributions += amount;
             self.rounds.write(round_id, round);
-            
+
             // Update contributor count
             let contributor_count = self.round_contributor_count.read(round_id);
             self.round_contributor_count.write(round_id, contributor_count + 1);
-            
+
             // Update member statistics
             let member_contribution_count = self.member_contribution_count.read(caller);
             self.member_contribution_count.write(caller, member_contribution_count + 1);
             self.member_last_contribution.write(caller, current_time);
-            
+
             // Add to member's contribution history
             let history_count = self.member_contribution_count.read(caller);
             self.member_contribution_history.write((caller, history_count - 1), round_id);
@@ -232,13 +239,18 @@ pub mod contribution_component {
             IERC20Dispatcher { contract_address: erc20_address }
                 .transfer_from(caller, get_contract_address(), amount);
 
-            self.emit(Event::ContributionMade(ContributionMade { 
-                round_id, 
-                member: caller, 
-                amount,
-                timestamp: current_time,
-                is_on_time: current_time <= round.deadline,
-            }));
+            self
+                .emit(
+                    Event::ContributionMade(
+                        ContributionMade {
+                            round_id,
+                            member: caller,
+                            amount,
+                            timestamp: current_time,
+                            is_on_time: current_time <= round.deadline,
+                        },
+                    ),
+                );
         }
 
         fn complete_round(ref self: ComponentState<TContractState>, round_id: u256) {
@@ -246,19 +258,25 @@ pub mod contribution_component {
 
             let mut round = self.rounds.read(round_id);
             assert(round.status == RoundStatus::Active, ContributionErrors::ROUND_NOT_ACTIVE);
-            
+
             let current_time = get_block_timestamp();
             round.status = RoundStatus::Completed;
+            round.completed_at = current_time;
             self.rounds.write(round_id, round);
-            
+
             let contributor_count = self.round_contributor_count.read(round_id);
-            
-            self.emit(Event::RoundCompleted(RoundCompleted { 
-                round_id,
-                total_amount: round.total_contributions,
-                contributor_count,
-                timestamp: current_time,
-            }));
+
+            self
+                .emit(
+                    Event::RoundCompleted(
+                        RoundCompleted {
+                            round_id,
+                            total_amount: round.total_contributions,
+                            contributor_count,
+                            timestamp: current_time,
+                        },
+                    ),
+                );
         }
 
         fn add_round_to_schedule(
@@ -275,16 +293,17 @@ pub mod contribution_component {
             let round_id = self.round_ids.read() + 1;
             self.round_ids.write(round_id);
             self.rotation_schedule.write(round_id, recipient);
-            
+
             let round = ContributionRound {
-                round_id, 
-                recipient, 
-                deadline, 
-                total_contributions: 0, 
+                round_id,
+                recipient,
+                deadline,
+                completed_at: 0,
+                total_contributions: 0,
                 status: RoundStatus::Active,
             };
             self.rounds.write(round_id, round);
-            
+
             // Initialize contributor count
             self.round_contributor_count.write(round_id, 0);
         }
@@ -296,10 +315,13 @@ pub mod contribution_component {
         fn check_missed_contributions(ref self: ComponentState<TContractState>, round_id: u256) {
             let round = self.rounds.read(round_id);
             assert(round.status == RoundStatus::Active, ContributionErrors::ROUND_NOT_ACTIVE);
-            
+
             let current_time = get_block_timestamp();
             let grace_period = self.grace_period_hours.read() * 3600;
-            assert(current_time > round.deadline + grace_period, ContributionErrors::ROUND_DEADLINE_NOT_PASSED);
+            assert(
+                current_time > round.deadline + grace_period,
+                ContributionErrors::ROUND_DEADLINE_NOT_PASSED,
+            );
 
             // Check all members for missed contributions
             let all_members = self.get_all_members();
@@ -308,11 +330,14 @@ pub mod contribution_component {
                 let member = *all_members[i];
                 let contribution = self.member_contributions.read((round_id, member));
                 if contribution.amount == 0 {
-                    self.emit(Event::ContributionMissed(ContributionMissed { 
-                        round_id, 
-                        member: member,
-                        timestamp: current_time,
-                    }));
+                    self
+                        .emit(
+                            Event::ContributionMissed(
+                                ContributionMissed {
+                                    round_id, member: member, timestamp: current_time,
+                                },
+                            ),
+                        );
                 }
                 i += 1;
             }
@@ -350,16 +375,21 @@ pub mod contribution_component {
             self.member_index_map.write(address, count);
 
             self.member_count.write(count + 1);
-            
+
             // Initialize member statistics
             self.member_contribution_count.write(address, 0);
             self.member_last_contribution.write(address, 0);
-            
-            self.emit(Event::MemberAdded(MemberAdded { 
-                member: address,
-                added_by: get_caller_address(),
-                timestamp: get_block_timestamp(),
-            }));
+
+            self
+                .emit(
+                    Event::MemberAdded(
+                        MemberAdded {
+                            member: address,
+                            added_by: get_caller_address(),
+                            timestamp: get_block_timestamp(),
+                        },
+                    ),
+                );
         }
 
         fn disburse_round_contribution(ref self: ComponentState<TContractState>, round_id: u256) {
@@ -376,13 +406,18 @@ pub mod contribution_component {
             IERC20Dispatcher { contract_address: erc20_address }
                 .transfer(round.recipient, round.total_contributions);
 
-            self.emit(Event::RoundDisbursed(RoundDisbursed {
-                round_id, 
-                recipient: round.recipient, 
-                amount: round.total_contributions,
-                contributor_count,
-                timestamp: current_time,
-            }));
+            self
+                .emit(
+                    Event::RoundDisbursed(
+                        RoundDisbursed {
+                            round_id,
+                            recipient: round.recipient,
+                            amount: round.total_contributions,
+                            contributor_count,
+                            timestamp: current_time,
+                        },
+                    ),
+                );
         }
 
         fn remove_member(ref self: ComponentState<TContractState>, address: ContractAddress) {
@@ -409,11 +444,16 @@ pub mod contribution_component {
             self.member_count.write(last_index);
             self.member_index_map.write(address, 0);
 
-            self.emit(Event::MemberRemoved(MemberRemoved { 
-                member: address,
-                removed_by: get_caller_address(),
-                timestamp: get_block_timestamp(),
-            }));
+            self
+                .emit(
+                    Event::MemberRemoved(
+                        MemberRemoved {
+                            member: address,
+                            removed_by: get_caller_address(),
+                            timestamp: get_block_timestamp(),
+                        },
+                    ),
+                );
         }
 
         fn get_round_details(
@@ -438,31 +478,33 @@ pub mod contribution_component {
             let old_amount = self.required_contribution.read();
             self.required_contribution.write(amount);
 
-            self.emit(Event::RequiredContributionUpdated(RequiredContributionUpdated { 
-                old_amount, 
-                new_amount: amount,
-                updated_by: get_caller_address(),
-                timestamp: get_block_timestamp(),
-            }));
+            self
+                .emit(
+                    Event::RequiredContributionUpdated(
+                        RequiredContributionUpdated {
+                            old_amount,
+                            new_amount: amount,
+                            updated_by: get_caller_address(),
+                            timestamp: get_block_timestamp(),
+                        },
+                    ),
+                );
         }
 
         fn get_required_contribution(self: @ComponentState<TContractState>) -> u256 {
             self.required_contribution.read()
         }
-        
+
         // Enhanced functions
         fn get_member_contribution_history(
-            self: @ComponentState<TContractState>, 
-            member: ContractAddress, 
-            limit: u32, 
-            offset: u32
+            self: @ComponentState<TContractState>, member: ContractAddress, limit: u32, offset: u32,
         ) -> Array<MemberContribution> {
             let mut contributions = ArrayTrait::new();
             let total_count = self.member_contribution_count.read(member);
-            
+
             let mut i = offset;
             let mut count = 0;
-            
+
             while i < total_count && count < limit {
                 let round_id = self.member_contribution_history.read((member, i));
                 if round_id > 0 {
@@ -472,86 +514,124 @@ pub mod contribution_component {
                 }
                 i += 1;
             }
-            
+
             contributions
         }
-        
+
         fn get_round_statistics(
-            self: @ComponentState<TContractState>, 
-            round_id: u256
+            self: @ComponentState<TContractState>, round_id: u256,
         ) -> (u256, u32, u32) {
             let round = self.rounds.read(round_id);
             let contributor_count = self.round_contributor_count.read(round_id);
             let member_count = self.member_count.read();
-            
+
             (round.total_contributions, contributor_count, member_count)
         }
-        
+
         fn validate_contribution_eligibility(
-            self: @ComponentState<TContractState>, 
-            member: ContractAddress, 
-            round_id: u256
+            self: @ComponentState<TContractState>, member: ContractAddress, round_id: u256,
         ) -> bool {
             // Check if member exists and is active
             if !self.is_member(member) {
                 return false;
             }
-            
+
             // Check if round is active
             let round = self.rounds.read(round_id);
             if round.status != RoundStatus::Active {
                 return false;
             }
-            
+
             // Check if member already contributed
             let contribution = self.member_contributions.read((round_id, member));
             if contribution.amount > 0 {
                 return false;
             }
-            
+
             // Check if deadline hasn't passed (including grace period)
             let current_time = get_block_timestamp();
             let grace_period = self.grace_period_hours.read() * 3600;
             if current_time > round.deadline + grace_period {
                 return false;
             }
-            
+
             true
         }
-        
-        fn get_next_recipient(self: @ComponentState<TContractState>) -> ContractAddress {
+
+        fn get_next_recipient(ref self: ComponentState<TContractState>) -> ContractAddress {
             let member_count = self.member_count.read();
             if member_count == 0 {
                 return 0.try_into().unwrap();
             }
-            
+
+            // Start scanning from the next index after the current rotation index
             let current_index = self.current_rotation_index.read();
-            let next_index = (current_index + 1) % member_count;
-            
-            self.member_by_index.read(next_index)
+            let start_index = (current_index + 1) % member_count;
+
+            // Scan up to member_count entries to find the first active member
+            let mut scanned = 0_u32;
+            while scanned < member_count {
+                let candidate_index = (start_index + scanned) % member_count;
+                let candidate = self.member_by_index.read(candidate_index);
+                if self.is_member(candidate) {
+                    // Advance rotation to the found active member and return it
+                    self.current_rotation_index.write(candidate_index);
+                    return candidate;
+                }
+                scanned += 1_u32;
+            }
+
+            // If no active member found, return zero address
+            0.try_into().unwrap()
         }
-        
+
         fn advance_round_rotation(ref self: ComponentState<TContractState>) {
             self.is_owner();
-            
+
             let member_count = self.member_count.read();
             if member_count == 0 {
                 return;
             }
-            
+
             let current_index = self.current_rotation_index.read();
-            let new_index = (current_index + 1) % member_count;
-            
-            self.current_rotation_index.write(new_index);
-            
-            let next_recipient = self.member_by_index.read(new_index);
-            
-            self.emit(Event::RoundRotationAdvanced(RoundRotationAdvanced {
-                old_index: current_index,
-                new_index,
-                next_recipient,
-                timestamp: get_block_timestamp(),
-            }));
+            let start_index = (current_index + 1) % member_count;
+
+            // Scan up to member_count entries to find the first active member
+            let mut scanned = 0_u32;
+            let mut found = false;
+            let mut found_index = current_index; // default to current if none found
+            let mut next_recipient: ContractAddress = 0.try_into().unwrap();
+
+            while scanned < member_count {
+                let candidate_index = (start_index + scanned) % member_count;
+                let candidate = self.member_by_index.read(candidate_index);
+                if self.is_member(candidate) {
+                    found = true;
+                    found_index = candidate_index;
+                    next_recipient = candidate;
+                    break;
+                }
+                scanned += 1_u32;
+            }
+
+            // If no active member is found, do not change the index
+            if !found {
+                return;
+            }
+
+            self.current_rotation_index.write(found_index);
+
+            self
+                .emit(
+                    Event::RoundRotationAdvanced(
+                        RoundRotationAdvanced {
+                            old_index: current_index,
+                            new_index: found_index,
+                            next_recipient,
+                            timestamp: get_block_timestamp(),
+                        },
+                    ),
+                );
         }
     }
 

@@ -17,22 +17,22 @@ pub trait IAutoSchedule<TContractState> {
     fn get_scheduled_round(self: @TContractState, round_id: u256) -> ScheduledRound;
     fn get_next_scheduled_rounds(self: @TContractState, count: u8) -> Array<ScheduledRound>;
     fn get_current_rotation_index(self: @TContractState) -> u32;
-    
+
     fn is_auto_schedule_enabled(self: @TContractState) -> bool;
     fn get_rotation_length(self: @TContractState) -> u32;
 }
 
 #[starknet::component]
 pub mod auto_schedule_component {
-    use starknet::{ContractAddress, get_block_timestamp, get_caller_address};
-    use starknet::storage::{
-        Map, StoragePointerReadAccess, StoragePointerWriteAccess, StorageMapReadAccess, StorageMapWriteAccess,
-    };
-
     use core::array::ArrayTrait;
-    use starkremit_contract::base::types::RoundStatus;
-    use super::{AutoScheduleConfig, ScheduledRound, IMainContractData};
+    use starknet::storage::{
+        Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
+        StoragePointerWriteAccess,
+    };
+    use starknet::{ContractAddress, get_block_timestamp, get_caller_address};
     use starkremit_contract::base::errors::AutoScheduleErrors;
+    use starkremit_contract::base::types::RoundStatus;
+    use super::{AutoScheduleConfig, IMainContractData, ScheduledRound};
 
     const SECONDS_PER_DAY: u64 = 86400;
 
@@ -44,6 +44,7 @@ pub mod auto_schedule_component {
         rotation_length: u32,
         current_rotation_index: u32,
         next_round_id: u256,
+        last_processed_round: u256,
         last_processed_timestamp: u64,
         admin: ContractAddress,
     }
@@ -112,6 +113,7 @@ pub mod auto_schedule_component {
     #[derive(Drop, starknet::Event)]
     pub struct ScheduleProcessed {
         rounds_processed: u32,
+        more_work_remaining: bool,
         timestamp: u64,
     }
 
@@ -119,16 +121,19 @@ pub mod auto_schedule_component {
     impl AutoScheduleImpl<
         TContractState, +HasComponent<TContractState>, +IMainContractData<TContractState>,
     > of super::IAutoSchedule<ComponentState<TContractState>> {
-        
         fn get_config(self: @ComponentState<TContractState>) -> AutoScheduleConfig {
             self.config.read()
         }
 
-        fn get_scheduled_round(self: @ComponentState<TContractState>, round_id: u256) -> ScheduledRound {
+        fn get_scheduled_round(
+            self: @ComponentState<TContractState>, round_id: u256,
+        ) -> ScheduledRound {
             self.scheduled_rounds.read(round_id)
         }
 
-        fn get_next_scheduled_rounds(self: @ComponentState<TContractState>, count: u8) -> Array<ScheduledRound> {
+        fn get_next_scheduled_rounds(
+            self: @ComponentState<TContractState>, count: u8,
+        ) -> Array<ScheduledRound> {
             let mut rounds = ArrayTrait::new();
             let current_index = self.current_rotation_index.read();
             let mut rounds_added = 0_u8;
@@ -165,10 +170,9 @@ pub mod auto_schedule_component {
     pub impl InternalImpl<
         TContractState, +HasComponent<TContractState>, +IMainContractData<TContractState>,
     > of InternalTrait<TContractState> {
-        
         fn initializer(ref self: ComponentState<TContractState>, admin: ContractAddress) {
             self.admin.write(admin);
-            
+
             // Set default auto-schedule configuration
             let default_config = AutoScheduleConfig {
                 round_duration_days: 30,
@@ -178,20 +182,26 @@ pub mod auto_schedule_component {
                 rolling_schedule_count: 3,
             };
             self.config.write(default_config);
-            
+
             // Initialize rotation system
             self.rotation_length.write(0);
             self.current_rotation_index.write(0);
             self.next_round_id.write(1);
+            self.last_processed_round.write(1);
             self.last_processed_timestamp.write(get_block_timestamp());
-            
-            self.emit(Event::AutoScheduleSetup(AutoScheduleSetup {
-                admin,
-                start_date: default_config.start_date,
-                round_duration_days: default_config.round_duration_days,
-                rolling_schedule_count: default_config.rolling_schedule_count,
-                timestamp: get_block_timestamp(),
-            }));
+
+            self
+                .emit(
+                    Event::AutoScheduleSetup(
+                        AutoScheduleSetup {
+                            admin,
+                            start_date: default_config.start_date,
+                            round_duration_days: default_config.round_duration_days,
+                            rolling_schedule_count: default_config.rolling_schedule_count,
+                            timestamp: get_block_timestamp(),
+                        },
+                    ),
+                );
         }
 
         // Internal function to assert that the caller is the admin
@@ -202,23 +212,30 @@ pub mod auto_schedule_component {
         }
 
         // Complex operations that will be called by the main contract
-        fn _setup_auto_schedule(ref self: ComponentState<TContractState>, config: AutoScheduleConfig) {
+        fn _setup_auto_schedule(
+            ref self: ComponentState<TContractState>, config: AutoScheduleConfig,
+        ) {
             self._assert_admin();
-            
+
             let old_config = self.config.read();
             self.config.write(config);
-            
+
             // Initialize member rotation if not already set
             if self.rotation_length.read() == 0 {
                 self._initialize_member_rotation();
             }
-            
-            self.emit(Event::ConfigUpdated(ConfigUpdated {
-                old_config,
-                new_config: config,
-                updated_by: get_caller_address(),
-                timestamp: get_block_timestamp(),
-            }));
+
+            self
+                .emit(
+                    Event::ConfigUpdated(
+                        ConfigUpdated {
+                            old_config,
+                            new_config: config,
+                            updated_by: get_caller_address(),
+                            timestamp: get_block_timestamp(),
+                        },
+                    ),
+                );
         }
 
         fn _maintain_rolling_schedule(ref self: ComponentState<TContractState>) {
@@ -240,7 +257,8 @@ pub mod auto_schedule_component {
 
                 // Calculate timing for the new round
                 let round_duration_seconds: u64 = config.round_duration_days * SECONDS_PER_DAY;
-                let round_start = config.start_date + ((current_index - 1_u256).try_into().unwrap() * round_duration_seconds);
+                let round_start = config.start_date
+                    + ((current_index - 1_u256).try_into().unwrap() * round_duration_seconds);
                 let round_deadline = round_start + round_duration_seconds;
 
                 // Determine recipient by rotating through the member list
@@ -263,11 +281,16 @@ pub mod auto_schedule_component {
             self.next_round_id.write(current_index);
             self.last_processed_timestamp.write(current_time);
 
-            self.emit(Event::ScheduleMaintained(ScheduleMaintained {
-                rounds_created: rounds_created.try_into().unwrap(),
-                last_maintenance_timestamp: current_time,
-                timestamp: get_block_timestamp(),
-            }));
+            self
+                .emit(
+                    Event::ScheduleMaintained(
+                        ScheduleMaintained {
+                            rounds_created: rounds_created.try_into().unwrap(),
+                            last_maintenance_timestamp: current_time,
+                            timestamp: get_block_timestamp(),
+                        },
+                    ),
+                );
         }
 
         fn _auto_activate_round(ref self: ComponentState<TContractState>, round_id: u256) {
@@ -281,83 +304,139 @@ pub mod auto_schedule_component {
                 scheduled_round.status = RoundStatus::Active;
                 self.scheduled_rounds.write(round_id, scheduled_round);
 
-                self.emit(Event::RoundAutoActivated(RoundAutoActivated {
-                    round_id,
-                    recipient: scheduled_round.recipient,
-                    scheduled_start: scheduled_round.scheduled_start,
-                    scheduled_deadline: scheduled_round.scheduled_deadline,
-                    timestamp: get_block_timestamp(),
-                }));
+                self
+                    .emit(
+                        Event::RoundAutoActivated(
+                            RoundAutoActivated {
+                                round_id,
+                                recipient: scheduled_round.recipient,
+                                scheduled_start: scheduled_round.scheduled_start,
+                                scheduled_deadline: scheduled_round.scheduled_deadline,
+                                timestamp: get_block_timestamp(),
+                            },
+                        ),
+                    );
             }
         }
 
-        fn _auto_complete_expired_rounds(ref self: ComponentState<TContractState>) {
+        fn _auto_complete_expired_rounds(
+            ref self: ComponentState<TContractState>, max_iterations: u32,
+        ) -> (u32, bool) {
             let config = self.config.read();
             if !config.auto_completion_enabled {
-                return;
+                return (0, false);
             }
 
             let current_time = get_block_timestamp();
-            let mut rounds_processed = 0;
+            let mut rounds_processed = 0_u32;
 
-            // Check all scheduled rounds for expiration
-            let mut i = 1_u256;
-            while i <= self.next_round_id.read() {
+            // Determine batch limit
+            let default_limit: u32 = 50;
+            let limit: u32 = if max_iterations == 0 {
+                default_limit
+            } else {
+                max_iterations
+            };
+
+            // Iterate starting from the last processed cursor with wrap-around
+            let next_round_id = self.next_round_id.read();
+            if next_round_id == 0_u256 {
+                return (0, false);
+            }
+            let mut i = self.last_processed_round.read();
+            if i < 1_u256 {
+                i = 1_u256;
+            }
+
+            let mut iterated: u32 = 0;
+            while i <= next_round_id && iterated < limit {
                 let mut scheduled_round = self.scheduled_rounds.read(i);
 
                 if scheduled_round.status == RoundStatus::Active
                     && scheduled_round.scheduled_deadline <= current_time {
                     scheduled_round.status = RoundStatus::Completed;
                     self.scheduled_rounds.write(i, scheduled_round);
-                    rounds_processed += 1;
+                    rounds_processed += 1_u32;
 
-                    self.emit(Event::RoundAutoCompleted(RoundAutoCompleted {
-                        round_id: i,
-                        completed_at: current_time,
-                        timestamp: get_block_timestamp(),
-                    }));
+                    self
+                        .emit(
+                            Event::RoundAutoCompleted(
+                                RoundAutoCompleted {
+                                    round_id: i,
+                                    completed_at: current_time,
+                                    timestamp: get_block_timestamp(),
+                                },
+                            ),
+                        );
                 }
-                i += 1;
+                i += 1_u256;
+                iterated += 1_u32;
             }
 
-            if rounds_processed > 0 {
-                self.emit(Event::ScheduleProcessed(ScheduleProcessed {
-                    rounds_processed,
-                    timestamp: get_block_timestamp(),
-                }));
+            // Update cursor: wrap to 1 if we've reached the end
+            let mut more_work_remaining = false;
+            if i <= next_round_id {
+                more_work_remaining = true;
+                self.last_processed_round.write(i);
+            } else {
+                self.last_processed_round.write(1);
             }
+
+            self
+                .emit(
+                    Event::ScheduleProcessed(
+                        ScheduleProcessed {
+                            rounds_processed, more_work_remaining, timestamp: get_block_timestamp(),
+                        },
+                    ),
+                );
+
+            (rounds_processed, more_work_remaining)
         }
 
-        fn _modify_schedule(ref self: ComponentState<TContractState>, round_id: u256, new_deadline: u64) {
+        fn _modify_schedule(
+            ref self: ComponentState<TContractState>, round_id: u256, new_deadline: u64,
+        ) {
             self._assert_admin();
 
             let mut scheduled_round = self.scheduled_rounds.read(round_id);
             let old_deadline = scheduled_round.scheduled_deadline;
 
             // Validate new deadline
-            assert(new_deadline > get_block_timestamp(), AutoScheduleErrors::NEW_DEADLINE_NOT_IN_FUTURE);
-            assert(new_deadline > scheduled_round.scheduled_start, AutoScheduleErrors::NEW_DEADLINE_NOT_AFTER_START);
+            assert(
+                new_deadline > get_block_timestamp(),
+                AutoScheduleErrors::NEW_DEADLINE_NOT_IN_FUTURE,
+            );
+            assert(
+                new_deadline > scheduled_round.scheduled_start,
+                AutoScheduleErrors::NEW_DEADLINE_NOT_AFTER_START,
+            );
 
             scheduled_round.scheduled_deadline = new_deadline;
             self.scheduled_rounds.write(round_id, scheduled_round);
 
-            self.emit(Event::RoundScheduleModified(RoundScheduleModified {
-                round_id,
-                old_deadline,
-                new_deadline,
-                modified_by: get_caller_address(),
-                timestamp: get_block_timestamp(),
-            }));
+            self
+                .emit(
+                    Event::RoundScheduleModified(
+                        RoundScheduleModified {
+                            round_id,
+                            old_deadline,
+                            new_deadline,
+                            modified_by: get_caller_address(),
+                            timestamp: get_block_timestamp(),
+                        },
+                    ),
+                );
         }
 
         // Helper functions
         fn _initialize_member_rotation(ref self: ComponentState<TContractState>) {
             let contract_state = self.get_contract();
             let member_count = contract_state.get_member_count();
-            
+
             if member_count > 0 {
                 self.rotation_length.write(member_count);
-                
+
                 // Populate rotation array
                 let mut i = 0;
                 while i < member_count {
@@ -375,13 +454,13 @@ pub mod auto_schedule_component {
             }
 
             let current_index = self.current_rotation_index.read();
+            let recipient = self.member_rotation.read(current_index);
             let next_index = (current_index + 1_u32) % rotation_length;
-            
-            // Update rotation index
+
+            // Update rotation index after selecting the recipient
             self.current_rotation_index.write(next_index);
-            
-            self.member_rotation.read(next_index)
+
+            recipient
         }
     }
-
 }

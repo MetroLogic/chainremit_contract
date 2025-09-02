@@ -1,5 +1,5 @@
 use starknet::ContractAddress;
-use starkremit_contract::base::types::*;
+use starkremit_contract::base::types::{*, MemberProfileData};
 
 #[starknet::interface]
 pub trait IStarkRemit<TContractState> {
@@ -280,6 +280,7 @@ pub trait IStarkRemit<TContractState> {
     fn emergency_set_pause_meta(ref self: TContractState, reason: felt252);
     fn emergency_set_ban(ref self: TContractState, member: ContractAddress, banned: bool);
 
+
     // Penalty Management Functions
     fn apply_late_fee(ref self: TContractState, member: ContractAddress, round_id: u256);
     fn add_strike(ref self: TContractState, member: ContractAddress, round_id: u256);
@@ -292,7 +293,7 @@ pub trait IStarkRemit<TContractState> {
     fn setup_auto_schedule(ref self: TContractState, config: AutoScheduleConfig);
     fn maintain_rolling_schedule(ref self: TContractState);
     fn auto_activate_round(ref self: TContractState, round_id: u256);
-    fn auto_complete_expired_rounds(ref self: TContractState);
+    fn auto_complete_expired_rounds(ref self: TContractState, max_iterations: u32) -> (u32, bool);
     fn modify_schedule(ref self: TContractState, round_id: u256, new_deadline: u64);
 
     // Payment Flexibility Functions
@@ -308,14 +309,26 @@ pub trait IStarkRemit<TContractState> {
         member: ContractAddress,
         round_id: u256,
         amount: u256,
+        token: ContractAddress,
     ) -> (u256, u256);
-    fn extend_grace_period(
-        ref self: TContractState,
-        member: ContractAddress,
-        extension_hours: u64,
-    );
+    fn extend_grace_period(ref self: TContractState, member: ContractAddress, extension_hours: u64);
     fn add_supported_token(ref self: TContractState, token: ContractAddress);
     fn remove_supported_token(ref self: TContractState, token: ContractAddress);
     fn update_payment_config(ref self: TContractState, config: PaymentConfig);
     fn process_auto_payments(ref self: TContractState);
+
+    // Contribution wrapper to centralize analytics update
+    fn contribute_round(ref self: TContractState, round_id: u256, amount: u256);
+
+    // Member Profile Functions
+    fn create_member_profile(ref self: TContractState, member: ContractAddress);
+    fn update_reliability_rating(ref self: TContractState, member: ContractAddress, new_rating: u8);
+    fn get_member_profile(self: @TContractState, member: ContractAddress) -> MemberProfileData;
+    fn add_to_waitlist(ref self: TContractState, member: ContractAddress);
+    fn remove_from_waitlist(ref self: TContractState, member: ContractAddress) -> bool;
+    fn get_waitlist_position(self: @TContractState, member: ContractAddress) -> u32;
+    fn update_communication_preferences(
+        ref self: TContractState, member: ContractAddress, preferences: felt252,
+    );
+    fn send_member_message(ref self: TContractState, member: ContractAddress, message: felt252);
 }

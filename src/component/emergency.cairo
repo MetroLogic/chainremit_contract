@@ -7,7 +7,6 @@ pub struct EmergencyConfig {
 }
 
 
-
 #[starknet::interface]
 pub trait IEmergency<TContractState> {
     // Configuration and query functions (simple operations)
@@ -17,24 +16,24 @@ pub trait IEmergency<TContractState> {
     fn get_pause_timestamp(self: @TContractState) -> u64;
     fn is_paused(self: @TContractState) -> bool;
     fn is_banned(self: @TContractState, member: ContractAddress) -> bool;
-    
+
     // Utility functions (simple operations)
     fn assert_paused(self: @TContractState);
     fn assert_not_paused(self: @TContractState);
 }
 
 
-
 #[starknet::component]
 pub mod emergency_component {
-    use starknet::{ContractAddress, get_block_timestamp, get_caller_address};
     use starknet::storage::{
-        Map, StoragePointerReadAccess, StoragePointerWriteAccess, StorageMapReadAccess, StorageMapWriteAccess,
+        Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
+        StoragePointerWriteAccess,
     };
-    use super::EmergencyConfig; 
-    use starkremit_contract::base::errors::{EmergencyComponentErrors};
+    use starknet::{ContractAddress, get_block_timestamp, get_caller_address};
+    use starkremit_contract::base::errors::EmergencyComponentErrors;
+    use super::EmergencyConfig;
 
-    
+
     #[storage]
     pub struct Storage {
         is_paused: bool,
@@ -45,7 +44,7 @@ pub mod emergency_component {
         config: EmergencyConfig,
     }
 
-    
+
     #[event]
     #[derive(Drop, starknet::Event)]
     pub enum Event {
@@ -94,8 +93,6 @@ pub mod emergency_component {
     impl EmergencyImpl<
         TContractState, +HasComponent<TContractState>,
     > of super::IEmergency<ComponentState<TContractState>> {
-
-
         fn get_pause_reason(self: @ComponentState<TContractState>) -> felt252 {
             self.pause_reason.read()
         }
@@ -105,14 +102,13 @@ pub mod emergency_component {
         }
 
 
-
         fn is_banned(self: @ComponentState<TContractState>, member: ContractAddress) -> bool {
             self.banned_members.read(member)
         }
 
         fn set_config(ref self: ComponentState<TContractState>, cfg: EmergencyConfig) {
-            self._assert_admin(); 
-            assert(!self.is_paused.read(), EmergencyComponentErrors::CONTRACT_PAUSED); 
+            self._assert_admin();
+            assert(!self.is_paused.read(), EmergencyComponentErrors::CONTRACT_PAUSED);
             self.config.write(cfg);
         }
 
@@ -141,9 +137,7 @@ pub mod emergency_component {
             self.emergency_admin.write(admin);
             self.is_paused.write(false); // Component starts unpaused by default
             // Initialize config to default values
-            self.config.write(
-                EmergencyConfig { emergency_cooldown: 0, required_approvals: 0 }
-            );
+            self.config.write(EmergencyConfig { emergency_cooldown: 0, required_approvals: 0 });
             self.emit(Event::Initialized(Initialized { admin }));
         }
 
@@ -179,7 +173,6 @@ pub mod emergency_component {
         fn _pause_with_metadata(ref self: ComponentState<TContractState>, reason: felt252) {
             assert(!self.is_paused.read(), EmergencyComponentErrors::ALREADY_PAUSED);
             self.pause_reason.write(reason);
-            self.pause_timestamp.write(get_block_timestamp());
             self._toggle_pause(true);
         }
 
@@ -196,7 +189,9 @@ pub mod emergency_component {
             self.pause_timestamp.write(get_block_timestamp());
         }
 
-        fn _set_ban(ref self: ComponentState<TContractState>, member: ContractAddress, banned: bool) {
+        fn _set_ban(
+            ref self: ComponentState<TContractState>, member: ContractAddress, banned: bool,
+        ) {
             assert(!self.is_paused.read(), EmergencyComponentErrors::CONTRACT_PAUSED);
             self.banned_members.write(member, banned);
         }

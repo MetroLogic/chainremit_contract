@@ -1,6 +1,6 @@
-use starknet::ContractAddress;
+use core::array::{Array, ArrayTrait};
 use core::serde::Serde;
-use core::array::{ArrayTrait, Array};
+use starknet::ContractAddress;
 
 
 /// User profile structure containing user information
@@ -217,6 +217,8 @@ pub struct ContributionRound {
     pub recipient: ContractAddress,
     /// Deadline for contributions
     pub deadline: u64,
+    /// Timestamp when the round was actually completed (0 if not completed)
+    pub completed_at: u64,
     /// Total contributions collected
     pub total_contributions: u256,
     /// Current status of the round
@@ -326,22 +328,22 @@ pub struct ParameterHistory {
 // Penalty configuration structure
 #[derive(Copy, Drop, Serde, starknet::Store)]
 pub struct PenaltyConfig {
-    pub late_fee_percentage: u256,        // Late fee as basis points (e.g., 250 = 2.5%)
-    pub grace_period_hours: u64,          // Grace period before late fees apply
-    pub max_strikes: u32,                 // Maximum strikes before automatic ban
+    pub late_fee_percentage: u256, // Late fee as basis points (e.g., 250 = 2.5%)
+    pub grace_period_hours: u64, // Grace period before late fees apply
+    pub max_strikes: u32, // Maximum strikes before automatic ban
     pub security_deposit_multiplier: u256, // Security deposit amount in tokens
-    pub penalty_pool_enabled: bool,       // Whether penalty pool distribution is enabled
+    pub penalty_pool_enabled: bool // Whether penalty pool distribution is enabled
 }
 
 // Member penalty record structure
 #[derive(Copy, Drop, Serde, starknet::Store)]
 pub struct MemberPenaltyRecord {
-    pub total_penalties_paid: u256,       // Total penalties paid by member
-    pub strikes: u32,                     // Current strike count
-    pub is_banned: bool,                  // Whether member is currently banned
-    pub last_penalty_date: u64,           // Timestamp of last penalty
-    pub last_strike_date: u64,            // Timestamp of last strike
-    pub total_rounds_missed: u32,         // Total rounds where contribution was missed
+    pub total_penalties_paid: u256, // Total penalties paid by member
+    pub strikes: u32, // Current strike count
+    pub is_banned: bool, // Whether member is currently banned
+    pub last_penalty_date: u64, // Timestamp of last penalty
+    pub last_strike_date: u64, // Timestamp of last strike
+    pub total_rounds_missed: u32 // Total rounds where contribution was missed
 }
 
 #[derive(Copy, Drop, Serde, starknet::Store)]
@@ -366,29 +368,29 @@ pub struct ScheduledRound {
 // Penalty event structure for history tracking
 #[derive(Copy, Drop, Serde, starknet::Store)]
 pub struct PenaltyEventRecord {
-    pub member: ContractAddress,          // Member who received penalty
-    pub round_id: u256,                   // Round where penalty occurred
-    pub event_type: PenaltyEventType,     // Type of penalty event
-    pub amount: u256,                     // Penalty amount
-    pub timestamp: u64,                   // When penalty occurred
-    pub admin: ContractAddress,           // Admin who applied penalty
+    pub member: ContractAddress, // Member who received penalty
+    pub round_id: u256, // Round where penalty occurred
+    pub event_type: PenaltyEventType, // Type of penalty event
+    pub amount: u256, // Penalty amount
+    pub timestamp: u64, // When penalty occurred
+    pub admin: ContractAddress // Admin who applied penalty
 }
 
 // Distribution data structure for penalty pool distribution
 // Note: This struct is not stored, only used for calculations
 #[derive(Clone, Drop, Serde)]
 pub struct DistributionData {
-    pub total_amount: u256,               // Total penalty pool amount
+    pub total_amount: u256, // Total penalty pool amount
     pub member_shares: Array<MemberShare>, // Array of member shares
-    pub total_compliant_contributions: u256, // Total contributions from compliant members
+    pub total_compliant_contributions: u256 // Total contributions from compliant members
 }
 
 // Individual member share structure
 #[derive(Copy, Drop, Serde, starknet::Store)]
 pub struct MemberShare {
-    pub member: ContractAddress,          // Member address
-    pub share: u256,                      // Share amount to receive
-    pub contribution: u256,               // Member's total contribution
+    pub member: ContractAddress, // Member address
+    pub share: u256, // Share amount to receive
+    pub contribution: u256 // Member's total contribution
 }
 
 // Penalty event types
@@ -405,6 +407,156 @@ pub enum PenaltyEventType {
 #[derive(Copy, Drop, starknet::Store)]
 pub struct RoundData {
     pub deadline: u64,
+    pub completed_at: u64,
     pub status: RoundStatus,
     pub total_contributions: u256,
+}
+
+// Data structures for payment flexibility functionality
+#[derive(Copy, Drop, Serde, starknet::Store)]
+pub struct PaymentConfig {
+    pub grace_period_hours: u64,
+    pub early_payment_discount_basis_points: u256, // E.g., 500 for 5%
+    pub auto_payment_enabled: bool,
+    pub usd_oracle_address: ContractAddress,
+    pub max_grace_period_extension: u64, // Maximum extension in hours
+    pub min_early_payment_days: u64 // Minimum days before deadline for early payment
+}
+
+#[derive(Copy, Drop, Serde, starknet::Store)]
+pub enum PaymentFrequency {
+    Once,
+    Daily,
+    Weekly,
+    Monthly,
+}
+
+#[derive(Copy, Drop, Serde, starknet::Store)]
+pub struct AutoPaymentSetup {
+    pub member: ContractAddress,
+    pub token: ContractAddress,
+    pub amount: u256,
+    pub frequency: PaymentFrequency,
+    pub next_payment_date: u64,
+    pub is_active: bool,
+    pub created_at: u64,
+    pub last_payment_date: u64,
+}
+
+#[derive(Copy, Drop, Serde, starknet::Store)]
+pub enum PaymentStatus {
+    Pending,
+    Paid,
+    Late,
+    Missed,
+    PaidAfterGrace,
+    Overpaid,
+    Early,
+}
+
+#[derive(Copy, Drop, Serde, starknet::Store)]
+pub struct PaymentRecord {
+    pub member: ContractAddress,
+    pub round_id: u256,
+    pub amount: u256,
+    pub token: ContractAddress,
+    pub payment_date: u64,
+    pub status: PaymentStatus,
+    pub is_early_payment: bool,
+    pub discount_applied: u256,
+    pub grace_period_used: u64,
+}
+
+#[derive(Copy, Drop, Serde, starknet::Store)]
+pub struct EarlyPaymentInfo {
+    pub member: ContractAddress,
+    pub round_id: u256,
+    pub original_amount: u256,
+    pub discount_amount: u256,
+    pub final_amount: u256,
+    pub payment_date: u64,
+}
+
+// Data structures for analytics functionality
+#[derive(Copy, Drop, Serde, starknet::Store)]
+pub struct ContributionAnalytics {
+    pub total_rounds: u256,
+    pub successful_rounds: u256,
+    pub failed_rounds: u256,
+    pub average_completion_time: u64,
+    pub total_penalties_collected: u256,
+    pub total_contributions: u256,
+    pub last_updated: u64,
+}
+
+#[derive(Copy, Drop, Serde, starknet::Store)]
+pub struct MemberAnalytics {
+    pub total_contributions: u256,
+    pub on_time_payments: u256,
+    pub late_payments: u256,
+    pub missed_payments: u256,
+    pub reliability_score: u8,
+    pub last_updated: u64,
+    pub average_contribution_amount: u256,
+    pub total_rounds_participated: u256,
+}
+
+#[derive(Copy, Drop, Serde, starknet::Store)]
+pub struct RoundPerformanceMetrics {
+    pub round_id: u256,
+    pub completion_rate: u8,
+    pub average_delay: u64,
+    pub total_fees_collected: u256,
+    pub success_status: RoundSuccessStatus,
+    pub total_contributions: u256,
+    pub participant_count: u32,
+    pub completion_time: u64,
+}
+
+#[derive(Copy, Drop, Serde, starknet::Store)]
+pub enum RoundSuccessStatus {
+    Outstanding,
+    Good,
+    Average,
+    Poor,
+    Failed,
+}
+
+#[derive(Copy, Drop, Serde, starknet::Store)]
+pub struct FinancialReport {
+    pub period_start: u64,
+    pub period_end: u64,
+    pub total_contributions: u256,
+    pub total_fees_collected: u256,
+    pub total_penalties_collected: u256,
+    pub active_members: u32,
+    pub rounds_completed: u32,
+    pub average_round_completion_time: u64,
+    pub system_uptime_percentage: u8,
+}
+
+#[derive(Copy, Drop, Serde, starknet::Store)]
+pub struct SystemHealthMetrics {
+    pub system_uptime_percentage: u8,
+    pub active_rounds: u32,
+    pub total_locked_value: u256,
+    pub security_score: u8,
+    pub member_satisfaction_score: u8,
+    pub last_health_check: u64,
+}
+
+/// Member profile structure for savings group members
+#[derive(Copy, Drop, Serde, starknet::Store)]
+pub struct MemberProfileData {
+    pub join_date: u64,
+    pub total_contributions: u256,
+    pub missed_contributions: u8,
+    pub credit_score: u8,
+    pub last_recipient_round: u256,
+    pub reliability_rating: u8,
+    pub preferred_payment_method: felt252,
+    pub communication_preferences: felt252,
+    pub is_on_waitlist: bool,
+    pub waitlist_position: u32,
+    pub last_message_timestamp: u64,
 }

@@ -391,7 +391,6 @@ pub mod AutoScheduleErrors {
     pub const NEW_DEADLINE_NOT_IN_FUTURE: felt252 = 'AutoSchedule: not future';
     /// Error triggered when new deadline is not after start
     pub const NEW_DEADLINE_NOT_AFTER_START: felt252 = 'AutoSchedule: not after start';
-
 }
 
 pub mod ContributionErrors {
@@ -446,4 +445,34 @@ pub mod PaymentFlexibilityErrors {
     pub const AUTO_PAYMENT_ACTIVE: felt252 = 'Payment: already active';
     /// Error triggered when frequency is invalid
     pub const INVALID_FREQUENCY: felt252 = 'Payment: invalid frequency';
+}
+
+pub mod AnalyticsComponentErrors {
+    /// Error triggered when caller is not an Admin or higher
+    pub const NOT_ADMIN: felt252 = 'Analytics: not admin';
+    /// Error triggered when analytics is disabled
+    pub const ANALYTICS_DISABLED: felt252 = 'Analytics: disabled';
+    /// Error triggered when member not found
+    pub const MEMBER_NOT_FOUND: felt252 = 'Analytics: member not found';
+    /// Error triggered when round not found
+    pub const ROUND_NOT_FOUND: felt252 = 'Analytics: round not found';
+    /// Error triggered when period is invalid
+    pub const INVALID_PERIOD: felt252 = 'Analytics: invalid period';
+    /// Error triggered when insufficient data
+    pub const INSUFFICIENT_DATA: felt252 = 'Analytics: insufficient data';
+}
+
+pub mod MemberProfileComponentErrors {
+    /// Error triggered when caller is not an Admin or higher
+    pub const NOT_ADMIN: felt252 = 'MemberProfile: not admin';
+    /// Error triggered when profile not found
+    pub const PROFILE_NOT_FOUND: felt252 = 'MemberProfile: invalid profile';
+    /// Error triggered when profile already exists
+    pub const PROFILE_ALREADY_EXISTS: felt252 = 'MemberProfile: profile exists';
+    /// Error triggered when rating is invalid
+    pub const INVALID_RATING: felt252 = 'MemberProfile: invalid rating';
+    /// Error triggered when preferences are invalid
+    pub const INVALID_PREFERENCES: felt252 = 'MemberProfile: invalid pref';
+    /// Error triggered when member not on waitlist
+    pub const MEMBER_NOT_ON_WAITLIST: felt252 = 'MemberProfile: not on waitlist';
 }

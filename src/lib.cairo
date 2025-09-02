@@ -29,9 +29,9 @@ pub mod component {
         pub mod test;
     }
     pub mod emergency;
-    pub mod penalty;
     pub mod kyc;
     pub mod loan;
+    pub mod penalty;
     pub mod savings_group;
     pub mod token_management;
     pub mod transfer;
@@ -40,8 +40,8 @@ pub mod component {
         pub mod test;
         pub mod user_management;
     }
+    pub mod analytics;
     pub mod auto_schedule;
     pub mod member_profile;
     pub mod payment_flexibility;
-    pub mod analytics;
 }
