@@ -33,7 +33,7 @@ pub mod StarkRemit {
     use starkremit_contract::component::kyc::kyc_component;
     use starkremit_contract::component::loan::loan_component;
     use starkremit_contract::component::savings_group::savings_group_component;
-    use starkremit_contract::component::token_management::token_management_component;
+    use starkremit_contract::component::token_management::token_management::token_management_component;
     use starkremit_contract::component::transfer::transfer_component;
     use starkremit_contract::component::user_management::user_management::user_management_component;
     use super::*;
