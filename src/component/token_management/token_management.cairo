@@ -45,6 +45,10 @@ pub mod token_management_component {
     use starkremit_contract::utils::helpers::{assert_non_zero_amount, assert_not_zero_address};
     use super::*;
 
+    // Constant for unlimited allowance
+    const UNLIMITED_ALLOWANCE: u256 =
+        0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
+
     #[storage]
     pub struct Storage {
         // ERC20 Standard Fields
@@ -55,7 +59,7 @@ pub mod token_management_component {
         balances: Map<ContractAddress, u256>,
         allowances: Map<(ContractAddress, ContractAddress), u256>,
         // Token Management Fields
-        max_supply: u256,
+        max_supply: u256, // 0 = unlimited supply
         minters: Map<ContractAddress, bool>,
         // Access Control Fields
         owner: ContractAddress,
@@ -79,66 +83,95 @@ pub mod token_management_component {
 
     #[derive(Drop, starknet::Event)]
     pub struct Transfer {
-        from: ContractAddress,
-        to: ContractAddress,
-        value: u256,
+        #[key]
+        pub from: ContractAddress,
+        #[key]
+        pub to: ContractAddress,
+        pub value: u256,
     }
 
     #[derive(Drop, starknet::Event)]
     pub struct Approval {
-        owner: ContractAddress,
-        spender: ContractAddress,
-        value: u256,
+        #[key]
+        pub owner: ContractAddress,
+        #[key]
+        pub spender: ContractAddress,
+        pub value: u256,
     }
 
     #[derive(Drop, starknet::Event)]
     pub struct Minted {
-        to: ContractAddress,
-        amount: u256,
+        #[key]
+        pub to: ContractAddress,
+        pub amount: u256,
     }
 
     #[derive(Drop, starknet::Event)]
     pub struct Burned {
-        from: ContractAddress,
-        amount: u256,
+        #[key]
+        pub from: ContractAddress,
+        pub amount: u256,
     }
 
     #[derive(Drop, starknet::Event)]
     pub struct MinterAdded {
-        minter: ContractAddress,
+        #[key]
+        pub minter: ContractAddress,
+        #[key]
+        pub added_by: ContractAddress,
     }
 
     #[derive(Drop, starknet::Event)]
     pub struct MinterRemoved {
-        minter: ContractAddress,
+        #[key]
+        pub minter: ContractAddress,
+        #[key]
+        pub removed_by: ContractAddress,
     }
 
     #[derive(Drop, starknet::Event)]
     pub struct MaxSupplyUpdated {
-        old_max_supply: u256,
-        new_max_supply: u256,
+        #[key]
+        pub old_max_supply: u256,
+        #[key]
+        pub new_max_supply: u256,
     }
 
     #[derive(Drop, starknet::Event)]
     pub struct OwnershipTransferred {
-        previous_owner: ContractAddress,
-        new_owner: ContractAddress,
+        #[key]
+        pub previous_owner: ContractAddress,
+        #[key]
+        pub new_owner: ContractAddress,
     }
 
     #[derive(Drop, starknet::Event)]
     pub struct Paused {
-        account: ContractAddress,
+        #[key]
+        pub account: ContractAddress,
     }
 
     #[derive(Drop, starknet::Event)]
     pub struct Unpaused {
-        account: ContractAddress,
+        #[key]
+        pub account: ContractAddress,
     }
 
     #[generate_trait]
     pub impl InternalImpl<
         TContractState, +HasComponent<TContractState>,
     > of InternalTrait<TContractState> {
+        fn initializer(
+            ref self: ComponentState<TContractState>,
+            name: felt252,
+            symbol: felt252,
+            owner: ContractAddress,
+        ) {
+            self.name.write(name);
+            self.symbol.write(symbol);
+            self.owner.write(owner);
+        }
+
         fn _transfer(
             ref self: ComponentState<TContractState>,
             from: ContractAddress,
@@ -164,6 +197,11 @@ pub mod token_management_component {
 
         fn _assert_not_paused(self: @ComponentState<TContractState>) {
             assert(!self.paused.read(), MintBurnErrors::CONTRACT_PAUSED);
+        }
+
+        fn _assert_only_minter(self: @ComponentState<TContractState>) {
+            let caller = get_caller_address();
+            assert(self.minters.read(caller), MintBurnErrors::NOT_MINTER);
         }
     }
 
@@ -204,6 +242,8 @@ pub mod token_management_component {
             assert_non_zero_amount(value);
 
             let caller = get_caller_address();
+
+            // Use internal _transfer function (no duplicate logic)
             self._transfer(caller, to, value);
             true
         }
@@ -239,12 +279,15 @@ pub mod token_management_component {
 
             let caller = get_caller_address();
             let allowance = self.allowances.read((from, caller));
-            assert(allowance >= value, MintBurnErrors::INSUFFICIENT_ALLOWANCE);
 
-            // Update allowance
-            self.allowances.write((from, caller), allowance - value);
+            // Check allowance (skip for unlimited allowance)
+            if allowance != UNLIMITED_ALLOWANCE {
+                assert(allowance >= value, MintBurnErrors::INSUFFICIENT_ALLOWANCE);
+                // Update allowance
+                self.allowances.write((from, caller), allowance - value);
+            }
 
-            // Perform transfer
+            // Perform transfer using internal function
             self._transfer(from, to, value);
             true
         }
@@ -267,12 +310,16 @@ pub mod token_management_component {
             assert_not_zero_address(to);
             assert_non_zero_amount(amount);
 
-            let caller = get_caller_address();
-            assert(self.minters.read(caller), MintBurnErrors::NOT_MINTER);
+            // Check minter permission
+            self._assert_only_minter();
 
             let supply = self.total_supply.read();
             let max_supply = self.max_supply.read();
-            assert(supply + amount <= max_supply, MintBurnErrors::MAX_SUPPLY_EXCEEDED);
+
+            // Check max supply (0 means unlimited)
+            if max_supply != 0 {
+                assert(supply + amount <= max_supply, MintBurnErrors::MAX_SUPPLY_EXCEEDED);
+            }
 
             // Update total supply
             self.total_supply.write(supply + amount);
@@ -305,8 +352,8 @@ pub mod token_management_component {
             assert_not_zero_address(from);
             assert_non_zero_amount(amount);
 
-            let caller = get_caller_address();
-            assert(self.minters.read(caller), MintBurnErrors::NOT_MINTER);
+            // Check minter permission
+            self._assert_only_minter();
 
             let from_balance = self.balances.read(from);
             assert(from_balance >= amount, MintBurnErrors::INSUFFICIENT_BALANCE_BURN);
@@ -338,8 +385,9 @@ pub mod token_management_component {
             self._assert_only_owner();
             assert_not_zero_address(minter);
 
+            let caller = get_caller_address();
             self.minters.write(minter, true);
-            self.emit(Event::MinterAdded(MinterAdded { minter }));
+            self.emit(Event::MinterAdded(MinterAdded { minter, added_by: caller }));
             true
         }
 
@@ -349,19 +397,24 @@ pub mod token_management_component {
             self._assert_only_owner();
             assert_not_zero_address(minter);
 
+            let caller = get_caller_address();
             self.minters.write(minter, false);
-            self.emit(Event::MinterRemoved(MinterRemoved { minter }));
+            self.emit(Event::MinterRemoved(MinterRemoved { minter, removed_by: caller }));
             true
         }
 
         fn set_max_supply(ref self: ComponentState<TContractState>, new_max_supply: u256) -> bool {
             self._assert_only_owner();
-            assert_non_zero_amount(new_max_supply);
 
             let current_supply = self.total_supply.read();
-            assert(new_max_supply >= current_supply, MintBurnErrors::MAX_SUPPLY_TOO_LOW);
+
+            // If setting non-zero max supply, ensure it's >= current supply
+            if new_max_supply != 0 {
+                assert(new_max_supply >= current_supply, MintBurnErrors::MAX_SUPPLY_TOO_LOW);
+            }
 
             let old_max_supply = self.max_supply.read();
+            let caller = get_caller_address();
             self.max_supply.write(new_max_supply);
 
             self.emit(Event::MaxSupplyUpdated(MaxSupplyUpdated { old_max_supply, new_max_supply }));
@@ -392,10 +445,9 @@ pub mod token_management_component {
             self._assert_only_owner();
             assert_not_zero_address(new_owner);
 
-            let caller = get_caller_address();
-            assert(caller != new_owner, MintBurnErrors::OWNERSHIP_TO_SELF);
-
             let previous_owner = self.owner.read();
+            assert(previous_owner != new_owner, MintBurnErrors::OWNERSHIP_TO_SELF);
+
             self.owner.write(new_owner);
 
             self
@@ -424,3 +476,4 @@ pub mod token_management_component {
         }
     }
 }
+
