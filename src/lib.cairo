@@ -36,7 +36,11 @@ pub mod component {
         pub mod test;
         pub mod token_management;
     }
-    pub mod transfer;
+    pub mod transfer {
+        pub mod transfer;
+        pub mod mock;
+        pub mod test;
+    }
     pub mod user_management {
         pub mod mock;
         pub mod test;

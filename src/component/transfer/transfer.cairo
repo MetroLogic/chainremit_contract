@@ -25,6 +25,7 @@ pub trait ITransfer<TContractState> {
         self: @TContractState, recipient: ContractAddress, limit: u32, offset: u32,
     ) -> Array<TransferData>;
     fn get_transfer_statistics(self: @TContractState) -> (u256, u256, u256, u256);
+    fn process_expired_transfers(ref self: TContractState, limit: u32) -> u32;
 }
 
 #[starknet::component]
@@ -197,6 +198,8 @@ pub mod transfer_component {
                     || transfer.status == TransferStatus::PartialComplete,
                 TransferErrors::INVALID_TRANSFER_STATUS,
             );
+            // Check if transfer has expired
+            assert(current_time <= transfer.expires_at, 'Transfer has expired');
             let zero_address: ContractAddress = 0.try_into().unwrap();
             let is_authorized = caller == transfer.recipient
                 || (transfer.assigned_agent != zero_address && caller == transfer.assigned_agent);
@@ -228,6 +231,8 @@ pub mod transfer_component {
                     || transfer.status == TransferStatus::PartialComplete,
                 TransferErrors::INVALID_TRANSFER_STATUS,
             );
+            // Check if transfer has expired
+            assert(current_time <= transfer.expires_at, 'Transfer has expired');
             let zero_address: ContractAddress = 0.try_into().unwrap();
             let is_authorized = caller == transfer.recipient
                 || (transfer.assigned_agent != zero_address && caller == transfer.assigned_agent);
@@ -266,6 +271,8 @@ pub mod transfer_component {
             assert(
                 transfer.status == TransferStatus::Pending, TransferErrors::INVALID_TRANSFER_STATUS,
             );
+            // Check if transfer has expired
+            assert(current_time <= transfer.expires_at, 'Transfer has expired');
             assert(caller == transfer.recipient, TransferErrors::UNAUTHORIZED_TRANSFER_OP);
             transfer.status = TransferStatus::CashOutRequested;
             transfer.updated_at = current_time;
@@ -356,6 +363,47 @@ pub mod transfer_component {
                 self.total_cancelled_transfers.read(),
                 self.total_expired_transfers.read(),
             )
+        }
+
+        /// Process expired transfers (admin only)
+        fn process_expired_transfers(ref self: ComponentState<TContractState>, limit: u32) -> u32 {
+            let current_time = get_block_timestamp();
+            let mut processed_count = 0;
+            let mut transfer_id = 1; // Start from first transfer ID
+
+            // Iterate through transfers to find expired ones
+            while processed_count < limit && transfer_id <= self.next_transfer_id.read() {
+                let transfer = self.transfers.read(transfer_id);
+
+                // Check if transfer exists and is still pending but expired
+                if transfer.transfer_id != 0
+                    && transfer.status == TransferStatus::Pending
+                    && current_time > transfer.expires_at {
+                    // Update transfer status to expired
+                    let mut updated_transfer = transfer;
+                    updated_transfer.status = TransferStatus::Expired;
+                    updated_transfer.updated_at = current_time;
+                    self.transfers.write(transfer_id, updated_transfer);
+
+                    // Update expired transfers counter
+                    let expired_count = self.total_expired_transfers.read();
+                    self.total_expired_transfers.write(expired_count + 1);
+
+                    // Emit TransferExpired event
+                    self
+                        .emit(
+                            Event::TransferExpired(
+                                TransferExpired { transfer_id, expired_at: current_time },
+                            ),
+                        );
+
+                    processed_count += 1;
+                }
+
+                transfer_id += 1;
+            }
+
+            processed_count
         }
     }
 }
