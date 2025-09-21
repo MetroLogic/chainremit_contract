@@ -28,6 +28,6 @@ pub mod MockTransferContract {
 
     // Contract constructor
     #[constructor]
-    fn constructor(ref self: ContractState) {// No initialization needed for transfer component
+    fn constructor(ref self: ContractState) { // No initialization needed for transfer component
     }
 }
