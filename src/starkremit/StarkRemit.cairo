@@ -34,7 +34,7 @@ pub mod StarkRemit {
     use starkremit_contract::component::loan::loan_component;
     use starkremit_contract::component::savings_group::savings_group_component;
     use starkremit_contract::component::token_management::token_management::token_management_component;
-    use starkremit_contract::component::transfer::transfer_component;
+    use starkremit_contract::component::transfer::transfer::transfer_component;
     use starkremit_contract::component::user_management::user_management::user_management_component;
     use super::*;
 
@@ -1160,6 +1160,8 @@ pub mod StarkRemit {
                     || transfer.status == TransferStatus::PartialComplete,
                 TransferErrors::INVALID_TRANSFER_STATUS,
             );
+            // Check if transfer has expired
+            assert(current_time <= transfer.expires_at, 'Transfer has expired');
 
             // Only recipient or assigned agent can complete
             let zero_address: ContractAddress = 0.try_into().unwrap();
@@ -1236,6 +1238,8 @@ pub mod StarkRemit {
                     || transfer.status == TransferStatus::PartialComplete,
                 TransferErrors::INVALID_TRANSFER_STATUS,
             );
+            // Check if transfer has expired
+            assert(current_time <= transfer.expires_at, 'Transfer has expired');
 
             // Only recipient or assigned agent can complete
             let zero_address: ContractAddress = 0.try_into().unwrap();
@@ -1310,6 +1314,8 @@ pub mod StarkRemit {
             assert(
                 transfer.status == TransferStatus::Pending, TransferErrors::INVALID_TRANSFER_STATUS,
             );
+            // Check if transfer has expired
+            assert(current_time <= transfer.expires_at, 'Transfer has expired');
             assert(caller == transfer.recipient, TransferErrors::UNAUTHORIZED_TRANSFER_OP);
 
             // Update transfer status
@@ -1469,12 +1475,41 @@ pub mod StarkRemit {
 
         /// Process expired transfers (admin only)
         fn process_expired_transfers(ref self: ContractState, limit: u32) -> u32 {
-            let _ = get_caller_address();
+            let _caller = get_caller_address();
             self.accesscontrol.assert_only_role(ADMIN_ROLE);
 
-            // This is a simplified implementation
-            // In production, you'd iterate through transfers and mark expired ones
-            0
+            let current_time = get_block_timestamp();
+            let mut processed_count = 0;
+            let mut transfer_id = 1; // Start from first transfer ID
+
+            // Iterate through transfers to find expired ones
+            while processed_count < limit && transfer_id <= self.next_transfer_id.read() {
+                let transfer = self.transfers.read(transfer_id);
+
+                // Check if transfer exists and is still pending but expired
+                if transfer.transfer_id != 0
+                    && transfer.status == TransferStatus::Pending
+                    && current_time > transfer.expires_at {
+                    // Update transfer status to expired
+                    let mut updated_transfer = transfer;
+                    updated_transfer.status = TransferStatus::Expired;
+                    updated_transfer.updated_at = current_time;
+                    self.transfers.write(transfer_id, updated_transfer);
+
+                    // Update expired transfers counter
+                    let expired_count = self.total_expired_transfers.read();
+                    self.total_expired_transfers.write(expired_count + 1);
+
+                    // Emit TransferExpired event
+                    self.emit(TransferExpired { transfer_id, timestamp: current_time });
+
+                    processed_count += 1;
+                }
+
+                transfer_id += 1;
+            }
+
+            processed_count
         }
 
         /// Assign agent to transfer (admin only)

@@ -25,6 +25,7 @@ pub trait ITransfer<TContractState> {
         self: @TContractState, recipient: ContractAddress, limit: u32, offset: u32,
     ) -> Array<TransferData>;
     fn get_transfer_statistics(self: @TContractState) -> (u256, u256, u256, u256);
+    fn process_expired_transfers(ref self: TContractState, limit: u32) -> u32;
 }
 
 #[starknet::component]
@@ -128,9 +129,14 @@ pub mod transfer_component {
             assert(expires_at > current_time, 'Expiry must be in future');
             assert(expires_at <= current_time + 86400 * 30, 'Expiry too far in future');
             let transfer_id = self.next_transfer_id.read();
+            println!(
+                "Initiating transfer with ID: {} and the new id now is {}",
+                transfer_id,
+                transfer_id + 1,
+            );
             self.next_transfer_id.write(transfer_id + 1);
             let transfer = TransferData {
-                transfer_id,
+                transfer_id: transfer_id + 1,
                 sender: caller,
                 recipient,
                 amount,
@@ -142,14 +148,14 @@ pub mod transfer_component {
                 partial_amount: 0,
                 metadata,
             };
-            self.transfers.write(transfer_id, transfer);
+            self.transfers.write(transfer_id + 1, transfer);
             let sender_count = self.user_sent_count.read(caller);
             assert(sender_count < 4294967295, 'Max transfers per user exceeded');
-            self.user_sent_transfers.write((caller, sender_count), transfer_id);
+            self.user_sent_transfers.write((caller, sender_count), transfer_id + 1);
             self.user_sent_count.write(caller, sender_count + 1);
             let recipient_count = self.user_received_count.read(recipient);
             assert(recipient_count < 4294967295, 'Max transfers per user exceeded');
-            self.user_received_transfers.write((recipient, recipient_count), transfer_id);
+            self.user_received_transfers.write((recipient, recipient_count), transfer_id + 1);
             self.user_received_count.write(recipient, recipient_count + 1);
             let total = self.total_transfers.read();
             self.total_transfers.write(total + 1);
@@ -157,11 +163,15 @@ pub mod transfer_component {
                 .emit(
                     Event::TransferCreated(
                         TransferCreated {
-                            transfer_id, sender: caller, recipient, amount, expires_at,
+                            transfer_id: transfer_id + 1,
+                            sender: caller,
+                            recipient,
+                            amount,
+                            expires_at,
                         },
                     ),
                 );
-            transfer_id
+            transfer_id + 1
         }
         fn cancel_transfer(ref self: ComponentState<TContractState>, transfer_id: u256) -> bool {
             let caller = get_caller_address();
@@ -356,6 +366,47 @@ pub mod transfer_component {
                 self.total_cancelled_transfers.read(),
                 self.total_expired_transfers.read(),
             )
+        }
+
+        /// Process expired transfers (admin only)
+        fn process_expired_transfers(ref self: ComponentState<TContractState>, limit: u32) -> u32 {
+            let current_time = get_block_timestamp();
+            let mut processed_count = 0;
+            let mut transfer_id = 1; // Start from first transfer ID
+
+            // Iterate through transfers to find expired ones
+            while processed_count < limit && transfer_id <= self.next_transfer_id.read() {
+                let transfer = self.transfers.read(transfer_id);
+
+                // Check if transfer exists and is still pending but expired
+                if transfer.transfer_id != 0
+                    && transfer.status == TransferStatus::Pending
+                    && current_time > transfer.expires_at {
+                    // Update transfer status to expired
+                    let mut updated_transfer = transfer;
+                    updated_transfer.status = TransferStatus::Expired;
+                    updated_transfer.updated_at = current_time;
+                    self.transfers.write(transfer_id, updated_transfer);
+
+                    // Update expired transfers counter
+                    let expired_count = self.total_expired_transfers.read();
+                    self.total_expired_transfers.write(expired_count + 1);
+
+                    // Emit TransferExpired event
+                    self
+                        .emit(
+                            Event::TransferExpired(
+                                TransferExpired { transfer_id, expired_at: current_time },
+                            ),
+                        );
+
+                    processed_count += 1;
+                }
+
+                transfer_id += 1;
+            }
+
+            processed_count
         }
     }
 }
