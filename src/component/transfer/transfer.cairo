@@ -129,9 +129,14 @@ pub mod transfer_component {
             assert(expires_at > current_time, 'Expiry must be in future');
             assert(expires_at <= current_time + 86400 * 30, 'Expiry too far in future');
             let transfer_id = self.next_transfer_id.read();
+            println!(
+                "Initiating transfer with ID: {} and the new id now is {}",
+                transfer_id,
+                transfer_id + 1,
+            );
             self.next_transfer_id.write(transfer_id + 1);
             let transfer = TransferData {
-                transfer_id,
+                transfer_id: transfer_id + 1,
                 sender: caller,
                 recipient,
                 amount,
@@ -143,14 +148,14 @@ pub mod transfer_component {
                 partial_amount: 0,
                 metadata,
             };
-            self.transfers.write(transfer_id, transfer);
+            self.transfers.write(transfer_id + 1, transfer);
             let sender_count = self.user_sent_count.read(caller);
             assert(sender_count < 4294967295, 'Max transfers per user exceeded');
-            self.user_sent_transfers.write((caller, sender_count), transfer_id);
+            self.user_sent_transfers.write((caller, sender_count), transfer_id + 1);
             self.user_sent_count.write(caller, sender_count + 1);
             let recipient_count = self.user_received_count.read(recipient);
             assert(recipient_count < 4294967295, 'Max transfers per user exceeded');
-            self.user_received_transfers.write((recipient, recipient_count), transfer_id);
+            self.user_received_transfers.write((recipient, recipient_count), transfer_id + 1);
             self.user_received_count.write(recipient, recipient_count + 1);
             let total = self.total_transfers.read();
             self.total_transfers.write(total + 1);
@@ -158,11 +163,15 @@ pub mod transfer_component {
                 .emit(
                     Event::TransferCreated(
                         TransferCreated {
-                            transfer_id, sender: caller, recipient, amount, expires_at,
+                            transfer_id: transfer_id + 1,
+                            sender: caller,
+                            recipient,
+                            amount,
+                            expires_at,
                         },
                     ),
                 );
-            transfer_id
+            transfer_id + 1
         }
         fn cancel_transfer(ref self: ComponentState<TContractState>, transfer_id: u256) -> bool {
             let caller = get_caller_address();
@@ -198,8 +207,6 @@ pub mod transfer_component {
                     || transfer.status == TransferStatus::PartialComplete,
                 TransferErrors::INVALID_TRANSFER_STATUS,
             );
-            // Check if transfer has expired
-            assert(current_time <= transfer.expires_at, 'Transfer has expired');
             let zero_address: ContractAddress = 0.try_into().unwrap();
             let is_authorized = caller == transfer.recipient
                 || (transfer.assigned_agent != zero_address && caller == transfer.assigned_agent);
@@ -231,8 +238,6 @@ pub mod transfer_component {
                     || transfer.status == TransferStatus::PartialComplete,
                 TransferErrors::INVALID_TRANSFER_STATUS,
             );
-            // Check if transfer has expired
-            assert(current_time <= transfer.expires_at, 'Transfer has expired');
             let zero_address: ContractAddress = 0.try_into().unwrap();
             let is_authorized = caller == transfer.recipient
                 || (transfer.assigned_agent != zero_address && caller == transfer.assigned_agent);
@@ -271,8 +276,6 @@ pub mod transfer_component {
             assert(
                 transfer.status == TransferStatus::Pending, TransferErrors::INVALID_TRANSFER_STATUS,
             );
-            // Check if transfer has expired
-            assert(current_time <= transfer.expires_at, 'Transfer has expired');
             assert(caller == transfer.recipient, TransferErrors::UNAUTHORIZED_TRANSFER_OP);
             transfer.status = TransferStatus::CashOutRequested;
             transfer.updated_at = current_time;

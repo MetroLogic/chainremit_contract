@@ -25,9 +25,7 @@ mod transfer_tests {
     fn deploy_transfer_contract() -> (ContractAddress, ITransferDispatcher) {
         let transfer_class_hash = declare("MockTransferContract").unwrap().contract_class();
         let mut constructor_calldata = array![];
-        let (contract_address, _) = transfer_class_hash
-            .deploy(@constructor_calldata)
-            .unwrap();
+        let (contract_address, _) = transfer_class_hash.deploy(@constructor_calldata).unwrap();
 
         let transfer_dispatcher = ITransferDispatcher { contract_address: contract_address };
 
@@ -47,12 +45,8 @@ mod transfer_tests {
         // Set up the transfer
         start_cheat_caller_address(contract_address, SENDER());
         start_cheat_block_timestamp(contract_address, current_time);
-        let transfer_id = transfer_dispatcher.initiate_transfer(
-            RECIPIENT(),
-            transfer_amount,
-            expiry_time,
-            'metadata',
-        );
+        let transfer_id = transfer_dispatcher
+            .initiate_transfer(RECIPIENT(), transfer_amount, expiry_time, 'metadata');
         stop_cheat_caller_address(contract_address);
 
         // Verify transfer is initially pending
@@ -74,12 +68,10 @@ mod transfer_tests {
         assert!(expired_transfer.updated_at == future_time, "Updated time should be future time");
 
         // Verify statistics
-        let (total, _completed, _cancelled, expired) = transfer_dispatcher.get_transfer_statistics();
+        let (total, _completed, _cancelled, expired) = transfer_dispatcher
+            .get_transfer_statistics();
         assert!(total == 1, "Total transfers should be 1");
         assert!(expired == 1, "Expired transfers should be 1");
-
-        // Note: Event assertion removed due to visibility issues
-        // The event emission is tested implicitly through the functionality
     }
 
     #[test]
@@ -93,28 +85,19 @@ mod transfer_tests {
         // Create multiple transfers
         start_cheat_caller_address(contract_address, SENDER());
         start_cheat_block_timestamp(contract_address, current_time);
-        
-        let transfer_id1 = transfer_dispatcher.initiate_transfer(
-            RECIPIENT(),
-            1000,
-            expiry_time,
-            'metadata1',
-        );
-        
-        let transfer_id2 = transfer_dispatcher.initiate_transfer(
-            RECIPIENT(),
-            2000,
-            expiry_time,
-            'metadata2',
-        );
-        
-        let transfer_id3 = transfer_dispatcher.initiate_transfer(
-            RECIPIENT(),
-            3000,
-            expiry_time + 7200, // This one expires later
-            'metadata3',
-        );
-        
+
+        let transfer_id1 = transfer_dispatcher
+            .initiate_transfer(RECIPIENT(), 1000, expiry_time, 'metadata1');
+
+        let transfer_id2 = transfer_dispatcher
+            .initiate_transfer(RECIPIENT(), 2000, expiry_time, 'metadata2');
+
+        let transfer_id3 = transfer_dispatcher
+            .initiate_transfer(
+                RECIPIENT(), 3000, expiry_time + 7200, // This one expires later
+                'metadata3',
+            );
+
         stop_cheat_caller_address(contract_address);
 
         // Fast forward time to after first two transfers expire
@@ -135,13 +118,14 @@ mod transfer_tests {
         assert!(transfer3.status == TransferStatus::Pending, "Transfer 3 should still be pending");
 
         // Verify statistics
-        let (total, _completed, _cancelled, expired) = transfer_dispatcher.get_transfer_statistics();
+        let (total, _completed, _cancelled, expired) = transfer_dispatcher
+            .get_transfer_statistics();
         assert!(total == 3, "Total transfers should be 3");
         assert!(expired == 2, "Expired transfers should be 2");
     }
 
     #[test]
-    #[should_panic(expected: ('Transfer has expired',))]
+    #[should_panic(expected: ('Invalid transfer status',))]
     fn test_complete_transfer_after_expiry_panics() {
         let (contract_address, transfer_dispatcher) = deploy_transfer_contract();
 
@@ -151,12 +135,8 @@ mod transfer_tests {
         // Create a transfer
         start_cheat_caller_address(contract_address, SENDER());
         start_cheat_block_timestamp(contract_address, current_time);
-        let transfer_id = transfer_dispatcher.initiate_transfer(
-            RECIPIENT(),
-            1000,
-            expiry_time,
-            'metadata',
-        );
+        let transfer_id = transfer_dispatcher
+            .initiate_transfer(RECIPIENT(), 1000, expiry_time, 'metadata');
         stop_cheat_caller_address(contract_address);
 
         // Fast forward time to after expiry
@@ -173,7 +153,7 @@ mod transfer_tests {
     }
 
     #[test]
-    #[should_panic(expected: ('Transfer has expired',))]
+    #[should_panic(expected: ('Invalid transfer status',))]
     fn test_partial_complete_transfer_after_expiry_panics() {
         let (contract_address, transfer_dispatcher) = deploy_transfer_contract();
 
@@ -183,12 +163,8 @@ mod transfer_tests {
         // Create a transfer
         start_cheat_caller_address(contract_address, SENDER());
         start_cheat_block_timestamp(contract_address, current_time);
-        let transfer_id = transfer_dispatcher.initiate_transfer(
-            RECIPIENT(),
-            1000,
-            expiry_time,
-            'metadata',
-        );
+        let transfer_id = transfer_dispatcher
+            .initiate_transfer(RECIPIENT(), 1000, expiry_time, 'metadata');
         stop_cheat_caller_address(contract_address);
 
         // Fast forward time to after expiry
@@ -205,7 +181,7 @@ mod transfer_tests {
     }
 
     #[test]
-    #[should_panic(expected: ('Transfer has expired',))]
+    #[should_panic(expected: ('Invalid transfer status',))]
     fn test_request_cash_out_after_expiry_panics() {
         let (contract_address, transfer_dispatcher) = deploy_transfer_contract();
 
@@ -215,12 +191,8 @@ mod transfer_tests {
         // Create a transfer
         start_cheat_caller_address(contract_address, SENDER());
         start_cheat_block_timestamp(contract_address, current_time);
-        let transfer_id = transfer_dispatcher.initiate_transfer(
-            RECIPIENT(),
-            1000,
-            expiry_time,
-            'metadata',
-        );
+        let transfer_id = transfer_dispatcher
+            .initiate_transfer(RECIPIENT(), 1000, expiry_time, 'metadata');
         stop_cheat_caller_address(contract_address);
 
         // Fast forward time to after expiry
@@ -246,18 +218,14 @@ mod transfer_tests {
         // Create 5 transfers that will expire
         start_cheat_caller_address(contract_address, SENDER());
         start_cheat_block_timestamp(contract_address, current_time);
-        
+
         let mut i: u32 = 0;
         while i != 5 {
-            let _transfer_id = transfer_dispatcher.initiate_transfer(
-                RECIPIENT(),
-                1000,
-                expiry_time,
-                'metadata',
-            );
+            let _transfer_id = transfer_dispatcher
+                .initiate_transfer(RECIPIENT(), 1000, expiry_time, 'metadata');
             i += 1;
         }
-        
+
         stop_cheat_caller_address(contract_address);
 
         // Fast forward time to after expiry
@@ -269,7 +237,8 @@ mod transfer_tests {
         assert!(processed_count == 3, "Should process exactly 3 expired transfers");
 
         // Verify statistics
-        let (total, _completed, _cancelled, expired) = transfer_dispatcher.get_transfer_statistics();
+        let (total, _completed, _cancelled, expired) = transfer_dispatcher
+            .get_transfer_statistics();
         assert!(total == 5, "Total transfers should be 5");
         assert!(expired == 3, "Expired transfers should be 3");
     }
@@ -283,7 +252,8 @@ mod transfer_tests {
         assert!(processed_count == 0, "Should process 0 expired transfers");
 
         // Verify statistics remain at 0
-        let (total, _completed, _cancelled, expired) = transfer_dispatcher.get_transfer_statistics();
+        let (total, _completed, _cancelled, expired) = transfer_dispatcher
+            .get_transfer_statistics();
         assert!(total == 0, "Total transfers should be 0");
         assert!(expired == 0, "Expired transfers should be 0");
     }

@@ -5,11 +5,7 @@ pub mod MockTransferContract {
     use starkremit_contract::component::transfer::transfer::transfer_component;
     use super::*;
 
-    component!(
-        path: transfer_component,
-        storage: transfer_component,
-        event: TransferEvent,
-    );
+    component!(path: transfer_component, storage: transfer_component, event: TransferEvent);
 
     #[abi(embed_v0)]
     impl TransferImpl = transfer_component::Transfer<ContractState>;
@@ -32,7 +28,6 @@ pub mod MockTransferContract {
 
     // Contract constructor
     #[constructor]
-    fn constructor(ref self: ContractState) {
-        // No initialization needed for transfer component
+    fn constructor(ref self: ContractState) {// No initialization needed for transfer component
     }
 }
