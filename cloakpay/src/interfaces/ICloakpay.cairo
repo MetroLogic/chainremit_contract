@@ -1,4 +1,2 @@
 #[starknet::interface]
-pub trait ICloakPay<TContractState> {
-
-}
+pub trait ICloakPay<TContractState> {}

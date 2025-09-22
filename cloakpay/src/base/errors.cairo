@@ -1,3 +1,1 @@
-pub mod Errors {
-    
-}
+pub mod Errors {}

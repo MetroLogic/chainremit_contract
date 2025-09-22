@@ -1,3 +1,1 @@
-pub mod Events {
-    
-}
+pub mod Events {}
