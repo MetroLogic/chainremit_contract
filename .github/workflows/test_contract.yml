@@ -40,3 +40,18 @@ jobs:
       - name: Check formatting
         run: |
           scarb fmt --check
+      
+      - name: Check formatting in cloakpay
+        run: |
+          cd cloakpay
+          scarb fmt --check
+
+      - name: Build contracts in cloakpay
+        run: |
+          cd cloakpay
+          scarb build
+
+      - name: Run tests in cloakpay
+        run: |
+          cd cloakpay
+          snforge test
