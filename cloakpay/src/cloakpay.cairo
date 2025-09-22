@@ -1,6 +1,6 @@
 #[starknet::contract]
 pub mod cloakpay {
-    use crate::interfaces::ICloakPay::ICloakPay;
+    use crate::interfaces::ICloakpay::ICloakPay;
     use super::*;
     #[storage]
     struct Storage {}

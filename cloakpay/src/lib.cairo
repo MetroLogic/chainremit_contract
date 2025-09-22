@@ -6,7 +6,7 @@ pub mod base {
 }
 
 pub mod interfaces {
-    pub mod ICloakPay;
+    pub mod ICloakpay;
 }
 
 
