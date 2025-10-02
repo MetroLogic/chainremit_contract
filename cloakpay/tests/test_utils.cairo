@@ -5,6 +5,7 @@ use starknet::ContractAddress;
 
 
 pub const owner: ContractAddress = 'owner'.try_into().unwrap();
+pub const verifier: ContractAddress = 'Verifier'.try_into().unwrap();
 pub const test_address_1: ContractAddress = 'test_address_1'.try_into().unwrap();
 pub const test_address_2: ContractAddress = 'test_address_2'.try_into().unwrap();
 pub const test_address_3: ContractAddress = 'test_address_3'.try_into().unwrap();
@@ -14,7 +15,7 @@ pub fn deploy_cloakpay() -> (ICloakPayDispatcher, IERC20Dispatcher) {
     let (erc20, erc20_address) = deploy_token();
     let cloakpay_class = declare("cloakpay").unwrap().contract_class();
     let (contract_address, _) = cloakpay_class
-        .deploy(@array![owner.into(), erc20_address.into()])
+        .deploy(@array![owner.into(), erc20_address.into(), verifier.into()])
         .unwrap();
 
     (ICloakPayDispatcher { contract_address }, erc20)
