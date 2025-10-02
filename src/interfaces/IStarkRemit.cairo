@@ -271,4 +271,12 @@ pub trait IStarkRemit<TContractState> {
 
     // Utility Function
     fn get_timelock_duration(self: @TContractState) -> u64;
+
+    // Emergency Operations
+    fn emergency_withdraw(
+        ref self: TContractState, token: ContractAddress, to: ContractAddress,
+    ) -> bool;
+
+    fn pause_protocol_token(ref self: TContractState) -> bool;
+    fn unpause_protocol_token(ref self: TContractState) -> bool;
 }

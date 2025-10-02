@@ -1,17 +1,19 @@
 // *************************************************************************
 //                              TEST
 // *************************************************************************
+
 // core imports
 use core::result::ResultTrait;
+use core::traits::Into;
 
 // OZ imports
-use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
+use snforge_std::cheatcodes::events::Event as CheatEvent;
 
 // snforge imports
 use snforge_std::{
     ContractClassTrait, DeclareResultTrait, EventSpyAssertionsTrait, declare, spy_events,
-    start_cheat_block_timestamp_global, start_cheat_caller_address_global,
-    stop_cheat_caller_address_global,
+    start_cheat_block_timestamp_global, start_cheat_caller_address,
+    start_cheat_caller_address_global, stop_cheat_caller_address, stop_cheat_caller_address_global,
 };
 
 // starknet imports
@@ -22,7 +24,8 @@ use starkremit_contract::base::errors::*;
 use starkremit_contract::base::events::*;
 use starkremit_contract::base::types::*;
 use starkremit_contract::interfaces::IERC20::{
-    IERC20MintableDispatcher, IERC20MintableDispatcherTrait,
+    IERC20Dispatcher, IERC20DispatcherTrait, IERC20MintableDispatcher,
+    IERC20MintableDispatcherTrait,
 };
 use starkremit_contract::interfaces::IStarkRemit::{
     IStarkRemitDispatcher, IStarkRemitDispatcherTrait,
@@ -32,10 +35,6 @@ use starkremit_contract::interfaces::IStarkRemit::{
 pub fn OWNER() -> ContractAddress {
     contract_address_const::<'OWNER'>()
 }
-pub fn TOKEN_ADDRESS() -> ContractAddress {
-    contract_address_const::<'TOKEN_ADDRESS'>()
-}
-
 pub fn ORACLE_ADDRESS() -> ContractAddress {
     contract_address_const::<0x2a85bd616f912537c50a49a4076db02c00b29b2cdc8a197ce92ed1837fa875b>()
 }
@@ -50,9 +49,7 @@ pub fn USER() -> ContractAddress {
 // return istrkremit contract address,
 fn __setup__() -> (ContractAddress, IStarkRemitDispatcher, IERC20Dispatcher) {
     let strk_token_name: ByteArray = "STARKNET_TOKEN";
-
     let strk_token_symbol: ByteArray = "STRK";
-
     let decimals: u8 = 18;
 
     let erc20_class_hash = declare("ERC20Upgradeable").unwrap().contract_class();
@@ -73,18 +70,22 @@ fn __setup__() -> (ContractAddress, IStarkRemitDispatcher, IERC20Dispatcher) {
 
     let ierc20_dispatcher = IERC20Dispatcher { contract_address: strk_contract_address };
 
-    let (starkremit_contract_address, starkremit_dispatcher) = deploy_starkremit_contract();
+    let (starkremit_contract_address, starkremit_dispatcher) = deploy_starkremit_contract(
+        strk_contract_address,
+    );
 
     return (starkremit_contract_address, starkremit_dispatcher, ierc20_dispatcher);
 }
 
 
-fn deploy_starkremit_contract() -> (ContractAddress, IStarkRemitDispatcher) {
+fn deploy_starkremit_contract(
+    token_address: ContractAddress,
+) -> (ContractAddress, IStarkRemitDispatcher) {
     let starkremit_class_hash = declare("StarkRemit").unwrap().contract_class();
     let mut starkremit_constructor_calldata = array![];
     OWNER().serialize(ref starkremit_constructor_calldata);
     ORACLE_ADDRESS().serialize(ref starkremit_constructor_calldata);
-    TOKEN_ADDRESS().serialize(ref starkremit_constructor_calldata);
+    token_address.serialize(ref starkremit_constructor_calldata);
     let (starkremit_contract_address, _) = starkremit_class_hash
         .deploy(@starkremit_constructor_calldata)
         .unwrap();
@@ -95,6 +96,7 @@ fn deploy_starkremit_contract() -> (ContractAddress, IStarkRemitDispatcher) {
 
     (starkremit_contract_address, starkremit_dispatcher)
 }
+
 
 // Helper function to create test registration data
 fn create_test_registration() -> RegistrationRequest {
@@ -232,6 +234,88 @@ fn test_system_parameters() {
 }
 
 #[test]
+fn test_emergency_withdraw_succeeds_when_paused() {
+    let (starkremit_address, starkremit_dispatcher, ierc20_dispatcher) = __setup__();
+    let amount: u256 = 500;
+
+    let mint_dispatcher = IERC20MintableDispatcher {
+        contract_address: ierc20_dispatcher.contract_address,
+    };
+    start_cheat_caller_address(ierc20_dispatcher.contract_address, OWNER());
+    let _ = mint_dispatcher.mint(starkremit_address, amount);
+    stop_cheat_caller_address(ierc20_dispatcher.contract_address);
+
+    let contract_balance_before = ierc20_dispatcher.balance_of(starkremit_address);
+    assert_eq!(contract_balance_before, amount, "Contract balance should reflect deposit");
+
+    // Pause token as protocol owner
+    start_cheat_caller_address(starkremit_address, OWNER());
+    let _ = starkremit_dispatcher.pause_protocol_token();
+    stop_cheat_caller_address(starkremit_address);
+
+    let mut event_spy = spy_events();
+
+    // Execute emergency withdrawal as owner
+    start_cheat_caller_address(starkremit_address, OWNER());
+    let result = starkremit_dispatcher
+        .emergency_withdraw(ierc20_dispatcher.contract_address, OWNER());
+    stop_cheat_caller_address(starkremit_address);
+
+    assert_eq!(result, true, "Emergency withdrawal should succeed");
+
+    let contract_balance_after = ierc20_dispatcher.balance_of(starkremit_address);
+    assert_eq!(contract_balance_after, 0, "Contract balance should be zero after withdraw");
+
+    let owner_balance = ierc20_dispatcher.balance_of(OWNER());
+    assert_eq!(owner_balance, amount, "Owner should receive withdrawn balance");
+
+    let token_key: felt252 = ierc20_dispatcher.contract_address.into();
+    let owner_key: felt252 = OWNER().into();
+
+    let keys = array![selector!("EmergencyWithdrawal"), token_key, owner_key];
+
+    let data = array![amount.low.into(), amount.high.into(), owner_key];
+
+    event_spy.assert_emitted(@array![(starkremit_address, CheatEvent { keys, data })]);
+}
+
+#[test]
+#[should_panic(expected: ('TOKEN_NOT_PAUSED',))]
+fn test_emergency_withdraw_fails_when_not_paused() {
+    let (starkremit_address, starkremit_dispatcher, ierc20_dispatcher) = __setup__();
+    let amount: u256 = 250;
+
+    let mint_dispatcher = IERC20MintableDispatcher {
+        contract_address: ierc20_dispatcher.contract_address,
+    };
+    start_cheat_caller_address(ierc20_dispatcher.contract_address, OWNER());
+    let _ = mint_dispatcher.mint(starkremit_address, amount);
+    stop_cheat_caller_address(ierc20_dispatcher.contract_address);
+
+    start_cheat_caller_address(starkremit_address, OWNER());
+    starkremit_dispatcher.emergency_withdraw(ierc20_dispatcher.contract_address, OWNER());
+}
+
+#[test]
+#[should_panic]
+fn test_emergency_withdraw_fails_for_non_owner() {
+    let (starkremit_address, starkremit_dispatcher, ierc20_dispatcher) = __setup__();
+    let amount: u256 = 150;
+
+    let mint_dispatcher = IERC20MintableDispatcher {
+        contract_address: ierc20_dispatcher.contract_address,
+    };
+    start_cheat_caller_address(ierc20_dispatcher.contract_address, OWNER());
+    let _ = mint_dispatcher.mint(starkremit_address, amount);
+    stop_cheat_caller_address(ierc20_dispatcher.contract_address);
+    start_cheat_caller_address(starkremit_address, OWNER());
+    let _ = starkremit_dispatcher.pause_protocol_token();
+    stop_cheat_caller_address(starkremit_address);
+
+    start_cheat_caller_address(starkremit_address, USER());
+    starkremit_dispatcher.emergency_withdraw(ierc20_dispatcher.contract_address, OWNER());
+}
+
 fn test_total_users_count() {
     let (_, starkremit_dispatcher, _) = __setup__();
     let user1 = contract_address_const::<'count_user1'>();

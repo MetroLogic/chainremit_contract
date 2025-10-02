@@ -2,12 +2,13 @@ use core::num::traits::Zero;
 use openzeppelin::access::accesscontrol::AccessControlComponent;
 use openzeppelin::access::ownable::OwnableComponent;
 use openzeppelin::introspection::src5::SRC5Component;
+use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
 use openzeppelin::upgrades::UpgradeableComponent;
 use starknet::storage::{
     Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePathEntry, StoragePointerReadAccess,
     StoragePointerWriteAccess,
 };
-use starknet::{ContractAddress, get_block_timestamp, get_caller_address};
+use starknet::{ContractAddress, get_block_timestamp, get_caller_address, get_contract_address};
 use starkremit_contract::base::errors::{
     GovernanceErrors, GroupErrors, KYCErrors, RegistrationErrors, TransferErrors,
 };
@@ -205,6 +206,16 @@ pub mod StarkRemit {
     }
 
     #[derive(Drop, starknet::Event)]
+    pub struct EmergencyWithdrawal {
+        #[key]
+        token: ContractAddress,
+        #[key]
+        recipient: ContractAddress,
+        amount: u256,
+        caller: ContractAddress,
+    }
+
+    #[derive(Drop, starknet::Event)]
     pub struct MultiSigOperationProposed {
         op_id: felt252,
         target_contract: ContractAddress,
@@ -273,6 +284,7 @@ pub mod StarkRemit {
         MultiSigOperationApproved: MultiSigOperationApproved,
         MultiSigOperationExecuted: MultiSigOperationExecuted,
         MultiSigOperationRejected: MultiSigOperationRejected,
+        EmergencyWithdrawal: EmergencyWithdrawal,
         AuditTrailEntry: AuditTrailEntry,
         // Main contract events (not duplicated by components)
         ExchangeRateUpdated: ExchangeRateUpdated, // Event for exchange rate updates
@@ -2363,6 +2375,50 @@ pub mod StarkRemit {
         /// Get timelock duration
         fn get_timelock_duration(self: @ContractState) -> u64 {
             self.timelock_duration.read()
+        }
+
+        /// Emergency withdrawal hook for protocol owner when the token is paused
+        fn emergency_withdraw(
+            ref self: ContractState, token: ContractAddress, to: ContractAddress,
+        ) -> bool {
+            self.accesscontrol.assert_only_role(PROTOCOL_OWNER_ROLE);
+
+            let zero_address: ContractAddress = 0.try_into().unwrap();
+            assert(token != zero_address, GovernanceErrors::ZERO_ADDRESS);
+            assert(to != zero_address, GovernanceErrors::ZERO_ADDRESS);
+
+            let configured_token = self.token_address.read();
+            assert(token == configured_token, GovernanceErrors::INVALID_CONTRACT);
+            let token_paused = self.token_management_component.is_paused();
+            assert(token_paused, 'TOKEN_NOT_PAUSED');
+
+            let caller = get_caller_address();
+            let contract_address = get_contract_address();
+            let token_dispatcher = IERC20Dispatcher { contract_address: token };
+            let balance = token_dispatcher.balance_of(contract_address);
+
+            if balance != 0 {
+                let transfer_success = token_dispatcher.transfer(to, balance);
+                assert(transfer_success, 'Emergency transfer failed');
+            }
+
+            self
+                .emit(
+                    Event::EmergencyWithdrawal(
+                        EmergencyWithdrawal { token, recipient: to, amount: balance, caller },
+                    ),
+                );
+            true
+        }
+
+        fn pause_protocol_token(ref self: ContractState) -> bool {
+            self.accesscontrol.assert_only_role(PROTOCOL_OWNER_ROLE);
+            self.token_management_component.pause()
+        }
+
+        fn unpause_protocol_token(ref self: ContractState) -> bool {
+            self.accesscontrol.assert_only_role(PROTOCOL_OWNER_ROLE);
+            self.token_management_component.unpause()
         }
     }
 
