@@ -14,4 +14,23 @@ pub trait ICloakPay<TContractState> {
     fn remove_supported_token(ref self: TContractState, token_address: ContractAddress);
     fn is_token_supported(ref self: TContractState, token_address: ContractAddress) -> bool;
     fn get_supported_tokens(ref self: TContractState) -> Array<ContractAddress>;
+    fn withdraw(
+        ref self: TContractState,
+        proof: Array<felt252>,
+        root: felt252,
+        nullifier_hash: felt252,
+        recipient: ContractAddress,
+        relayer: ContractAddress,
+        fee: u256,
+        amount: u256,
+        token_id: u256,
+    );
+    fn add_merkle_root(ref self: TContractState, root: felt252);
+    fn is_valid_root(ref self: TContractState, root: felt252) -> bool;
+    fn is_nullifier_used(ref self: TContractState, nullifier_hash: felt252) -> bool;
+    fn get_total_withdrawals(ref self: TContractState) -> u256;
+    fn update_verifier(ref self: TContractState, new_verifier: ContractAddress);
+    fn add_denomination(ref self: TContractState, amount: u256);
+    fn remove_denomination(ref self: TContractState, amount: u256);
+    fn is_denomination_allowed(ref self: TContractState, amount: u256) -> bool;
 }

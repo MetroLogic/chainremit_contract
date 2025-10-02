@@ -14,6 +14,7 @@ pub mod cloakpay {
     use crate::base::events::Events::*;
     use crate::base::types::DepositDetails;
     use crate::interfaces::ICloakpay::ICloakPay;
+    use crate::interfaces::IVerifier::{IVerifierDispatcher, IVerifierDispatcherTrait};
     const ADMIN_ROLE: felt252 = selector!("ADMIN");
     const OVERALL_ADMIN_ROLE: felt252 = selector!("OVERALL_ADMIN_ROLE");
 
@@ -50,6 +51,11 @@ pub mod cloakpay {
         accesscontrol: AccessControlComponent::Storage,
         #[substorage(v0)]
         src5: SRC5Component::Storage,
+        nullifiers: Map<felt252, bool>, // nullifier to used status
+        merkle_roots: Map<felt252, bool>, // valid merkle roots
+        total_withdrawals: u256,
+        verifier_address: ContractAddress, // address of the ZK verifier contract
+        allowed_denominations: Map<u256, bool> // allowed withdrawal amounts
     }
 
     #[event]
@@ -66,13 +72,22 @@ pub mod cloakpay {
         AccessControlEvent: AccessControlComponent::Event,
         #[flat]
         SRC5Event: SRC5Component::Event,
+        WithdrawalEvent: WithdrawalEvent,
+        NullifierUsed: NullifierUsed,
+        VerifierUpdated: VerifierUpdated,
+        DenominationAdded: DenominationAdded,
+        DenominationRemoved: DenominationRemoved,
     }
 
     #[constructor]
     fn constructor(
-        ref self: ContractState, owner: ContractAddress, default_supported_token: ContractAddress,
+        ref self: ContractState,
+        owner: ContractAddress,
+        default_supported_token: ContractAddress,
+        verifier_address: ContractAddress,
     ) {
         assert(!owner.is_zero(), CloakPayErrors::ERROR_ZERO_ADDRESS);
+        assert(!verifier_address.is_zero(), CloakPayErrors::ERROR_ZERO_ADDRESS);
         // initialize owner of contract
         self.ownable.initializer(owner);
         self.accesscontrol.initializer();
@@ -83,6 +98,8 @@ pub mod cloakpay {
         self.supported_tokens_status.entry(default_supported_token).write(true);
         self.supported_tokens_list.push(default_supported_token);
         self.total_deposits.write(0_u256);
+        self.verifier_address.write(verifier_address);
+        self.total_withdrawals.write(0_u256);
     }
 
 
@@ -186,6 +203,117 @@ pub mod cloakpay {
 
         fn get_supported_tokens(ref self: ContractState) -> Array<ContractAddress> {
             self._get_supported_tokens_array()
+        }
+
+        ///  Withdraw
+
+        fn withdraw(
+            ref self: ContractState,
+            proof: Array<felt252>,
+            root: felt252,
+            nullifier_hash: felt252,
+            recipient: ContractAddress,
+            relayer: ContractAddress,
+            fee: u256,
+            amount: u256,
+            token_id: u256,
+        ) {
+            self._assert_not_paused();
+
+            assert(!recipient.is_zero(), CloakPayErrors::ERROR_ZERO_ADDRESS);
+            assert(!nullifier_hash.is_zero(), 'Invalid nullifier hash');
+
+            assert(!self.nullifiers.read(nullifier_hash), 'Nullifier already used');
+
+            assert(self.allowed_denominations.read(amount), 'Invalid denomination');
+
+            assert(self.merkle_roots.read(root), 'Invalid merkle root');
+
+            let token = self.supported_tokens.read(token_id);
+            assert(!token.is_zero(), CloakPayErrors::UNSUPPORTED_TOKEN);
+
+            assert(fee < amount, 'Fee exceeds amount');
+
+            let verifier = IVerifierDispatcher { contract_address: self.verifier_address.read() };
+            let is_valid = verifier
+                .verify_proof(proof, root, nullifier_hash, recipient, relayer, fee, amount);
+            assert(is_valid, 'Invalid proof');
+
+            self.nullifiers.entry(nullifier_hash).write(true);
+            let net_amount = amount - fee;
+
+            let token_dispatcher = IERC20Dispatcher { contract_address: token };
+
+            token_dispatcher.transfer(recipient, net_amount);
+
+            if fee > 0 && !relayer.is_zero() {
+                token_dispatcher.transfer(relayer, fee);
+            }
+
+            let current_total = self.total_withdrawals.read();
+            self.total_withdrawals.write(current_total + 1);
+
+            let timestamp = get_block_timestamp();
+
+            self.emit(Event::NullifierUsed(NullifierUsed { nullifier_hash, timestamp }));
+
+            self
+                .emit(
+                    Event::WithdrawalEvent(
+                        WithdrawalEvent {
+                            nullifier_hash, recipient, relayer, amount, fee, token, timestamp,
+                        },
+                    ),
+                );
+        }
+
+        fn add_merkle_root(ref self: ContractState, root: felt252) {
+            self.accesscontrol.assert_only_role(ADMIN_ROLE);
+            assert(!root.is_zero(), 'Invalid root');
+            self.merkle_roots.entry(root).write(true);
+        }
+
+        fn is_valid_root(ref self: ContractState, root: felt252) -> bool {
+            self.merkle_roots.read(root)
+        }
+
+        fn is_nullifier_used(ref self: ContractState, nullifier_hash: felt252) -> bool {
+            self.nullifiers.read(nullifier_hash)
+        }
+
+        fn get_total_withdrawals(ref self: ContractState) -> u256 {
+            self.total_withdrawals.read()
+        }
+
+        fn update_verifier(ref self: ContractState, new_verifier: ContractAddress) {
+            self.accesscontrol.assert_only_role(ADMIN_ROLE);
+            assert(!new_verifier.is_zero(), CloakPayErrors::ERROR_ZERO_ADDRESS);
+
+            let old_verifier = self.verifier_address.read();
+            self.verifier_address.write(new_verifier);
+
+            self.emit(Event::VerifierUpdated(VerifierUpdated { old_verifier, new_verifier }));
+        }
+
+        fn add_denomination(ref self: ContractState, amount: u256) {
+            self.accesscontrol.assert_only_role(ADMIN_ROLE);
+            assert(amount > 0, 'Amount must be positive');
+            assert(!self.allowed_denominations.read(amount), 'Denomination exists');
+
+            self.allowed_denominations.entry(amount).write(true);
+            self.emit(Event::DenominationAdded(DenominationAdded { amount }));
+        }
+
+        fn remove_denomination(ref self: ContractState, amount: u256) {
+            self.accesscontrol.assert_only_role(ADMIN_ROLE);
+            assert(self.allowed_denominations.read(amount), 'Denomination not found');
+
+            self.allowed_denominations.entry(amount).write(false);
+            self.emit(Event::DenominationRemoved(DenominationRemoved { amount }));
+        }
+
+        fn is_denomination_allowed(ref self: ContractState, amount: u256) -> bool {
+            self.allowed_denominations.read(amount)
         }
     }
 
